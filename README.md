@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # MTRC ENTREPOSE Information System
 
 Web-Based Patient Monitoring and Case Management Information System for the
@@ -107,3 +108,6 @@ With Login + User Management working end to end, the natural next modules
 Each of those can follow the same pattern already set up here: a MySQL
 table → an Express controller/route protected by `requireRole(...)` →
 a React page wrapped in `<AppShell>` and added to `App.jsx`.
+=======
+# mtrc-entrepose-system
+>>>>>>> ec3ead984f00560791d9ff3ac298774f5b09271e

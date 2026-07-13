@@ -3,20 +3,34 @@ import api from "../api/axios.js";
 
 const AuthContext = createContext(null);
 
+// "Remember me" checked  -> localStorage (survives closing the browser)
+// "Remember me" unchecked -> sessionStorage (cleared once the tab/browser closes)
+function readStoredUser() {
+  const fromLocal = localStorage.getItem("mtrc_user");
+  if (fromLocal) return JSON.parse(fromLocal);
+
+  const fromSession = sessionStorage.getItem("mtrc_user");
+  if (fromSession) return JSON.parse(fromSession);
+
+  return null;
+}
+
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const stored = localStorage.getItem("mtrc_user");
-    if (stored) setUser(JSON.parse(stored));
+    setUser(readStoredUser());
     setLoading(false);
   }, []);
 
-  async function login(username, password) {
+  async function login(username, password, rememberMe = true) {
     const { data } = await api.post("/auth/login", { username, password });
-    localStorage.setItem("mtrc_token", data.token);
-    localStorage.setItem("mtrc_user", JSON.stringify(data.user));
+
+    const storage = rememberMe ? localStorage : sessionStorage;
+    storage.setItem("mtrc_token", data.token);
+    storage.setItem("mtrc_user", JSON.stringify(data.user));
+
     setUser(data.user);
     return data.user;
   }
@@ -24,6 +38,8 @@ export function AuthProvider({ children }) {
   function logout() {
     localStorage.removeItem("mtrc_token");
     localStorage.removeItem("mtrc_user");
+    sessionStorage.removeItem("mtrc_token");
+    sessionStorage.removeItem("mtrc_user");
     setUser(null);
   }
 

@@ -34,9 +34,6 @@ const COMING_SOON_ROUTES = [
   // Analytics
   ["/analytics", "Analytics"],
 
-  // Notifications
-  ["/notifications", "Notifications"],
-
   // Administration
   ["/settings/audit-logs", "Audit Logs", ["ict_admin"]],
   ["/settings", "Settings", ["ict_admin"]],

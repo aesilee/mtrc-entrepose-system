@@ -22,7 +22,6 @@ export const NAV_BY_ROLE = {
       ],
     },
     { label: "Certificates", path: "/certificates", icon: "certificates" },
-    { label: "Notifications", path: "/notifications", icon: "notifications" },
   ],
   case_manager: [
     { label: "Dashboard", path: "/dashboard", icon: "dashboard" },
@@ -49,7 +48,6 @@ export const NAV_BY_ROLE = {
       ],
     },
     { label: "Analytics", path: "/analytics", icon: "analytics", badge: "Limited" },
-    { label: "Notifications", path: "/notifications", icon: "notifications" },
   ],
   him_staff: [
     { label: "Dashboard", path: "/dashboard", icon: "dashboard" },
@@ -84,7 +82,6 @@ export const NAV_BY_ROLE = {
     },
     { label: "Certificates", path: "/certificates", icon: "certificates" },
     { label: "Analytics", path: "/analytics", icon: "analytics" },
-    { label: "Notifications", path: "/notifications", icon: "notifications" },
   ],
   ict_admin: [
     { label: "Dashboard", path: "/dashboard", icon: "dashboard" },
@@ -125,7 +122,6 @@ export const NAV_BY_ROLE = {
     },
     { label: "Certificates", path: "/certificates", icon: "certificates" },
     { label: "Analytics", path: "/analytics", icon: "analytics" },
-    { label: "Notifications", path: "/notifications", icon: "notifications" },
     {
       label: "Administration",
       icon: "administration",

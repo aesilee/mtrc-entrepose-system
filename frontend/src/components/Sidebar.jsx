@@ -55,12 +55,6 @@ const NAV_ICONS = {
       <path d="M15 6h6v6" />
     </svg>
   ),
-  notifications: (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M6 9a6 6 0 0 1 12 0c0 5 2 6 2 6H4s2-1 2-6" />
-      <path d="M10 20a2 2 0 0 0 4 0" />
-    </svg>
-  ),
   administration: (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <path d="M12 3l7 3v6c0 5-3.5 8-7 9-3.5-1-7-4-7-9V6l7-3z" />
@@ -75,6 +69,21 @@ const NAV_ICONS = {
     </svg>
   ),
 };
+
+const HOVER_STYLES = (
+  <style>{`
+    .mtrc-nav-item {
+      background: transparent;
+    }
+    .mtrc-nav-item:hover {
+      background: var(--color-primary-tint);
+      color: var(--color-primary-dark);
+    }
+    .mtrc-nav-item:hover .mtrc-nav-icon {
+      color: var(--color-primary-dark);
+    }
+  `}</style>
+);
 
 function NavTooltip({ label, show, children }) {
   const [hover, setHover] = useState(false);
@@ -109,13 +118,88 @@ function NavTooltip({ label, show, children }) {
   );
 }
 
+function GroupFlyout({ label, groupItem, location, children }) {
+  const [open, setOpen] = useState(false);
+  const [coords, setCoords] = useState({ top: 0, left: 0 });
+  const wrapperRef = useRef(null);
+  const closeTimer = useRef(null);
+
+  const openFlyout = () => {
+    if (closeTimer.current) clearTimeout(closeTimer.current);
+    if (wrapperRef.current) {
+      const rect = wrapperRef.current.getBoundingClientRect();
+      setCoords({ top: rect.top, left: rect.right + 12 });
+    }
+    setOpen(true);
+  };
+
+  const scheduleClose = () => {
+    closeTimer.current = setTimeout(() => setOpen(false), 150);
+  };
+
+  return (
+    <div
+      ref={wrapperRef}
+      style={styles.tooltipWrapper}
+      onMouseEnter={openFlyout}
+      onMouseLeave={scheduleClose}
+    >
+      {children}
+      {open &&
+        createPortal(
+          <div
+            style={{ ...styles.flyoutPanel, top: coords.top, left: coords.left }}
+            onMouseEnter={openFlyout}
+            onMouseLeave={scheduleClose}
+          >
+            <div style={styles.flyoutHeader}>{label}</div>
+            {groupItem.children.map((child) => (
+              <NavLink
+                key={child.path}
+                to={child.path}
+                className="mtrc-nav-item"
+                style={({ isActive }) => ({
+                  ...styles.flyoutItem,
+                  ...(isActive ? styles.navItemActive : {}),
+                })}
+                onClick={() => setOpen(false)}
+              >
+                <span>{child.label}</span>
+                {child.badge && <span style={styles.badge}>{child.badge}</span>}
+              </NavLink>
+            ))}
+          </div>,
+          document.body
+        )}
+    </div>
+  );
+}
+
 export default function Sidebar({ user }) {
   const items = NAV_BY_ROLE[user.role] || [];
   const location = useLocation();
-  const [collapsed, setCollapsed] = useState(false);
+  const [collapsed, setCollapsed] = useState(
+    () => sessionStorage.getItem("mtrc-sidebar-collapsed") === "true"
+  );
+
+  const setCollapsedPersisted = (value) => {
+    setCollapsed((prev) => {
+      const next = typeof value === "function" ? value(prev) : value;
+      sessionStorage.setItem("mtrc-sidebar-collapsed", String(next));
+      return next;
+    });
+  };
 
   const [openGroups, setOpenGroups] = useState(() => {
-    const initial = {};
+    let stored = null;
+    try {
+      stored = JSON.parse(sessionStorage.getItem("mtrc-sidebar-open-groups"));
+    } catch {
+      stored = null;
+    }
+
+    const initial = stored && typeof stored === "object" ? stored : {};
+
     items.forEach((item) => {
       if (item.children?.some((c) => location.pathname.startsWith(c.path))) {
         initial[item.label] = true;
@@ -124,8 +208,16 @@ export default function Sidebar({ user }) {
     return initial;
   });
 
+  const persistOpenGroups = (next) => {
+    sessionStorage.setItem("mtrc-sidebar-open-groups", JSON.stringify(next));
+  };
+
   const toggleGroup = (label) => {
-    setOpenGroups((prev) => ({ ...prev, [label]: !prev[label] }));
+    setOpenGroups((prev) => {
+      const next = { ...prev, [label]: !prev[label] };
+      persistOpenGroups(next);
+      return next;
+    });
   };
 
   return (
@@ -135,6 +227,7 @@ export default function Sidebar({ user }) {
         width: collapsed ? 72 : 240,
         padding: collapsed ? "20px 12px" : "20px 16px",
       }}>
+      {HOVER_STYLES}
       <div
         style={{
           ...styles.brand,
@@ -153,7 +246,7 @@ export default function Sidebar({ user }) {
 
         <button
           type="button"
-          onClick={() => setCollapsed((prev) => !prev)}
+          onClick={() => setCollapsedPersisted((prev) => !prev)}
           style={{ ...styles.collapseBtn, marginTop: collapsed ? 10 : 0 }}
           aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
           title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
@@ -178,40 +271,48 @@ export default function Sidebar({ user }) {
         {items.map((item) =>
           item.children ? (
             <div key={item.label} style={styles.group}>
-              <NavTooltip label={item.label} show={collapsed}>
+              {collapsed ? (
+                <GroupFlyout label={item.label} groupItem={item} location={location}>
+                  <button
+                    type="button"
+                    className="mtrc-nav-item"
+                    style={{
+                      ...styles.navItem,
+                      ...styles.groupHeader,
+                      ...styles.navItemCollapsed,
+                      ...(item.children.some((c) => location.pathname.startsWith(c.path))
+                        ? styles.navItemActive
+                        : {}),
+                    }}
+                  >
+                    <span className="mtrc-nav-icon" style={styles.navIcon}>{NAV_ICONS[item.icon]}</span>
+                  </button>
+                </GroupFlyout>
+              ) : (
                 <button
                   type="button"
-                  onClick={() => {
-                    if (collapsed) {
-                      setCollapsed(false);
-                      setOpenGroups((prev) => ({ ...prev, [item.label]: true }));
-                    } else {
-                      toggleGroup(item.label);
-                    }
-                  }}
+                  className="mtrc-nav-item"
+                  onClick={() => toggleGroup(item.label)}
                   style={{
                     ...styles.navItem,
                     ...styles.groupHeader,
-                    ...(collapsed ? styles.navItemCollapsed : {}),
                     ...(item.children.some((c) => location.pathname.startsWith(c.path))
                       ? styles.navItemActive
                       : {}),
                   }}
                 >
-                  <span style={styles.navIcon}>{NAV_ICONS[item.icon]}</span>
-                  {!collapsed && <span style={styles.navLabel}>{item.label}</span>}
-                  {!collapsed && (
-                    <span
-                      style={{
-                        ...styles.chevron,
-                        transform: openGroups[item.label] ? "rotate(90deg)" : "rotate(0deg)",
-                      }}
-                    >
-                      ›
-                    </span>
-                  )}
+                  <span className="mtrc-nav-icon" style={styles.navIcon}>{NAV_ICONS[item.icon]}</span>
+                  <span style={styles.navLabel}>{item.label}</span>
+                  <span
+                    style={{
+                      ...styles.chevron,
+                      transform: openGroups[item.label] ? "rotate(90deg)" : "rotate(0deg)",
+                    }}
+                  >
+                    ›
+                  </span>
                 </button>
-              </NavTooltip>
+              )}
 
               {!collapsed && openGroups[item.label] && (
                 <div style={styles.subNav}>
@@ -219,6 +320,7 @@ export default function Sidebar({ user }) {
                     <NavLink
                       key={child.path}
                       to={child.path}
+                      className="mtrc-nav-item"
                       style={({ isActive }) => ({
                         ...styles.subNavItem,
                         ...(isActive ? styles.navItemActive : {}),
@@ -235,13 +337,14 @@ export default function Sidebar({ user }) {
             <NavTooltip key={item.path} label={item.label} show={collapsed}>
               <NavLink
                 to={item.path}
+                className="mtrc-nav-item"
                 style={({ isActive }) => ({
                   ...styles.navItem,
                   ...(collapsed ? styles.navItemCollapsed : {}),
                   ...(isActive ? styles.navItemActive : {}),
                 })}
               >
-                <span style={styles.navIcon}>{NAV_ICONS[item.icon]}</span>
+                <span className="mtrc-nav-icon" style={styles.navIcon}>{NAV_ICONS[item.icon]}</span>
                 <span style={{ ...styles.navLabel, ...(collapsed ? styles.navLabelHidden : {}) }}>
                   {item.label}
                 </span>
@@ -257,13 +360,14 @@ export default function Sidebar({ user }) {
           <NavTooltip key={item.path} label={item.label} show={collapsed}>
             <NavLink
               to={item.path}
+              className="mtrc-nav-item"
               style={({ isActive }) => ({
                 ...styles.navItem,
                 ...(collapsed ? styles.navItemCollapsed : {}),
                 ...(isActive ? styles.navItemActive : {}),
               })}
             >
-              <span style={styles.navIcon}>{NAV_ICONS[item.icon]}</span>
+              <span className="mtrc-nav-icon" style={styles.navIcon}>{NAV_ICONS[item.icon]}</span>
               <span style={{ ...styles.navLabel, ...(collapsed ? styles.navLabelHidden : {}) }}>
                 {item.label}
               </span>
@@ -354,7 +458,6 @@ const styles = {
     alignItems: "center",
     justifyContent: "space-between",
     width: "100%",
-    background: "none",
     border: "none",
     cursor: "pointer",
     textAlign: "left",
@@ -440,6 +543,38 @@ const styles = {
     boxShadow: "0 4px 12px rgba(0,0,0,0.18)",
     zIndex: 100,
     pointerEvents: "none",
+  },
+  flyoutPanel: {
+    position: "fixed",
+    minWidth: 200,
+    background: "var(--color-surface)",
+    border: "1px solid var(--color-border)",
+    borderRadius: "var(--radius-md, 10px)",
+    boxShadow: "0 10px 28px rgba(0,0,0,0.2)",
+    padding: 8,
+    display: "flex",
+    flexDirection: "column",
+    gap: 2,
+    zIndex: 9999,
+  },
+  flyoutHeader: {
+    fontSize: 11,
+    fontWeight: 700,
+    color: "var(--color-text-muted)",
+    textTransform: "uppercase",
+    letterSpacing: 0.4,
+    padding: "4px 10px 8px",
+  },
+  flyoutItem: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    textDecoration: "none",
+    color: "var(--color-text)",
+    padding: "8px 10px",
+    borderRadius: "var(--radius-sm)",
+    fontSize: 13,
+    fontWeight: 500,
   },
   navItemActive: {
     background: "var(--color-primary-tint)",

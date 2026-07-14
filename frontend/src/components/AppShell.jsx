@@ -2,7 +2,7 @@ import { useAuth } from "../context/AuthContext.jsx";
 import Sidebar from "./Sidebar.jsx";
 import Topbar from "./Topbar.jsx";
 
-export default function AppShell({ title, children }) {
+export default function AppShell({ title, description, children }) {
   const { user } = useAuth();
   if (!user) return null;
 
@@ -10,7 +10,7 @@ export default function AppShell({ title, children }) {
     <div style={{ display: "flex" }}>
       <Sidebar user={user} />
       <div style={{ flex: 1, minHeight: "100vh" }}>
-        <Topbar title={title} />
+        <Topbar title={title} description={description} />
         <main style={{ padding: 32 }}>{children}</main>
       </div>
     </div>

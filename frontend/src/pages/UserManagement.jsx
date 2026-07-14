@@ -52,12 +52,12 @@ export default function UserManagement() {
   }
 
   return (
-    <AppShell title="User Management">
+    <AppShell
+      title="User Management"
+      description="Create and manage login accounts for admitting personnel, case managers, HIM staff, and ICT administrators."
+    >
       <div style={styles.headerRow}>
-        <p style={styles.subtitle}>
-          Create and manage login accounts for admitting personnel, case
-          managers, HIM staff, and ICT administrators.
-        </p>
+        <div />
         <button style={styles.addBtn} onClick={() => setShowForm((v) => !v)}>
           {showForm ? "Cancel" : "+ Add user"}
         </button>
@@ -188,12 +188,6 @@ const styles = {
     alignItems: "flex-start",
     gap: 16,
     marginBottom: 20,
-  },
-  subtitle: {
-    color: "var(--color-text-muted)",
-    fontSize: 14,
-    maxWidth: 520,
-    lineHeight: 1.6,
   },
   addBtn: {
     background: "var(--color-primary)",

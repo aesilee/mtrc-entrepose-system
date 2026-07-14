@@ -13,63 +13,21 @@ export const ROLE_LABELS = {
 export const NAV_BY_ROLE = {
   admitting: [
     { label: "Dashboard", path: "/dashboard", icon: "dashboard" },
-    {
-      label: "Patients",
-      icon: "patients",
-      children: [
-        { label: "Patient List", path: "/patients" },
-        { label: "Register Patient", path: "/patients/register" },
-      ],
-    },
+    { label: "Patients", path: "/patients", icon: "patients" },
     { label: "Certificates", path: "/certificates", icon: "certificates" },
   ],
   case_manager: [
     { label: "Dashboard", path: "/dashboard", icon: "dashboard" },
-    {
-      label: "Patients",
-      icon: "patients",
-      children: [{ label: "Assigned Patients", path: "/patients/assigned" }],
-    },
-    {
-      label: "Attendance",
-      icon: "attendance",
-      children: [
-        { label: "Attendance List", path: "/attendance" },
-        { label: "Record Attendance", path: "/attendance/record" },
-        { label: "Attendance History", path: "/attendance/history" },
-      ],
-    },
-    {
-      label: "Case Management",
-      icon: "caseManagement",
-      children: [
-        { label: "Progress Notes", path: "/case-management/progress-notes" },
-        { label: "Follow-up Records", path: "/case-management/follow-ups" },
-      ],
-    },
+    { label: "Patients", path: "/patients", icon: "patients" },
+    { label: "Attendance", path: "/attendance", icon: "attendance" },
+    { label: "Case Management", path: "/case-management", icon: "caseManagement" },
     { label: "Analytics", path: "/analytics", icon: "analytics", badge: "Limited" },
   ],
   him_staff: [
     { label: "Dashboard", path: "/dashboard", icon: "dashboard" },
-    {
-      label: "Patients",
-      icon: "patients",
-      children: [{ label: "Patient List", path: "/patients", badge: "View" }],
-    },
-    {
-      label: "Attendance",
-      icon: "attendance",
-      children: [
-        { label: "Attendance History", path: "/attendance/history", badge: "View" },
-      ],
-    },
-    {
-      label: "Case Management",
-      icon: "caseManagement",
-      children: [
-        { label: "Progress Notes", path: "/case-management/progress-notes", badge: "View" },
-      ],
-    },
+    { label: "Patients", path: "/patients", icon: "patients", badge: "View" },
+    { label: "Attendance", path: "/attendance", icon: "attendance", badge: "View" },
+    { label: "Case Management", path: "/case-management", icon: "caseManagement", badge: "View" },
     {
       label: "Reports",
       icon: "reports",
@@ -85,31 +43,9 @@ export const NAV_BY_ROLE = {
   ],
   ict_admin: [
     { label: "Dashboard", path: "/dashboard", icon: "dashboard" },
-    {
-      label: "Patients",
-      icon: "patients",
-      children: [
-        { label: "Patient List", path: "/patients" },
-        { label: "Register Patient", path: "/patients/register" },
-      ],
-    },
-    {
-      label: "Attendance",
-      icon: "attendance",
-      children: [
-        { label: "Attendance List", path: "/attendance" },
-        { label: "Record Attendance", path: "/attendance/record" },
-        { label: "Attendance History", path: "/attendance/history" },
-      ],
-    },
-    {
-      label: "Case Management",
-      icon: "caseManagement",
-      children: [
-        { label: "Progress Notes", path: "/case-management/progress-notes" },
-        { label: "Follow-up Records", path: "/case-management/follow-ups" },
-      ],
-    },
+    { label: "Patients", path: "/patients", icon: "patients" },
+    { label: "Attendance", path: "/attendance", icon: "attendance" },
+    { label: "Case Management", path: "/case-management", icon: "caseManagement" },
     {
       label: "Reports",
       icon: "reports",

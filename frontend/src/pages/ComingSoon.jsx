@@ -1,8 +1,8 @@
 import AppShell from "../components/AppShell.jsx";
 
-export default function ComingSoon({ title }) {
+export default function ComingSoon({ title, description }) {
   return (
-    <AppShell title={title}>
+    <AppShell title={title} description={description}>
       <div style={styles.card}>
         <p style={styles.text}>
           {title} hasn't been built yet. This is next once Login and User

@@ -6,7 +6,7 @@ export default function Dashboard() {
   const { user } = useAuth();
 
   return (
-    <AppShell title="Dashboard">
+    <AppShell title="Dashboard" description="Overview of enrollment, attendance, and program activity.">
       <div style={styles.card}>
         <h2 style={styles.heading}>Welcome, {user.fullName.split(" ")[0]}</h2>
         <p style={styles.text}>

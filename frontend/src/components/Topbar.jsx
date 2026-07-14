@@ -1,7 +1,7 @@
 import { useAuth } from "../context/AuthContext.jsx";
 import { useNavigate } from "react-router-dom";
 
-export default function Topbar({ title }) {
+export default function Topbar({ title, description }) {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
 
@@ -12,7 +12,10 @@ export default function Topbar({ title }) {
 
   return (
     <header style={styles.header}>
-      <h1 style={styles.title}>{title}</h1>
+      <div>
+        <h1 style={styles.title}>{title}</h1>
+        {description && <p style={styles.description}>{description}</p>}
+      </div>
       <div style={styles.right}>
         <span style={styles.name}>{user.fullName}</span>
         <button style={styles.logoutBtn} onClick={handleLogout}>
@@ -35,6 +38,12 @@ const styles = {
   title: {
     fontSize: 20,
     fontWeight: 800,
+    margin: 0,
+  },
+  description: {
+    fontSize: 13,
+    color: "var(--color-text-muted)",
+    marginTop: 2,
   },
   right: {
     display: "flex",

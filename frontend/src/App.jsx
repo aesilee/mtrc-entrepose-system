@@ -5,6 +5,8 @@ import Dashboard from "./pages/Dashboard.jsx";
 import UserManagement from "./pages/UserManagement.jsx";
 import ComingSoon from "./pages/ComingSoon.jsx";
 import Patients from "./pages/Patients.jsx";
+import RegisterPatient from "./pages/RegisterPatient.jsx";
+import PatientProfile from "./pages/PatientProfile.jsx";
 import Attendance from "./pages/Attendance.jsx";
 import CaseManagement from "./pages/CaseManagement.jsx";
 
@@ -61,6 +63,22 @@ export default function App() {
         element={
           <ProtectedRoute>
             <Patients />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/patients/register"
+        element={
+          <ProtectedRoute allowedRoles={["admitting", "ict_admin"]}>
+            <RegisterPatient />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/patients/:id"
+        element={
+          <ProtectedRoute>
+            <PatientProfile />
           </ProtectedRoute>
         }
       />

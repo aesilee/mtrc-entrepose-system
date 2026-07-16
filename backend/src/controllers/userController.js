@@ -3,6 +3,13 @@ import pool from "../config/db.js";
 
 const VALID_ROLES = ["admitting", "case_manager", "him_staff", "ict_admin"];
 
+export async function listCaseManagers(req, res) {
+  const [rows] = await pool.query(
+    `SELECT id, full_name FROM users WHERE role = 'case_manager' AND status = 'active' ORDER BY full_name`
+  );
+  res.json({ caseManagers: rows });
+}
+
 export async function listUsers(req, res) {
   const [rows] = await pool.query(
     `SELECT id, employee_id, full_name, username, role, status, last_login, created_at

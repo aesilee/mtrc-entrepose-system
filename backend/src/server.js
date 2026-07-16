@@ -4,6 +4,11 @@ import dotenv from "dotenv";
 
 import authRoutes from "./routes/authRoutes.js";
 import userRoutes from "./routes/userRoutes.js";
+import patientRoutes from "./routes/patientRoutes.js";
+import programRoutes from "./routes/programRoutes.js";
+import sessionRoutes from "./routes/sessionRoutes.js";
+import attendanceRoutes from "./routes/attendanceRoutes.js";
+import dashboardRoutes from "./routes/dashboardRoutes.js";
 
 dotenv.config();
 
@@ -16,6 +21,11 @@ app.get("/api/health", (req, res) => res.json({ status: "ok" }));
 
 app.use("/api/auth", authRoutes);
 app.use("/api/users", userRoutes);
+app.use("/api/patients", patientRoutes);
+app.use("/api/programs", programRoutes);
+app.use("/api/sessions", sessionRoutes);
+app.use("/api/attendance", attendanceRoutes);
+app.use("/api/dashboard", dashboardRoutes);
 
 import pool from "./config/db.js";
 

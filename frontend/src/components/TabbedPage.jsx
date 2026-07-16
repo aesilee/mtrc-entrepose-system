@@ -1,12 +1,12 @@
 import { useState } from "react";
 
-export default function TabbedPage({ tabs }) {
+export default function TabbedPage({ tabs, actions }) {
   const [activeTab, setActiveTab] = useState(tabs[0]?.key);
   const active = tabs.find((t) => t.key === activeTab);
 
   return (
     <div style={styles.wrapper}>
-      <div style={styles.tabCard}>
+      <div style={{ ...styles.tabCard, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
         <div style={styles.tabBar}>
           {tabs.map((tab) => (
             <button
@@ -33,6 +33,7 @@ export default function TabbedPage({ tabs }) {
             </button>
           ))}
         </div>
+        {actions && <div style={styles.actionsSlot}>{actions}</div>}
       </div>
 
       <div style={styles.panel}>
@@ -59,7 +60,11 @@ const styles = {
     borderRadius: 16,
     padding: 8,
     marginBottom: 24,
-    display: "inline-block",
+  },
+  actionsSlot: {
+    display: "flex",
+    alignItems: "center",
+    paddingRight: 8,
   },
   tabBar: {
     display: "flex",

@@ -1,10 +1,13 @@
 import { Router } from "express";
 import { verifyToken, requireRole } from "../middleware/auth.js";
-import { listUsers, createUser, updateUser, resetPassword } from "../controllers/userController.js";
+import { listUsers, createUser, updateUser, resetPassword, listCaseManagers } from "../controllers/userController.js";
 
 const router = Router();
 
-// Every route here requires a valid token AND the ict_admin role
+// Available to any authenticated user (used to populate "Assigned Case Manager" dropdowns)
+router.get("/case-managers", verifyToken, listCaseManagers);
+
+// Every route below requires a valid token AND the ict_admin role
 router.use(verifyToken, requireRole("ict_admin"));
 
 router.get("/", listUsers);

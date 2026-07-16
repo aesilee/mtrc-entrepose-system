@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import AppShell from "../components/AppShell.jsx";
 import RecordAttendanceModal from "../components/RecordAttendanceModal.jsx";
+import EmptyState from "../components/EmptyState.jsx";
 import api from "../api/axios.js";
 
 const iconProps = { viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 2, strokeLinecap: "round", strokeLinejoin: "round" };
@@ -160,7 +161,19 @@ export default function Attendance() {
               {loading ? (
                 <tr><td style={styles.emptyCell} colSpan={7}>Loading attendance…</td></tr>
               ) : records.length === 0 ? (
-                <tr><td style={styles.emptyCell} colSpan={7}>No attendance records match your filters.</td></tr>
+                <tr>
+                  <td colSpan={7}>
+                    <EmptyState
+                      icon={
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="24" height="24">
+                          <rect x="3" y="5" width="18" height="16" rx="2" /><path d="M3 10h18" /><path d="M8 3v4M16 3v4" />
+                        </svg>
+                      }
+                      title="No attendance records yet"
+                      description="Click Record Attendance to log your first session, or adjust your filters to see existing records."
+                    />
+                  </td>
+                </tr>
               ) : (
                 records.map((r) => {
                   const statusStyle = STATUS_COLORS[r.status] || STATUS_COLORS.present;

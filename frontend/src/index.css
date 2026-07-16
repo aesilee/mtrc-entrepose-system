@@ -67,3 +67,21 @@ a {
   background: var(--color-primary-tint);
   color: var(--color-primary-dark);
 }
+
+@media print {
+  .no-print {
+    display: none !important;
+  }
+  body * {
+    visibility: hidden;
+  }
+  .report-print-area, .report-print-area * {
+    visibility: visible;
+  }
+  .report-print-area {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+  }
+}

@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext.jsx";
 import AppShell from "../components/AppShell.jsx";
+import EmptyState from "../components/EmptyState.jsx";
 import api from "../api/axios.js";
 
 const iconProps = { viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 2, strokeLinecap: "round", strokeLinejoin: "round" };
@@ -201,7 +202,21 @@ export default function Patients() {
               {loading ? (
                 <tr><td style={styles.emptyCell} colSpan={9}>Loading patients…</td></tr>
               ) : filtered.length === 0 ? (
-                <tr><td style={styles.emptyCell} colSpan={9}>No patients match your filters.</td></tr>
+                <tr>
+                  <td colSpan={9}>
+                    <EmptyState
+                      icon={
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="24" height="24">
+                          <circle cx="9" cy="8" r="3.2" /><path d="M3.5 20c0-3.5 2.9-6 5.5-6s5.5 2.5 5.5 6" /><circle cx="17" cy="8" r="2.6" />
+                        </svg>
+                      }
+                      title="No patients found"
+                      description={search || statusFilter || genderFilter || caseManagerFilter || municipalityFilter || dateFrom || dateTo
+                        ? "No patients match your current search or filters. Try adjusting them."
+                        : "Once patients are registered, they'll show up here."}
+                    />
+                  </td>
+                </tr>
               ) : (
                 filtered.map((p) => {
                   const statusStyle = STATUS_COLORS[p.enrollment_status] || STATUS_COLORS.pending;

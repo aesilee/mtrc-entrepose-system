@@ -11,6 +11,8 @@ import attendanceRoutes from "./routes/attendanceRoutes.js";
 import dashboardRoutes from "./routes/dashboardRoutes.js";
 import progressNoteRoutes from "./routes/progressNoteRoutes.js";
 import followUpRoutes from "./routes/followUpRoutes.js";
+import reportRoutes from "./routes/reportRoutes.js";
+import analyticsRoutes from "./routes/analyticsRoutes.js";
 
 dotenv.config();
 
@@ -30,6 +32,8 @@ app.use("/api/attendance", attendanceRoutes);
 app.use("/api/dashboard", dashboardRoutes);
 app.use("/api/progress-notes", progressNoteRoutes);
 app.use("/api/follow-ups", followUpRoutes);
+app.use("/api/reports", reportRoutes);
+app.use("/api/analytics", analyticsRoutes);
 
 import pool from "./config/db.js";
 

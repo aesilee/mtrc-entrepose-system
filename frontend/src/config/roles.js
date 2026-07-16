@@ -14,7 +14,6 @@ export const NAV_BY_ROLE = {
   admitting: [
     { label: "Dashboard", path: "/dashboard", icon: "dashboard" },
     { label: "Patients", path: "/patients", icon: "patients" },
-    { label: "Certificates", path: "/certificates", icon: "certificates" },
   ],
   case_manager: [
     { label: "Dashboard", path: "/dashboard", icon: "dashboard" },
@@ -26,34 +25,14 @@ export const NAV_BY_ROLE = {
     { label: "Dashboard", path: "/dashboard", icon: "dashboard" },
     { label: "Patients", path: "/patients", icon: "patients", badge: "View" },
     { label: "Attendance", path: "/attendance", icon: "attendance", badge: "View" },
-    {
-      label: "Reports",
-      icon: "reports",
-      children: [
-        { label: "Attendance Report", path: "/reports/attendance" },
-        { label: "Patient Report", path: "/reports/patient" },
-        { label: "Program Report", path: "/reports/program" },
-        { label: "Monthly Report", path: "/reports/monthly" },
-      ],
-    },
-    { label: "Certificates", path: "/certificates", icon: "certificates" },
+    { label: "Reports", path: "/reports", icon: "reports" },
     { label: "Analytics", path: "/analytics", icon: "analytics" },
   ],
   ict_admin: [
     { label: "Dashboard", path: "/dashboard", icon: "dashboard" },
     { label: "Patients", path: "/patients", icon: "patients" },
     { label: "Attendance", path: "/attendance", icon: "attendance" },
-    {
-      label: "Reports",
-      icon: "reports",
-      children: [
-        { label: "Attendance Report", path: "/reports/attendance" },
-        { label: "Patient Report", path: "/reports/patient" },
-        { label: "Program Report", path: "/reports/program" },
-        { label: "Monthly Report", path: "/reports/monthly" },
-      ],
-    },
-    { label: "Certificates", path: "/certificates", icon: "certificates" },
+    { label: "Reports", path: "/reports", icon: "reports" },
     { label: "Analytics", path: "/analytics", icon: "analytics" },
     {
       label: "Administration",

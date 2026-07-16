@@ -6,6 +6,7 @@ import { useAuth } from "../context/AuthContext.jsx";
 import ProgressNoteModal from "../components/ProgressNoteModal.jsx";
 import FollowUpModal from "../components/FollowUpModal.jsx";
 import CompleteFollowUpModal from "../components/CompleteFollowUpModal.jsx";
+import SharedEmptyState from "../components/EmptyState.jsx";
 
 const iconProps = { viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 2, strokeLinecap: "round", strokeLinejoin: "round" };
 
@@ -547,7 +548,7 @@ function StatChip({ label, value }) {
 }
 
 function EmptyState({ text }) {
-  return <div style={styles.emptyState}>{text}</div>;
+  return <SharedEmptyState title={text} />;
 }
 
 function SimpleTable({ columns, rows }) {
@@ -631,7 +632,12 @@ const styles = {
   statChipLabel: { fontSize: 12, color: "var(--color-text-muted)", marginTop: 2 },
 
   emptyState: { padding: 40, textAlign: "center", color: "var(--color-text-muted)", fontSize: 13 },
-  list: { display: "flex", flexDirection: "column", gap: 12 },
+  list: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))",
+    gap: 14,
+    alignItems: "start",
+  },
   noteCard: { border: "1px solid var(--color-border)", borderRadius: "var(--radius-sm)", padding: 14 },
   noteHeader: { display: "flex", justifyContent: "space-between", fontSize: 12, marginBottom: 8 },
   noteMeta: { color: "var(--color-text-muted)" },

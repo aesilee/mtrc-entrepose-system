@@ -7,25 +7,15 @@ import ComingSoon from "./pages/ComingSoon.jsx";
 import Patients from "./pages/Patients.jsx";
 import RegisterPatient from "./pages/RegisterPatient.jsx";
 import PatientProfile from "./pages/PatientProfile.jsx";
+import Reports from "./pages/Reports.jsx";
+import Analytics from "./pages/Analytics.jsx";
 import Attendance from "./pages/Attendance.jsx";
-import CaseManagement from "./pages/CaseManagement.jsx";
 
 // Simple declarative route table: [path, title, allowedRoles?]
 // allowedRoles omitted = any authenticated user.
 // Route table: [path, title, description, allowedRoles?]
 // allowedRoles omitted = any authenticated user.
 const COMING_SOON_ROUTES = [
-  // Reports
-  ["/reports/attendance", "Attendance Report", "Session attendance broken down by patient, program, and date range.", ["him_staff", "ict_admin"]],
-  ["/reports/patient", "Patient Report", "Detailed patient records and enrollment summaries for export.", ["him_staff", "ict_admin"]],
-  ["/reports/program", "Program Report", "Program-wide statistics on caseload, status, and outcomes.", ["him_staff", "ict_admin"]],
-  ["/reports/monthly", "Monthly Report", "Consolidated monthly activity across admissions and attendance.", ["him_staff", "ict_admin"]],
-
-  // Certificates
-  ["/certificates", "Certificates", "Generate and print Certificates of Enrollment for patients.", ["admitting", "him_staff", "ict_admin"]],
-
-  // Analytics
-  ["/analytics", "Analytics", "Program performance trends and key monitoring statistics."],
 
   // Administration
   ["/settings/audit-logs", "Audit Logs", "Track logins, updates, and record changes across the system.", ["ict_admin"]],
@@ -90,11 +80,20 @@ export default function App() {
           </ProtectedRoute>
         }
       />
+
       <Route
-        path="/case-management"
+        path="/reports"
+        element={
+          <ProtectedRoute allowedRoles={["him_staff", "ict_admin"]}>
+            <Reports />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/analytics"
         element={
           <ProtectedRoute allowedRoles={["case_manager", "him_staff", "ict_admin"]}>
-            <CaseManagement />
+            <Analytics />
           </ProtectedRoute>
         }
       />

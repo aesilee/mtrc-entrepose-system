@@ -18,6 +18,7 @@ export function verifyToken(req, res, next) {
   } catch (err) {
     return res.status(401).json({ message: "Invalid or expired token." });
   }
+}
 
 // Usage: requireRole("ict_admin") or requireRole("ict_admin", "him_staff")
 export function requireRole(...allowedRoles) {

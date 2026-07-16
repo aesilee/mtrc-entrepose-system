@@ -15,13 +15,21 @@ export async function listPatients(req, res) {
     `SELECT p.id, p.patient_code, p.full_name, p.gender, p.municipality,
             p.admission_date, p.enrollment_status, p.is_archived,
             p.assigned_case_manager_id AS case_manager_id,
-            u.full_name AS case_manager_name
+            u.full_name AS case_manager_name,
+            (SELECT COUNT(*) FROM attendance a WHERE a.patient_id = p.id) AS total_sessions,
+            (SELECT COUNT(*) FROM attendance a WHERE a.patient_id = p.id AND a.status = 'present') AS present_sessions
      FROM patients p
      LEFT JOIN users u ON u.id = p.assigned_case_manager_id
      WHERE p.is_archived = FALSE
      ORDER BY p.created_at DESC`
   );
-  res.json({ patients: rows });
+
+  const patients = rows.map((p) => ({
+    ...p,
+    attendance_rate: p.total_sessions > 0 ? Math.round((p.present_sessions / p.total_sessions) * 100) : null,
+  }));
+
+  res.json({ patients });
 }
 
 export async function updatePatient(req, res) {

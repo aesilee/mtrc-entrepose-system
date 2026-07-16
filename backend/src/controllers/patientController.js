@@ -122,13 +122,41 @@ export async function getPatientAttendance(req, res) {
 export async function getPatientProgressNotes(req, res) {
   const { id } = req.params;
   const [rows] = await pool.query(
-    `SELECT pn.id, pn.note_type, pn.content, pn.created_at, u.full_name AS case_manager_name
+    `SELECT pn.id, pn.session_date, pn.session_type, pn.observation, pn.intervention_provided,
+            pn.patient_response, pn.recommendations, pn.next_follow_up_date,
+            pn.created_at, pn.updated_at, u.full_name AS case_manager_name
      FROM progress_notes pn
      LEFT JOIN users u ON u.id = pn.case_manager_id
-     WHERE pn.patient_id = ? ORDER BY pn.created_at DESC`,
+     WHERE pn.patient_id = ? ORDER BY pn.session_date DESC, pn.created_at DESC`,
     [id]
   );
   res.json({ progressNotes: rows });
+}
+
+export async function getPatientTimeline(req, res) {
+  const { id } = req.params;
+  const [rows] = await pool.query(
+    `SELECT 'progress_note' AS event_type,
+            CONCAT('Progress note added', IF(session_type IS NOT NULL, CONCAT(' — ', session_type), '')) AS title,
+            observation AS detail, created_at AS event_date
+     FROM progress_notes WHERE patient_id = ?
+     UNION ALL
+     SELECT 'attendance', CONCAT('Attendance recorded: ', status), session_type, created_at
+     FROM attendance WHERE patient_id = ?
+     UNION ALL
+     SELECT 'follow_up_scheduled', 'Follow-up scheduled', reason, created_at
+     FROM follow_ups WHERE patient_id = ?
+     UNION ALL
+     SELECT 'follow_up_completed', 'Follow-up completed', completed_remarks, resolved_at
+     FROM follow_ups WHERE patient_id = ? AND status = 'completed' AND resolved_at IS NOT NULL
+     UNION ALL
+     SELECT 'certificate', CONCAT(certificate_type, ' certificate issued'), NULL, issued_at
+     FROM certificates WHERE patient_id = ?
+     ORDER BY event_date DESC
+     LIMIT 50`,
+    [id, id, id, id, id]
+  );
+  res.json({ timeline: rows });
 }
 
 export async function getPatientCertificates(req, res) {

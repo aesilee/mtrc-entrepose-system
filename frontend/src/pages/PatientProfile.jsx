@@ -2,6 +2,10 @@ import { useEffect, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import AppShell from "../components/AppShell.jsx";
 import api from "../api/axios.js";
+import { useAuth } from "../context/AuthContext.jsx";
+import ProgressNoteModal from "../components/ProgressNoteModal.jsx";
+import FollowUpModal from "../components/FollowUpModal.jsx";
+import CompleteFollowUpModal from "../components/CompleteFollowUpModal.jsx";
 
 const iconProps = { viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 2, strokeLinecap: "round", strokeLinejoin: "round" };
 
@@ -24,8 +28,8 @@ const PROFILE_SECTIONS = [
 
 const TAB_SECTIONS = [
   { key: "attendance", label: "Attendance" },
-  { key: "case-notes", label: "Case Notes" },
-  { key: "progress", label: "Progress" },
+  { key: "case-notes", label: "Case Management" },
+  { key: "progress", label: "Timeline" },
   { key: "certificates", label: "Certificates" },
   { key: "history", label: "History" },
 ];
@@ -61,7 +65,15 @@ function toInputDate(d) { return d ? String(d).slice(0, 10) : ""; }
 
 export default function PatientProfile() {
   const { id } = useParams();
+  const { user } = useAuth();
+  const canManageCase = ["case_manager", "ict_admin"].includes(user.role);
   const [patient, setPatient] = useState(null);
+  const [caseSubTab, setCaseSubTab] = useState("summary");
+  const [followUps, setFollowUps] = useState([]);
+  const [timeline, setTimeline] = useState([]);
+  const [noteModal, setNoteModal] = useState(null); // null closed, {} = new, note object = edit
+  const [followUpModalOpen, setFollowUpModalOpen] = useState(false);
+  const [completingFollowUpId, setCompletingFollowUpId] = useState(null);
   const [form, setForm] = useState({});
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -89,15 +101,19 @@ export default function PatientProfile() {
       api.get(`/patients/${id}/progress-notes`),
       api.get(`/patients/${id}/certificates`),
       api.get(`/patients/${id}/history`),
+      api.get(`/patients/${id}/follow-ups`),
+      api.get(`/patients/${id}/timeline`),
       api.get("/users/case-managers"),
       api.get("/programs"),
-    ]).then(([p, a, pn, c, h, cm, pr]) => {
+    ]).then(([p, a, pn, c, h, fu, tl, cm, pr]) => {
       setPatient(p.data.patient);
       setForm(toFormState(p.data.patient));
       setAttendance(a.data.attendance);
       setProgressNotes(pn.data.progressNotes);
       setCertificates(c.data.certificates);
       setHistory(h.data.history);
+      setFollowUps(fu.data.followUps);
+      setTimeline(tl.data.timeline);
       setCaseManagers(cm.data.caseManagers);
       setPrograms(pr.data.programs);
     }).finally(() => setLoading(false));
@@ -314,32 +330,111 @@ export default function PatientProfile() {
             </div>
           ) : activeSection === "case-notes" ? (
             <div>
-              <SectionHeader icon={NAV_ICONS["case-notes"]} title="Case Notes" />
-              {progressNotes.length === 0 ? <EmptyState text="No case notes have been recorded yet." /> : (
-                <div style={styles.list}>
-                  {progressNotes.map((n) => (
-                    <div key={n.id} style={styles.noteCard}>
-                      <div style={styles.noteHeader}>
-                        <span style={{ textTransform: "capitalize", fontWeight: 700 }}>{n.note_type}</span>
-                        <span style={styles.noteMeta}>{n.case_manager_name || "—"} · {fmtDateTime(n.created_at)}</span>
-                      </div>
-                      <p style={styles.noteContent}>{n.content}</p>
+              <SectionHeader icon={NAV_ICONS["case-notes"]} title="Case Management" />
+
+              <div style={styles.subTabBar}>
+                {[
+                  { key: "summary", label: "Rehabilitation Summary" },
+                  { key: "notes", label: "Progress Notes" },
+                  { key: "followups", label: "Follow-up Actions" },
+                ].map((t) => (
+                  <button
+                    key={t.key}
+                    type="button"
+                    onClick={() => setCaseSubTab(t.key)}
+                    style={{ ...styles.subTabButton, ...(caseSubTab === t.key ? styles.subTabButtonActive : {}) }}
+                  >
+                    {t.label}
+                  </button>
+                ))}
+              </div>
+
+              {caseSubTab === "summary" && (
+                <div style={styles.grid}>
+                  <Field label="Current status">{patient.current_status || "—"}</Field>
+                  <Field label="Program phase">{patient.program_phase || "—"}</Field>
+                  <Field label="Assigned case manager">{patient.case_manager_name || "Unassigned"}</Field>
+                  <Field label="Admission date">{fmtDate(patient.admission_date)}</Field>
+                  <Field label="Expected completion">{fmtDate(patient.expected_completion_date)}</Field>
+                  <Field label="Completion %">
+                    {patient.sessions_required ? `${Math.round((presentCount / patient.sessions_required) * 100)}%` : "—"}
+                  </Field>
+                </div>
+              )}
+
+              {caseSubTab === "notes" && (
+                <div>
+                  {canManageCase && (
+                    <div style={{ marginBottom: 16 }}>
+                      <button type="button" style={styles.generateBtn} onClick={() => setNoteModal({})}>+ Add Progress Note</button>
                     </div>
-                  ))}
+                  )}
+                  {progressNotes.length === 0 ? <EmptyState text="No progress notes have been recorded yet." /> : (
+                    <div style={styles.list}>
+                      {progressNotes.map((n) => (
+                        <div key={n.id} style={styles.noteCard}>
+                          <div style={styles.noteHeader}>
+                            <span style={{ fontWeight: 700 }}>{fmtDate(n.session_date)} {n.session_type && `· ${n.session_type}`}</span>
+                            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                              <span style={styles.noteMeta}>{n.case_manager_name || "—"} · {fmtDateTime(n.created_at)}</span>
+                              {canManageCase && (
+                                <button type="button" style={styles.editLink} onClick={() => setNoteModal(n)}>Edit</button>
+                              )}
+                            </div>
+                          </div>
+                          <p style={styles.noteContent}><strong>Observation:</strong> {n.observation}</p>
+                          {n.intervention_provided && <p style={styles.noteContent}><strong>Intervention:</strong> {n.intervention_provided}</p>}
+                          {n.patient_response && <p style={styles.noteContent}><strong>Patient response:</strong> {n.patient_response}</p>}
+                          {n.recommendations && <p style={styles.noteContent}><strong>Recommendations:</strong> {n.recommendations}</p>}
+                          {n.next_follow_up_date && <p style={styles.noteContent}><strong>Next follow-up:</strong> {fmtDate(n.next_follow_up_date)}</p>}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {caseSubTab === "followups" && (
+                <div>
+                  {canManageCase && (
+                    <div style={{ marginBottom: 16 }}>
+                      <button type="button" style={styles.generateBtn} onClick={() => setFollowUpModalOpen(true)}>+ Schedule Follow-up</button>
+                    </div>
+                  )}
+                  {followUps.length === 0 ? <EmptyState text="No follow-up actions scheduled yet." /> : (
+                    <div style={styles.list}>
+                      {followUps.map((f) => (
+                        <div key={f.id} style={styles.noteCard}>
+                          <div style={styles.noteHeader}>
+                            <span style={{ fontWeight: 700 }}>Due {fmtDate(f.due_date)}</span>
+                            <span style={{ ...styles.statusBadgeSm, ...(f.status === "completed" ? styles.statusCompleted : styles.statusPending) }}>
+                              {f.status}
+                            </span>
+                          </div>
+                          <p style={styles.noteContent}>{f.reason}</p>
+                          {f.status === "completed" ? (
+                            <p style={styles.noteMeta}>Completed {fmtDateTime(f.resolved_at)}{f.completed_remarks && ` — ${f.completed_remarks}`}</p>
+                          ) : canManageCase ? (
+                            <button type="button" style={styles.editLink} onClick={() => setCompletingFollowUpId(f.id)}>Mark complete</button>
+                          ) : null}
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
             </div>
           ) : activeSection === "progress" ? (
             <div>
               <SectionHeader icon={NAV_ICONS.progress} title="Progress" />
-              {progressNotes.length === 0 ? <EmptyState text="No progress timeline yet." /> : (
-                <div style={styles.timeline}>
-                  {progressNotes.map((n) => (
-                    <div key={n.id} style={styles.timelineItem}>
+              {timeline.length === 0 ? <EmptyState text="No progress timeline yet." /> : (
+                <div style={styles.timelineScroll}>
+                  {timeline.map((t, i) => (
+                    <div key={i} style={styles.timelineItem}>
                       <div style={styles.timelineDot} />
                       <div>
-                        <div style={styles.noteMeta}>{fmtDateTime(n.created_at)}</div>
-                        <p style={styles.noteContent}>{n.content}</p>
+                        <div style={styles.noteMeta}>{fmtDateTime(t.event_date)}</div>
+                        <p style={styles.noteContent}><strong>{t.title}</strong>{t.detail ? ` — ${t.detail}` : ""}</p>
                       </div>
                     </div>
                   ))}
@@ -366,6 +461,29 @@ export default function PatientProfile() {
           ) : null}
         </div>
       </div>
+
+      {noteModal && (
+        <ProgressNoteModal
+          patientId={id}
+          note={noteModal.id ? noteModal : null}
+          onClose={() => setNoteModal(null)}
+          onSaved={() => { setNoteModal(null); loadAll(); }}
+        />
+      )}
+      {followUpModalOpen && (
+        <FollowUpModal
+          patientId={id}
+          onClose={() => setFollowUpModalOpen(false)}
+          onSaved={() => { setFollowUpModalOpen(false); loadAll(); }}
+        />
+      )}
+      {completingFollowUpId && (
+        <CompleteFollowUpModal
+          followUpId={completingFollowUpId}
+          onClose={() => setCompletingFollowUpId(null)}
+          onSaved={() => { setCompletingFollowUpId(null); loadAll(); }}
+        />
+      )}
     </AppShell>
   );
 }
@@ -519,6 +637,14 @@ const styles = {
   noteMeta: { color: "var(--color-text-muted)" },
   noteContent: { fontSize: 13, color: "var(--color-text)", margin: 0, lineHeight: 1.6 },
 
+  subTabBar: { display: "flex", gap: 4, marginBottom: 18, borderBottom: "1px solid var(--color-border)" },
+  subTabButton: { padding: "9px 4px", marginRight: 20, fontSize: 13, fontWeight: 600, color: "var(--color-text-muted)", background: "none", border: "none", borderBottom: "2px solid transparent", cursor: "pointer" },
+  subTabButtonActive: { color: "var(--color-text)", borderBottom: "2px solid var(--color-primary-dark)" },
+  editLink: { background: "none", border: "none", color: "var(--color-primary-dark)", fontWeight: 700, fontSize: 12, cursor: "pointer", padding: 0 },
+  statusBadgeSm: { fontSize: 11, fontWeight: 700, textTransform: "capitalize", padding: "3px 9px", borderRadius: 999 },
+  statusPending: { background: "#FFF3D6", color: "#9A6B00" },
+  statusCompleted: { background: "var(--color-primary-tint)", color: "var(--color-primary-dark)" },
+  timelineScroll: { display: "flex", flexDirection: "column", gap: 18, paddingLeft: 8, maxHeight: 420, overflowY: "auto" },
   timeline: { display: "flex", flexDirection: "column", gap: 20, paddingLeft: 8 },
   timelineItem: { display: "flex", gap: 12 },
   timelineDot: { width: 8, height: 8, borderRadius: "50%", background: "var(--color-primary)", marginTop: 6, flexShrink: 0 },

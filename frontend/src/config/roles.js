@@ -20,14 +20,12 @@ export const NAV_BY_ROLE = {
     { label: "Dashboard", path: "/dashboard", icon: "dashboard" },
     { label: "Patients", path: "/patients", icon: "patients" },
     { label: "Attendance", path: "/attendance", icon: "attendance" },
-    { label: "Case Management", path: "/case-management", icon: "caseManagement" },
     { label: "Analytics", path: "/analytics", icon: "analytics", badge: "Limited" },
   ],
   him_staff: [
     { label: "Dashboard", path: "/dashboard", icon: "dashboard" },
     { label: "Patients", path: "/patients", icon: "patients", badge: "View" },
     { label: "Attendance", path: "/attendance", icon: "attendance", badge: "View" },
-    { label: "Case Management", path: "/case-management", icon: "caseManagement", badge: "View" },
     {
       label: "Reports",
       icon: "reports",
@@ -45,7 +43,6 @@ export const NAV_BY_ROLE = {
     { label: "Dashboard", path: "/dashboard", icon: "dashboard" },
     { label: "Patients", path: "/patients", icon: "patients" },
     { label: "Attendance", path: "/attendance", icon: "attendance" },
-    { label: "Case Management", path: "/case-management", icon: "caseManagement" },
     {
       label: "Reports",
       icon: "reports",

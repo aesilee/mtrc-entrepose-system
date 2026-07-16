@@ -9,6 +9,8 @@ import programRoutes from "./routes/programRoutes.js";
 import sessionRoutes from "./routes/sessionRoutes.js";
 import attendanceRoutes from "./routes/attendanceRoutes.js";
 import dashboardRoutes from "./routes/dashboardRoutes.js";
+import progressNoteRoutes from "./routes/progressNoteRoutes.js";
+import followUpRoutes from "./routes/followUpRoutes.js";
 
 dotenv.config();
 
@@ -26,6 +28,8 @@ app.use("/api/programs", programRoutes);
 app.use("/api/sessions", sessionRoutes);
 app.use("/api/attendance", attendanceRoutes);
 app.use("/api/dashboard", dashboardRoutes);
+app.use("/api/progress-notes", progressNoteRoutes);
+app.use("/api/follow-ups", followUpRoutes);
 
 import pool from "./config/db.js";
 

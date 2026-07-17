@@ -427,7 +427,7 @@ const styles = {
     borderRadius: "var(--radius-md, 10px)",
     overflow: "auto",
   },
-  table: { width: "100%", borderCollapse: "collapse", fontSize: 13 },
+  table: { width: "100%", tableLayout: "fixed", borderCollapse: "collapse", fontSize: 13 },
   th: {
     textAlign: "left",
     padding: "12px 16px",
@@ -438,13 +438,16 @@ const styles = {
     color: "var(--color-text-muted)",
     borderBottom: "1px solid var(--color-border)",
     whiteSpace: "nowrap",
+    overflow: "hidden",
+    textOverflow: "ellipsis",
   },
   row: { cursor: "pointer" },
   td: {
     padding: "12px 16px",
     borderBottom: "1px solid var(--color-border)",
     color: "var(--color-text)",
-    whiteSpace: "nowrap",
+    wordBreak: "break-word",
+    verticalAlign: "top",
   },
   emptyCell: { padding: 32, textAlign: "center", color: "var(--color-text-muted)" },
   statusBadge: {

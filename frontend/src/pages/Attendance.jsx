@@ -148,13 +148,13 @@ export default function Attendance() {
           <table style={styles.table}>
             <thead>
               <tr>
-                <th style={styles.th}>Patient</th>
-                <th style={styles.th}>Session</th>
-                <th style={styles.th}>Program</th>
-                <th style={styles.th}>Case Manager</th>
-                <th style={styles.th}>Date</th>
-                <th style={styles.th}>Status</th>
-                <th style={styles.th}>Remarks</th>
+                <th style={{ ...styles.th, width: "16%" }}>Patient</th>
+                <th style={{ ...styles.th, width: "14%" }}>Session</th>
+                <th style={{ ...styles.th, width: "16%" }}>Program</th>
+                <th style={{ ...styles.th, width: "14%" }}>Case Manager</th>
+                <th style={{ ...styles.th, width: "10%" }}>Date</th>
+                <th style={{ ...styles.th, width: "10%" }}>Status</th>
+                <th style={{ ...styles.th, width: "20%" }}>Remarks</th>
               </tr>
             </thead>
             <tbody>
@@ -245,9 +245,9 @@ const styles = {
   recordBtn: { background: "var(--color-primary)", color: "#fff", border: "none", padding: "10px 16px", borderRadius: "var(--radius-sm)", fontWeight: 700, fontSize: 13, cursor: "pointer", whiteSpace: "nowrap" },
 
   tableCard: { background: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: "var(--radius-md, 10px)", overflow: "auto" },
-  table: { width: "100%", borderCollapse: "collapse", fontSize: 13 },
-  th: { textAlign: "left", padding: "12px 16px", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.4, color: "var(--color-text-muted)", borderBottom: "1px solid var(--color-border)", whiteSpace: "nowrap" },
-  td: { padding: "12px 16px", borderBottom: "1px solid var(--color-border)", whiteSpace: "nowrap" },
+  table: { width: "100%", tableLayout: "fixed", borderCollapse: "collapse", fontSize: 13 },
+  th: { textAlign: "left", padding: "12px 16px", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.4, color: "var(--color-text-muted)", borderBottom: "1px solid var(--color-border)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" },
+  td: { padding: "12px 16px", borderBottom: "1px solid var(--color-border)", wordBreak: "break-word", verticalAlign: "top" },
   emptyCell: { padding: 32, textAlign: "center", color: "var(--color-text-muted)" },
   statusBadge: { fontSize: 11, fontWeight: 700, textTransform: "capitalize", padding: "4px 10px", borderRadius: 999 },
 };

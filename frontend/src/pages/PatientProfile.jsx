@@ -132,6 +132,7 @@ export default function PatientProfile() {
       admissionDate: toInputDate(p.admission_date), referralSource: p.referral_source || "", admissionType: p.admission_type || "",
       programId: p.program_id || "", assignedCaseManagerId: p.assigned_case_manager_id || "",
       admissionNotes: p.admission_notes || "", initialAssessment: p.initial_assessment || "",
+      enrollmentStatus: p.enrollment_status || "pending", statusRemark: "",
       currentStatus: p.current_status || "", programPhase: p.program_phase || "",
       expectedCompletionDate: toInputDate(p.expected_completion_date), sessionsRequired: p.sessions_required ?? "",
       photoDataUrl: p.photo_url || "",
@@ -164,6 +165,11 @@ export default function PatientProfile() {
   function handleCancel() {
     setForm(toFormState(patient));
     setEditing(false);
+  }
+
+  function startEditing() {
+    setForm((prev) => ({ ...prev, statusRemark: "" }));
+    setEditing(true);
   }
 
   function goToSection(key) {
@@ -220,7 +226,7 @@ export default function PatientProfile() {
               </button>
             </>
           ) : (
-            <button type="button" style={styles.editBtn} onClick={() => setEditing(true)}>Edit profile</button>
+            <button type="button" style={styles.editBtn} onClick={startEditing}>Edit profile</button>
           )}
         </div>
       </div>
@@ -282,6 +288,23 @@ export default function PatientProfile() {
               <section ref={admissionRef}>
                 <SectionHeader icon={NAV_ICONS.admission} title="Admission Information" />
                 <div style={styles.grid}>
+                  <EditField
+                    label="Enrollment status" editing={editing} type="select"
+                    options={["pending", "active", "completed", "dropped", "transferred"]}
+                    value={form.enrollmentStatus} onChange={(v) => update("enrollmentStatus", v)}
+                    display={patient.enrollment_status}
+                  />
+                  {editing && form.enrollmentStatus !== patient.enrollment_status && (
+                    <div>
+                      <div style={styles.fieldLabel}>Status change remark (optional)</div>
+                      <textarea
+                        style={{ ...styles.input, minHeight: 50 }}
+                        placeholder="Why is the status changing?"
+                        value={form.statusRemark}
+                        onChange={(e) => update("statusRemark", e.target.value)}
+                      />
+                    </div>
+                  )}
                   <EditField label="Admission date" editing={editing} type="date" value={form.admissionDate} onChange={(v) => update("admissionDate", v)} display={fmtDate(patient.admission_date)} />
                   <EditField label="Referral source" editing={editing} value={form.referralSource} onChange={(v) => update("referralSource", v)} />
                   <EditField label="Admission type" editing={editing} value={form.admissionType} onChange={(v) => update("admissionType", v)} />

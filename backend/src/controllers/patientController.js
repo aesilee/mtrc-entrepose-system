@@ -48,6 +48,7 @@ export async function updatePatient(req, res) {
     admissionType: "admission_type", programId: "program_id",
     assignedCaseManagerId: "assigned_case_manager_id", admissionNotes: "admission_notes",
     initialAssessment: "initial_assessment",
+    enrollmentStatus: "enrollment_status",
     currentStatus: "current_status", programPhase: "program_phase",
     expectedCompletionDate: "expected_completion_date", sessionsRequired: "sessions_required",
   };
@@ -78,6 +79,16 @@ export async function updatePatient(req, res) {
     values.push(fullName);
   }
 
+  // Check for an enrollment status change so the audit log entry can be specific about it
+  let statusChangeMessage = null;
+  if (fields.enrollmentStatus) {
+    const [[current]] = await pool.query("SELECT enrollment_status FROM patients WHERE id = ?", [id]);
+    if (current && current.enrollment_status !== fields.enrollmentStatus) {
+      statusChangeMessage = `Changed enrollment status from "${current.enrollment_status}" to "${fields.enrollmentStatus}"`;
+      if (fields.statusRemark) statusChangeMessage += ` — ${fields.statusRemark}`;
+    }
+  }
+
   values.push(id);
 
   try {
@@ -85,7 +96,7 @@ export async function updatePatient(req, res) {
 
     await pool.query(
       "INSERT INTO audit_log (actor_username, action, table_name, record_id) VALUES (?, ?, ?, ?)",
-      [req.user.username, `Updated patient record #${id}`, "patients", id]
+      [req.user.username, statusChangeMessage || `Updated patient record #${id}`, "patients", id]
     );
 
     res.json({ message: "Patient updated." });

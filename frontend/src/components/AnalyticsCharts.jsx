@@ -12,7 +12,7 @@ export function KpiCard({ label, value, suffix, icon }) {
   );
 }
 
-export function DonutChart({ data, size = 160 }) {
+export function DonutChart({ data, size = 130 }) {
   const total = data.reduce((s, d) => s + d.value, 0) || 1;
   const radius = size / 2 - 14;
   const cx = size / 2, cy = size / 2;
@@ -66,7 +66,7 @@ export function DonutChart({ data, size = 160 }) {
 }
 
 export function LineChart({ data, color = "#7C5CFC", suffix = "" }) {
-  const width = 480, height = 150, padLeft = 34, padRight = 12, padTop = 16, padBottom = 24;
+  const width = 480, height = 115, padLeft = 32, padRight = 10, padTop = 14, padBottom = 20;
   const chartWidth = width - padLeft - padRight;
   const chartHeight = height - padTop - padBottom;
   const max = Math.max(...data.map((d) => d.value), 1);
@@ -82,7 +82,7 @@ export function LineChart({ data, color = "#7C5CFC", suffix = "" }) {
   const areaPath = `${linePath} L${points[points.length - 1].x},${padTop + chartHeight} L${points[0].x},${padTop + chartHeight} Z`;
 
   return (
-    <svg viewBox={`0 0 ${width} ${height}`} style={{ width: "100%", height: 150 }}>
+    <svg viewBox={`0 0 ${width} ${height}`} style={{ width: "100%", height: 115 }}>
       {/* gridlines + y-axis labels */}
       {Array.from({ length: gridLines + 1 }).map((_, i) => {
         const y = padTop + (chartHeight / gridLines) * i;
@@ -108,7 +108,7 @@ export function LineChart({ data, color = "#7C5CFC", suffix = "" }) {
 }
 
 export function BarChart({ data }) {
-  const width = 380, height = 180, padTop = 30, padBottom = 26;
+  const width = 380, height = 140, padTop = 24, padBottom = 22;
   const max = Math.max(...data.map((d) => d.value), 1);
   const chartHeight = height - padTop - padBottom;
   const barGap = width / data.length;
@@ -116,7 +116,7 @@ export function BarChart({ data }) {
   const gridLines = 4;
 
   return (
-    <svg viewBox={`0 0 ${width} ${height}`} style={{ width: "100%", height: 180 }}>
+    <svg viewBox={`0 0 ${width} ${height}`} style={{ width: "100%", height: 140 }}>
       {/* gridlines */}
       {Array.from({ length: gridLines + 1 }).map((_, i) => {
         const y = padTop + (chartHeight / gridLines) * i;

@@ -3,6 +3,7 @@ import AppShell from "../components/AppShell.jsx";
 import RecordAttendanceModal from "../components/RecordAttendanceModal.jsx";
 import EmptyState from "../components/EmptyState.jsx";
 import api from "../api/axios.js";
+import useViewport from "../hooks/useViewport.js";
 
 const iconProps = { viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 2, strokeLinecap: "round", strokeLinejoin: "round" };
 
@@ -14,6 +15,8 @@ const STATUS_COLORS = {
 };
 
 export default function Attendance() {
+  const { isMobile, isTablet } = useViewport();
+  const statCols = isMobile ? 1 : isTablet ? 2 : 4;
   const [stats, setStats] = useState(null);
   const [records, setRecords] = useState([]);
   const [programs, setPrograms] = useState([]);
@@ -59,15 +62,15 @@ export default function Attendance() {
   return (
     <AppShell title="Attendance" description="Track sessions, record attendance, and monitor daily rates.">
       <div style={styles.wrapper}>
-        <div style={styles.statsRow}>
+        <div style={{ ...styles.statsRow, gridTemplateColumns: `repeat(${statCols}, 1fr)` }}>
           <StatCard label="Today's Sessions" value={stats?.todaySessions ?? "—"} />
           <StatCard label="Today's Attendance Rate" value={stats && stats.todayRate !== null ? `${stats.todayRate}%` : "—"} />
           <StatCard label="Present Today" value={stats?.presentToday ?? "—"} />
           <StatCard label="Absent Today" value={stats?.absentToday ?? "—"} />
         </div>
 
-        <div style={styles.toolbar}>
-          <div style={styles.leftControls}>
+        <div style={{ ...styles.toolbar, flexWrap: isMobile ? "wrap" : "nowrap" }}>
+          <div style={{ ...styles.leftControls, flexWrap: isMobile ? "wrap" : "nowrap", width: isMobile ? "100%" : "auto" }}>
             <div style={{ position: "relative" }}>
               <button type="button" style={styles.filterBtn} onClick={() => setFiltersOpen((v) => !v)}>
                 <svg {...iconProps} width="15" height="15"><path d="M4 6h16M7 12h10M10 18h4" /></svg>
@@ -228,7 +231,7 @@ const styles = {
   filterBtn: { display: "flex", alignItems: "center", gap: 8, background: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: "var(--radius-sm)", padding: "9px 14px", fontSize: 13, fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap" },
   filterCount: { background: "var(--color-primary)", color: "#fff", fontSize: 11, fontWeight: 700, borderRadius: 999, padding: "1px 7px" },
   menuBackdrop: { position: "fixed", inset: 0, zIndex: 30 },
-  filterPanel: { position: "absolute", top: "calc(100% + 8px)", left: 0, background: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: "var(--radius-md, 10px)", boxShadow: "0 12px 28px rgba(0,0,0,0.18)", padding: 16, width: 280, boxSizing: "border-box", display: "flex", flexDirection: "column", gap: 12, zIndex: 40 },
+  filterPanel: { position: "absolute", top: "calc(100% + 8px)", left: 0, background: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: "var(--radius-md, 10px)", boxShadow: "0 12px 28px rgba(0,0,0,0.18)", padding: 16, width: 280, maxWidth: "88vw", boxSizing: "border-box", display: "flex", flexDirection: "column", gap: 12, zIndex: 40 },
   filterPanelHeader: { display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 13, fontWeight: 700, paddingBottom: 8, borderBottom: "1px solid var(--color-border)" },
   filterLabel: { display: "flex", flexDirection: "column", gap: 6, fontSize: 12, fontWeight: 600, color: "var(--color-text-muted)" },
   filterSelect: { padding: "8px 10px", borderRadius: "var(--radius-sm)", border: "1px solid var(--color-border)", fontSize: 13, background: "var(--color-surface)", width: "100%", boxSizing: "border-box" },
@@ -245,7 +248,7 @@ const styles = {
   recordBtn: { background: "var(--color-primary)", color: "#fff", border: "none", padding: "10px 16px", borderRadius: "var(--radius-sm)", fontWeight: 700, fontSize: 13, cursor: "pointer", whiteSpace: "nowrap" },
 
   tableCard: { background: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: "var(--radius-md, 10px)", overflow: "auto" },
-  table: { width: "100%", tableLayout: "fixed", borderCollapse: "collapse", fontSize: 13 },
+  table: { width: "100%", minWidth: 720, tableLayout: "fixed", borderCollapse: "collapse", fontSize: 13 },
   th: { textAlign: "left", padding: "12px 16px", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.4, color: "var(--color-text-muted)", borderBottom: "1px solid var(--color-border)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" },
   td: { padding: "12px 16px", borderBottom: "1px solid var(--color-border)", wordBreak: "break-word", verticalAlign: "top" },
   emptyCell: { padding: 32, textAlign: "center", color: "var(--color-text-muted)" },

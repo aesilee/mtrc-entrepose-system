@@ -5,6 +5,7 @@ import { useAuth } from "../context/AuthContext.jsx";
 import AppShell from "../components/AppShell.jsx";
 import EmptyState from "../components/EmptyState.jsx";
 import api from "../api/axios.js";
+import useViewport from "../hooks/useViewport.js";
 
 const iconProps = { viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 2, strokeLinecap: "round", strokeLinejoin: "round" };
 
@@ -26,6 +27,7 @@ export default function Patients() {
   const [loading, setLoading] = useState(true);
   const [openMenuId, setOpenMenuId] = useState(null);
   const [filtersOpen, setFiltersOpen] = useState(false);
+  const { isMobile } = useViewport();
 
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
@@ -77,8 +79,8 @@ export default function Patients() {
   return (
     <AppShell title="Patients" description="Manage patient records, admissions, and registrations.">
       <div style={{ ...styles.wrapper, height: "100%" }}>
-        <div style={styles.toolbar}>
-          <div style={styles.leftControls}>
+        <div style={{ ...styles.toolbar, flexWrap: isMobile ? "wrap" : "nowrap" }}>
+          <div style={{ ...styles.leftControls, flexWrap: isMobile ? "wrap" : "nowrap", width: isMobile ? "100%" : "auto" }}>
             <div style={{ position: "relative" }}>
               <button
                 type="button"
@@ -331,6 +333,7 @@ const styles = {
     boxShadow: "0 12px 28px rgba(0,0,0,0.18)",
     padding: 16,
     width: 280,
+    maxWidth: "88vw",
     boxSizing: "border-box",
     display: "flex",
     flexDirection: "column",
@@ -427,7 +430,7 @@ const styles = {
     borderRadius: "var(--radius-md, 10px)",
     overflow: "auto",
   },
-  table: { width: "100%", tableLayout: "fixed", borderCollapse: "collapse", fontSize: 13 },
+  table: { width: "100%", minWidth: 760, tableLayout: "fixed", borderCollapse: "collapse", fontSize: 13 },
   th: {
     textAlign: "left",
     padding: "12px 16px",

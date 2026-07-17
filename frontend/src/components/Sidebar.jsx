@@ -2,6 +2,7 @@ import { useState, useRef } from "react";
 import { createPortal } from "react-dom";
 import { NavLink, useLocation } from "react-router-dom";
 import { ROLE_LABELS, NAV_BY_ROLE, FOOTER_NAV } from "../config/roles.js";
+import useViewport from "../hooks/useViewport.js";
 
 const NAV_ICONS = {
   dashboard: (
@@ -99,26 +100,19 @@ function NavTooltip({ label, show, children }) {
   };
 
   return (
-    <div
-      ref={wrapperRef}
-      style={styles.tooltipWrapper}
-      onMouseEnter={handleEnter}
-      onMouseLeave={() => setHover(false)}
-    >
+    <div ref={wrapperRef} style={styles.tooltipWrapper} onMouseEnter={handleEnter} onMouseLeave={() => setHover(false)}>
       {children}
       {show &&
         hover &&
         createPortal(
-          <div style={{ ...styles.tooltip, top: coords.top, left: coords.left }}>
-            {label}
-          </div>,
+          <div style={{ ...styles.tooltip, top: coords.top, left: coords.left }}>{label}</div>,
           document.body
         )}
     </div>
   );
 }
 
-function GroupFlyout({ label, groupItem, location, children }) {
+function GroupFlyout({ label, groupItem }) {
   const [open, setOpen] = useState(false);
   const [coords, setCoords] = useState({ top: 0, left: 0 });
   const wrapperRef = useRef(null);
@@ -132,36 +126,23 @@ function GroupFlyout({ label, groupItem, location, children }) {
     }
     setOpen(true);
   };
-
-  const scheduleClose = () => {
-    closeTimer.current = setTimeout(() => setOpen(false), 150);
-  };
+  const scheduleClose = () => { closeTimer.current = setTimeout(() => setOpen(false), 150); };
 
   return (
-    <div
-      ref={wrapperRef}
-      style={styles.tooltipWrapper}
-      onMouseEnter={openFlyout}
-      onMouseLeave={scheduleClose}
-    >
-      {children}
+    <div ref={wrapperRef} style={styles.tooltipWrapper} onMouseEnter={openFlyout} onMouseLeave={scheduleClose}>
+      <button type="button" className="mtrc-nav-item" style={{ ...styles.navItem, ...styles.groupHeader, ...styles.navItemCollapsed }}>
+        <span className="mtrc-nav-icon" style={styles.navIcon}>{NAV_ICONS[groupItem.icon]}</span>
+      </button>
       {open &&
         createPortal(
-          <div
-            style={{ ...styles.flyoutPanel, top: coords.top, left: coords.left }}
-            onMouseEnter={openFlyout}
-            onMouseLeave={scheduleClose}
-          >
+          <div style={{ ...styles.flyoutPanel, top: coords.top, left: coords.left }} onMouseEnter={openFlyout} onMouseLeave={scheduleClose}>
             <div style={styles.flyoutHeader}>{label}</div>
             {groupItem.children.map((child) => (
               <NavLink
                 key={child.path}
                 to={child.path}
                 className="mtrc-nav-item"
-                style={({ isActive }) => ({
-                  ...styles.flyoutItem,
-                  ...(isActive ? styles.navItemActive : {}),
-                })}
+                style={({ isActive }) => ({ ...styles.flyoutItem, ...(isActive ? styles.navItemActive : {}) })}
                 onClick={() => setOpen(false)}
               >
                 <span>{child.label}</span>
@@ -175,13 +156,79 @@ function GroupFlyout({ label, groupItem, location, children }) {
   );
 }
 
+// ---- Mobile: bottom navigation bar ----
+function BottomBar({ user }) {
+  const items = NAV_BY_ROLE[user.role] || [];
+  const location = useLocation();
+  const [sheetItem, setSheetItem] = useState(null);
+  const allItems = [...items, ...FOOTER_NAV];
+
+  return (
+    <>
+      <nav style={styles.bottomBar}>
+        {allItems.map((item) =>
+          item.children ? (
+            <button
+              key={item.label}
+              type="button"
+              style={{
+                ...styles.bottomBarItem,
+                ...(item.children.some((c) => location.pathname.startsWith(c.path)) ? styles.bottomBarItemActive : {}),
+              }}
+              onClick={() => setSheetItem(item)}
+            >
+              <span style={styles.bottomBarIcon}>{NAV_ICONS[item.icon]}</span>
+              <span style={styles.bottomBarLabel}>{item.label}</span>
+            </button>
+          ) : (
+            <NavLink
+              key={item.path}
+              to={item.path}
+              style={({ isActive }) => ({
+                ...styles.bottomBarItem,
+                ...(isActive ? styles.bottomBarItemActive : {}),
+              })}
+            >
+              <span style={styles.bottomBarIcon}>{NAV_ICONS[item.icon]}</span>
+              <span style={styles.bottomBarLabel}>{item.label}</span>
+            </NavLink>
+          )
+        )}
+      </nav>
+
+      {sheetItem &&
+        createPortal(
+          <div style={styles.sheetBackdrop} onClick={() => setSheetItem(null)}>
+            <div style={styles.sheet} onClick={(e) => e.stopPropagation()}>
+              <div style={styles.sheetHandle} />
+              <div style={styles.sheetTitle}>{sheetItem.label}</div>
+              {sheetItem.children.map((child) => (
+                <NavLink
+                  key={child.path}
+                  to={child.path}
+                  className="mtrc-nav-item"
+                  style={({ isActive }) => ({ ...styles.sheetItem, ...(isActive ? styles.navItemActive : {}) })}
+                  onClick={() => setSheetItem(null)}
+                >
+                  <span>{child.label}</span>
+                  {child.badge && <span style={styles.badge}>{child.badge}</span>}
+                </NavLink>
+              ))}
+            </div>
+          </div>,
+          document.body
+        )}
+    </>
+  );
+}
+
 export default function Sidebar({ user }) {
+  const { isMobile } = useViewport();
   const items = NAV_BY_ROLE[user.role] || [];
   const location = useLocation();
   const [collapsed, setCollapsed] = useState(
     () => sessionStorage.getItem("mtrc-sidebar-collapsed") === "true"
   );
-
   const setCollapsedPersisted = (value) => {
     setCollapsed((prev) => {
       const next = typeof value === "function" ? value(prev) : value;
@@ -197,9 +244,7 @@ export default function Sidebar({ user }) {
     } catch {
       stored = null;
     }
-
     const initial = stored && typeof stored === "object" ? stored : {};
-
     items.forEach((item) => {
       if (item.children?.some((c) => location.pathname.startsWith(c.path))) {
         initial[item.label] = true;
@@ -220,13 +265,18 @@ export default function Sidebar({ user }) {
     });
   };
 
+  if (isMobile) {
+    return <BottomBar user={user} />;
+  }
+
   return (
     <aside
       style={{
         ...styles.aside,
         width: collapsed ? 72 : 240,
         padding: collapsed ? "20px 12px" : "20px 16px",
-      }}>
+      }}
+    >
       {HOVER_STYLES}
       <div
         style={{
@@ -272,22 +322,7 @@ export default function Sidebar({ user }) {
           item.children ? (
             <div key={item.label} style={styles.group}>
               {collapsed ? (
-                <GroupFlyout label={item.label} groupItem={item} location={location}>
-                  <button
-                    type="button"
-                    className="mtrc-nav-item"
-                    style={{
-                      ...styles.navItem,
-                      ...styles.groupHeader,
-                      ...styles.navItemCollapsed,
-                      ...(item.children.some((c) => location.pathname.startsWith(c.path))
-                        ? styles.navItemActive
-                        : {}),
-                    }}
-                  >
-                    <span className="mtrc-nav-icon" style={styles.navIcon}>{NAV_ICONS[item.icon]}</span>
-                  </button>
-                </GroupFlyout>
+                <GroupFlyout label={item.label} groupItem={item} />
               ) : (
                 <button
                   type="button"
@@ -296,19 +331,12 @@ export default function Sidebar({ user }) {
                   style={{
                     ...styles.navItem,
                     ...styles.groupHeader,
-                    ...(item.children.some((c) => location.pathname.startsWith(c.path))
-                      ? styles.navItemActive
-                      : {}),
+                    ...(item.children.some((c) => location.pathname.startsWith(c.path)) ? styles.navItemActive : {}),
                   }}
                 >
                   <span className="mtrc-nav-icon" style={styles.navIcon}>{NAV_ICONS[item.icon]}</span>
                   <span style={styles.navLabel}>{item.label}</span>
-                  <span
-                    style={{
-                      ...styles.chevron,
-                      transform: openGroups[item.label] ? "rotate(90deg)" : "rotate(0deg)",
-                    }}
-                  >
+                  <span style={{ ...styles.chevron, transform: openGroups[item.label] ? "rotate(90deg)" : "rotate(0deg)" }}>
                     ›
                   </span>
                 </button>
@@ -321,10 +349,7 @@ export default function Sidebar({ user }) {
                       key={child.path}
                       to={child.path}
                       className="mtrc-nav-item"
-                      style={({ isActive }) => ({
-                        ...styles.subNavItem,
-                        ...(isActive ? styles.navItemActive : {}),
-                      })}
+                      style={({ isActive }) => ({ ...styles.subNavItem, ...(isActive ? styles.navItemActive : {}) })}
                     >
                       <span>{child.label}</span>
                       {child.badge && <span style={styles.badge}>{child.badge}</span>}
@@ -345,9 +370,7 @@ export default function Sidebar({ user }) {
                 })}
               >
                 <span className="mtrc-nav-icon" style={styles.navIcon}>{NAV_ICONS[item.icon]}</span>
-                <span style={{ ...styles.navLabel, ...(collapsed ? styles.navLabelHidden : {}) }}>
-                  {item.label}
-                </span>
+                {!collapsed && <span style={styles.navLabel}>{item.label}</span>}
                 {item.badge && !collapsed && <span style={styles.badge}>{item.badge}</span>}
               </NavLink>
             </NavTooltip>
@@ -368,9 +391,7 @@ export default function Sidebar({ user }) {
               })}
             >
               <span className="mtrc-nav-icon" style={styles.navIcon}>{NAV_ICONS[item.icon]}</span>
-              <span style={{ ...styles.navLabel, ...(collapsed ? styles.navLabelHidden : {}) }}>
-                {item.label}
-              </span>
+              {!collapsed && <span style={styles.navLabel}>{item.label}</span>}
             </NavLink>
           </NavTooltip>
         ))}
@@ -383,7 +404,6 @@ export default function Sidebar({ user }) {
 
 const styles = {
   aside: {
-    width: 240,
     minHeight: "100vh",
     background: "var(--color-surface)",
     borderRight: "1px solid var(--color-border)",
@@ -391,222 +411,89 @@ const styles = {
     flexDirection: "column",
     padding: "20px 16px",
     transition: "width 0.25s ease, padding 0.25s ease",
-    overflowX: "visible",
-    position: "relative",
-    zIndex: 20,
   },
-  brand: {
-    display: "flex",
-    alignItems: "center",
-    gap: 8,
-    padding: "4px 4px 24px",
-    transition: "flex-direction 0.2s ease",
-  },
-  brandText: {
-    overflow: "hidden",
-    whiteSpace: "nowrap",
-  },
+  brand: { display: "flex", alignItems: "center", gap: 8, padding: "4px 4px 24px" },
+  brandText: { overflow: "hidden", whiteSpace: "nowrap" },
   collapseBtn: {
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    width: 22,
-    height: 22,
-    border: "none",
-    background: "transparent",
-    padding: 0,
-    color: "var(--color-text-muted)",
-    cursor: "pointer",
-    flexShrink: 0,
-    transition: "color 0.15s ease",
+    display: "flex", alignItems: "center", justifyContent: "center", width: 22, height: 22,
+    border: "none", background: "transparent", padding: 0, color: "var(--color-text-muted)", cursor: "pointer", flexShrink: 0,
   },
   logoMark: {
-    width: 34,
-    height: 34,
-    borderRadius: "var(--radius-sm)",
-    background: "var(--color-primary)",
-    color: "#fff",
-    fontFamily: "var(--font-display)",
-    fontWeight: 800,
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
+    width: 34, height: 34, borderRadius: "var(--radius-sm)", background: "var(--color-primary)", color: "#fff",
+    fontFamily: "var(--font-display)", fontWeight: 800, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
   },
-  brandName: {
-    fontFamily: "var(--font-display)",
-    fontWeight: 800,
-    fontSize: 15,
-    color: "var(--color-primary-dark)",
-  },
-  brandSub: {
-    fontSize: 11,
-    color: "var(--color-text-muted)",
-  },
-  nav: {
-    display: "flex",
-    flexDirection: "column",
-    gap: 2,
-    flex: 1,
-    overflowY: "auto",
-  },
-  group: {
-    display: "flex",
-    flexDirection: "column",
-  },
-  groupHeader: {
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "space-between",
-    width: "100%",
-    border: "none",
-    cursor: "pointer",
-    textAlign: "left",
-  },
-  chevron: {
-    display: "inline-block",
-    transition: "transform 0.15s ease",
-    fontSize: 14,
-    color: "var(--color-text-muted)",
-  },
-  subNav: {
-    display: "flex",
-    flexDirection: "column",
-    gap: 1,
-    marginLeft: 12,
-    paddingLeft: 10,
-    borderLeft: "1px solid var(--color-border)",
-  },
+  brandName: { fontFamily: "var(--font-display)", fontWeight: 800, fontSize: 15, color: "var(--color-primary-dark)" },
+  brandSub: { fontSize: 11, color: "var(--color-text-muted)" },
+  nav: { display: "flex", flexDirection: "column", gap: 2, flex: 1, overflowY: "auto" },
+  group: { display: "flex", flexDirection: "column" },
+  groupHeader: { display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%", border: "none", cursor: "pointer", textAlign: "left" },
+  chevron: { display: "inline-block", transition: "transform 0.15s ease", fontSize: 14, color: "var(--color-text-muted)" },
+  subNav: { display: "flex", flexDirection: "column", gap: 1, marginLeft: 12, paddingLeft: 10, borderLeft: "1px solid var(--color-border)" },
   subNavItem: {
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "space-between",
-    textDecoration: "none",
-    color: "var(--color-text)",
-    padding: "8px 12px",
-    borderRadius: "var(--radius-sm)",
-    fontSize: 13,
-    fontWeight: 500,
+    display: "flex", alignItems: "center", justifyContent: "space-between", textDecoration: "none",
+    color: "var(--color-text)", padding: "8px 12px", borderRadius: "var(--radius-sm)", fontSize: 13, fontWeight: 500,
   },
   navItem: {
-    display: "flex",
-    alignItems: "center",
-    textDecoration: "none",
-    color: "var(--color-text)",
-    padding: "10px 12px",
-    borderRadius: "var(--radius-sm)",
-    fontSize: 14,
-    fontWeight: 500,
+    display: "flex", alignItems: "center", textDecoration: "none", color: "var(--color-text)",
+    padding: "10px 12px", borderRadius: "var(--radius-sm)", fontSize: 14, fontWeight: 500,
     transition: "background 0.15s ease, color 0.15s ease, padding 0.2s ease",
+    width: "100%",
   },
-  navItemCollapsed: {
-    justifyContent: "center",
-    padding: "10px 0",
-  },
-  navIcon: {
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    width: 20,
-    height: 20,
-    flexShrink: 0,
-  },
-  navLabel: {
-    flex: "1 1 auto",
-    opacity: 1,
-    maxWidth: 160,
-    overflow: "hidden",
-    whiteSpace: "nowrap",
-    marginLeft: 10,
-    transition: "opacity 0.2s ease, max-width 0.2s ease, margin 0.2s ease, flex 0.2s ease",
-  },
-  navLabelHidden: {
-    opacity: 0,
-    maxWidth: 0,
-    marginLeft: 0,
-    flex: "0 0 auto",
-    width: 0,
-    padding: 0,
-    overflow: "hidden",
-  },
+  navItemCollapsed: { justifyContent: "center", alignItems: "center", padding: "10px 0", width: "100%" },
+  navIcon: { display: "flex", alignItems: "center", justifyContent: "center", width: 20, height: 20, flexShrink: 0 },
+  navLabel: { flex: 1, overflow: "hidden", whiteSpace: "nowrap", marginLeft: 10 },
   tooltip: {
-    position: "absolute",
-    left: "calc(100% + 14px)",
-    top: "50%",
-    transform: "translateY(-50%)",
-    background: "var(--color-primary-dark)",
-    color: "#fff",
-    fontSize: 12,
-    fontWeight: 600,
-    padding: "6px 10px",
-    borderRadius: "var(--radius-sm)",
-    whiteSpace: "nowrap",
-    boxShadow: "0 4px 12px rgba(0,0,0,0.18)",
-    zIndex: 100,
-    pointerEvents: "none",
+    position: "fixed", transform: "translateY(-50%)", background: "var(--color-primary-dark)", color: "#fff",
+    fontSize: 12, fontWeight: 600, padding: "6px 10px", borderRadius: "var(--radius-sm)", whiteSpace: "nowrap",
+    boxShadow: "0 4px 12px rgba(0,0,0,0.2)", zIndex: 9999, pointerEvents: "none",
   },
+  tooltipWrapper: { position: "relative", display: "flex", alignItems: "center", justifyContent: "center", width: "100%" },
   flyoutPanel: {
-    position: "fixed",
-    minWidth: 200,
-    background: "var(--color-surface)",
-    border: "1px solid var(--color-border)",
-    borderRadius: "var(--radius-md, 10px)",
-    boxShadow: "0 10px 28px rgba(0,0,0,0.2)",
-    padding: 8,
-    display: "flex",
-    flexDirection: "column",
-    gap: 2,
-    zIndex: 9999,
+    position: "fixed", minWidth: 200, background: "var(--color-surface)", border: "1px solid var(--color-border)",
+    borderRadius: "var(--radius-md, 10px)", boxShadow: "0 10px 28px rgba(0,0,0,0.2)", padding: 8,
+    display: "flex", flexDirection: "column", gap: 2, zIndex: 9999,
   },
-  flyoutHeader: {
-    fontSize: 11,
-    fontWeight: 700,
-    color: "var(--color-text-muted)",
-    textTransform: "uppercase",
-    letterSpacing: 0.4,
-    padding: "4px 10px 8px",
-  },
+  flyoutHeader: { fontSize: 11, fontWeight: 700, color: "var(--color-text-muted)", textTransform: "uppercase", letterSpacing: 0.4, padding: "4px 10px 8px" },
   flyoutItem: {
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "space-between",
-    textDecoration: "none",
-    color: "var(--color-text)",
-    padding: "8px 10px",
-    borderRadius: "var(--radius-sm)",
-    fontSize: 13,
-    fontWeight: 500,
+    display: "flex", alignItems: "center", justifyContent: "space-between", textDecoration: "none",
+    color: "var(--color-text)", padding: "8px 10px", borderRadius: "var(--radius-sm)", fontSize: 13, fontWeight: 500,
   },
-  navItemActive: {
-    background: "var(--color-primary-tint)",
-    color: "var(--color-primary-dark)",
-    fontWeight: 700,
-  },
+  navItemActive: { background: "var(--color-primary-tint)", color: "var(--color-primary-dark)", fontWeight: 700 },
   badge: {
-    fontSize: 10,
-    fontWeight: 700,
-    color: "var(--color-primary-dark)",
-    background: "var(--color-primary-tint)",
-    padding: "2px 6px",
-    borderRadius: 999,
-    textTransform: "uppercase",
-    letterSpacing: 0.3,
+    fontSize: 10, fontWeight: 700, color: "var(--color-primary-dark)", background: "var(--color-primary-tint)",
+    padding: "2px 6px", borderRadius: 999, textTransform: "uppercase", letterSpacing: 0.3,
   },
-  footerNav: {
-    display: "flex",
-    flexDirection: "column",
-    gap: 2,
-    paddingTop: 10,
-    marginTop: 10,
-    borderTop: "1px solid var(--color-border)",
-  },
+  footerNav: { display: "flex", flexDirection: "column", gap: 2, paddingTop: 10, marginTop: 10, borderTop: "1px solid var(--color-border)" },
   roleBadge: {
-    fontSize: 11,
-    fontWeight: 600,
-    color: "var(--color-primary-dark)",
-    background: "var(--color-primary-tint)",
-    padding: "6px 10px",
-    borderRadius: 999,
-    textAlign: "center",
-    marginTop: 12,
+    fontSize: 11, fontWeight: 600, color: "var(--color-primary-dark)", background: "var(--color-primary-tint)",
+    padding: "6px 10px", borderRadius: 999, textAlign: "center", marginTop: 12,
+  },
+
+  // ---- Bottom bar (mobile) ----
+  bottomBar: {
+    position: "fixed", bottom: 0, left: 0, right: 0, height: 64,
+    background: "var(--color-surface)", borderTop: "1px solid var(--color-border)",
+    display: "flex", alignItems: "stretch", justifyContent: "space-around",
+    zIndex: 200, overflowX: "auto",
+  },
+  bottomBarItem: {
+    display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 3,
+    flex: 1, minWidth: 56, textDecoration: "none", color: "var(--color-text-muted)",
+    border: "none", background: "none", cursor: "pointer", padding: "6px 2px",
+  },
+  bottomBarItemActive: { color: "var(--color-primary-dark)" },
+  bottomBarIcon: { width: 20, height: 20, display: "flex", alignItems: "center", justifyContent: "center" },
+  bottomBarLabel: { fontSize: 9.5, fontWeight: 600, textAlign: "center", lineHeight: 1.1 },
+
+  sheetBackdrop: { position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", zIndex: 300, display: "flex", alignItems: "flex-end" },
+  sheet: {
+    width: "100%", background: "var(--color-surface)", borderRadius: "18px 18px 0 0",
+    padding: "10px 16px 20px", display: "flex", flexDirection: "column", gap: 4,
+  },
+  sheetHandle: { width: 36, height: 4, borderRadius: 999, background: "var(--color-border)", alignSelf: "center", marginBottom: 8 },
+  sheetTitle: { fontSize: 13, fontWeight: 700, color: "var(--color-text-muted)", textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 6 },
+  sheetItem: {
+    display: "flex", alignItems: "center", justifyContent: "space-between", textDecoration: "none",
+    color: "var(--color-text)", padding: "12px 10px", borderRadius: "var(--radius-sm)", fontSize: 14, fontWeight: 500,
   },
 };

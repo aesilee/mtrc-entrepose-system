@@ -169,11 +169,11 @@ export default function ReportGeneratorModal({ onClose, onGenerated }) {
 
 const styles = {
   backdrop: { position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 100 },
-  modal: { background: "var(--color-surface)", borderRadius: "var(--radius-lg)", maxHeight: "88vh", display: "flex", flexDirection: "column", overflow: "hidden", transition: "width 0.2s ease" },
+  modal: { background: "var(--color-surface)", borderRadius: "var(--radius-lg)", maxHeight: "88vh", maxWidth: "94vw", display: "flex", flexDirection: "column", overflow: "hidden", transition: "width 0.2s ease" },
   header: { display: "flex", justifyContent: "space-between", alignItems: "center", padding: "16px 20px", borderBottom: "1px solid var(--color-border)" },
   title: { fontSize: 16, fontWeight: 800 },
   closeBtn: { background: "none", border: "none", fontSize: 22, cursor: "pointer", color: "var(--color-text-muted)" },
-  body: { display: "flex", overflow: "hidden", flex: 1 },
+  body: { display: "flex", flexWrap: "wrap", overflow: "auto", flex: 1 },
   formCol: { padding: 20, display: "flex", flexDirection: "column", gap: 14, overflowY: "auto", borderRight: "1px solid var(--color-border)", flexShrink: 0 },
   previewCol: { flex: 1, padding: 20, overflowY: "auto" },
   error: { background: "#FDE2E2", color: "#B3261E", fontSize: 13, padding: "8px 12px", borderRadius: "var(--radius-sm)" },

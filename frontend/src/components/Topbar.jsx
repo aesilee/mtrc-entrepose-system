@@ -12,7 +12,7 @@ export default function Topbar({ title, description }) {
 
   return (
     <header style={styles.header}>
-      <div>
+      <div style={{ minWidth: 0 }}>
         <h1 style={styles.title}>{title}</h1>
         {description && <p style={styles.description}>{description}</p>}
       </div>
@@ -39,6 +39,19 @@ const styles = {
     fontSize: 20,
     fontWeight: 800,
     margin: 0,
+  },
+  menuBtn: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    width: 36,
+    height: 36,
+    flexShrink: 0,
+    background: "none",
+    border: "1px solid var(--color-border)",
+    borderRadius: "var(--radius-sm)",
+    color: "var(--color-text)",
+    cursor: "pointer",
   },
   description: {
     fontSize: 13,

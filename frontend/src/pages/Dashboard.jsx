@@ -4,6 +4,8 @@ import AppShell from "../components/AppShell.jsx";
 import { useAuth } from "../context/AuthContext.jsx";
 import { ROLE_LABELS } from "../config/roles.js";
 import api from "../api/axios.js";
+import useViewport from "../hooks/useViewport.js";
+
 
 const iconProps = { viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 2, strokeLinecap: "round", strokeLinejoin: "round" };
 
@@ -45,6 +47,8 @@ const QUICK_ACTIONS = [
 
 function IctAdminDashboard() {
   const navigate = useNavigate();
+  const { isMobile, isTablet } = useViewport();
+  const statCols = isMobile ? 1 : isTablet ? 2 : 4;
   const [stats, setStats] = useState(null);
 
   useEffect(() => {
@@ -60,7 +64,7 @@ function IctAdminDashboard() {
 
   return (
     <div style={styles.grid}>
-      <div style={styles.statsRow}>
+      <div style={{ ...styles.statsRow, gridTemplateColumns: `repeat(${statCols}, 1fr)` }}>
         {statCards.map((card) => (
           <div key={card.key} style={styles.statCard}>
             <div style={styles.statIcon}>{card.icon}</div>
@@ -72,7 +76,7 @@ function IctAdminDashboard() {
         ))}
       </div>
 
-      <div style={styles.twoColRow}>
+      <div style={{ ...styles.twoColRow, flexDirection: isMobile ? "column" : "row" }}>
         <div style={styles.card}>
           <div style={styles.cardTitle}>Recent User Activity</div>
           <div style={styles.list}>
@@ -99,7 +103,7 @@ function IctAdminDashboard() {
         </div>
       </div>
 
-      <div style={styles.twoColRow}>
+      <div style={{ ...styles.twoColRow, flexDirection: isMobile ? "column" : "row" }}>
         <div style={styles.card}>
           <div style={styles.cardTitle}>System Health</div>
           <div style={styles.healthGrid}>

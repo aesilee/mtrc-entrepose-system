@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { NavLink, useLocation } from "react-router-dom";
 import { ROLE_LABELS, NAV_BY_ROLE, FOOTER_NAV } from "../config/roles.js";
 import useViewport from "../hooks/useViewport.js";
+import useOrgSettings from "../hooks/useOrgSettings.js";
 
 const NAV_ICONS = {
   dashboard: (
@@ -141,6 +142,7 @@ function GroupFlyout({ label, groupItem }) {
               <NavLink
                 key={child.path}
                 to={child.path}
+                end
                 className="mtrc-nav-item"
                 style={({ isActive }) => ({ ...styles.flyoutItem, ...(isActive ? styles.navItemActive : {}) })}
                 onClick={() => setOpen(false)}
@@ -206,6 +208,7 @@ function BottomBar({ user }) {
                 <NavLink
                   key={child.path}
                   to={child.path}
+                  end
                   className="mtrc-nav-item"
                   style={({ isActive }) => ({ ...styles.sheetItem, ...(isActive ? styles.navItemActive : {}) })}
                   onClick={() => setSheetItem(null)}
@@ -226,6 +229,7 @@ export default function Sidebar({ user }) {
   const { isMobile } = useViewport();
   const items = NAV_BY_ROLE[user.role] || [];
   const location = useLocation();
+  const org = useOrgSettings();
   const [collapsed, setCollapsed] = useState(
     () => sessionStorage.getItem("mtrc-sidebar-collapsed") === "true"
   );
@@ -285,7 +289,11 @@ export default function Sidebar({ user }) {
           justifyContent: collapsed ? "center" : "space-between",
         }}
       >
-        <div style={styles.logoMark}>M</div>
+        {org?.organization_logo ? (
+  <img src={org.organization_logo} alt="Organization logo" style={styles.logoMark} />
+) : (
+  <div style={styles.logoMark}>M</div>
+)}
 
         {!collapsed && (
           <div style={styles.brandText}>
@@ -348,6 +356,7 @@ export default function Sidebar({ user }) {
                     <NavLink
                       key={child.path}
                       to={child.path}
+                      end
                       className="mtrc-nav-item"
                       style={({ isActive }) => ({ ...styles.subNavItem, ...(isActive ? styles.navItemActive : {}) })}
                     >
@@ -419,9 +428,10 @@ const styles = {
     border: "none", background: "transparent", padding: 0, color: "var(--color-text-muted)", cursor: "pointer", flexShrink: 0,
   },
   logoMark: {
-    width: 34, height: 34, borderRadius: "var(--radius-sm)", background: "var(--color-primary)", color: "#fff",
-    fontFamily: "var(--font-display)", fontWeight: 800, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
-  },
+  width: 34, height: 34, borderRadius: "var(--radius-sm)", background: "var(--color-primary)", color: "#fff",
+  fontFamily: "var(--font-display)", fontWeight: 800, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
+  objectFit: "contain",
+},
   brandName: { fontFamily: "var(--font-display)", fontWeight: 800, fontSize: 15, color: "var(--color-primary-dark)" },
   brandSub: { fontSize: 11, color: "var(--color-text-muted)" },
   nav: { display: "flex", flexDirection: "column", gap: 2, flex: 1, overflowY: "auto" },

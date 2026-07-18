@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext.jsx";
+import api from "../api/axios.js";
 
 function EyeIcon() {
   return (
@@ -23,6 +24,11 @@ function EyeOffIcon() {
 export default function Login() {
   const { login } = useAuth();
   const navigate = useNavigate();
+  const [org, setOrg] = useState(null);
+
+  useEffect(() => {
+    api.get("/settings/public").then(({ data }) => setOrg(data.settings)).catch(() => {});
+  }, []);
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -62,8 +68,12 @@ export default function Login() {
   return (
     <div style={styles.page}>
       <div style={styles.card}>
-        <div style={styles.logoMark}>M</div>
-        <h1 style={styles.title}>MTRC ENTREPOSE</h1>
+        {org?.organization_logo ? (
+          <img src={org.organization_logo} alt="Organization logo" style={{ ...styles.logoMark, objectFit: "contain", background: "#fff" }} />
+        ) : (
+          <div style={styles.logoMark}>M</div>
+        )}
+        <h1 style={styles.title}>{org?.organization_name || "MTRC ENTREPOSE"}</h1>
         <p style={styles.subtitle}>Patient &amp; Case Monitoring System</p>
 
         <form onSubmit={handleSubmit} style={styles.form}>

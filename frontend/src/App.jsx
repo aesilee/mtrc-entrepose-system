@@ -10,17 +10,14 @@ import PatientProfile from "./pages/PatientProfile.jsx";
 import Reports from "./pages/Reports.jsx";
 import Analytics from "./pages/Analytics.jsx";
 import Attendance from "./pages/Attendance.jsx";
+import AuditLogs from "./pages/AuditLogs.jsx";
+import Settings from "./pages/Settings.jsx";
 
 // Simple declarative route table: [path, title, allowedRoles?]
 // allowedRoles omitted = any authenticated user.
 // Route table: [path, title, description, allowedRoles?]
 // allowedRoles omitted = any authenticated user.
 const COMING_SOON_ROUTES = [
-
-  // Administration
-  ["/settings/audit-logs", "Audit Logs", "Track logins, updates, and record changes across the system.", ["ict_admin"]],
-  ["/settings", "Settings", "Configure general, notification, and security preferences.", ["ict_admin"]],
-
   // Account
   ["/profile", "My Profile", "View and update your account details."],
 ];
@@ -44,6 +41,23 @@ export default function App() {
         element={
           <ProtectedRoute allowedRoles={["ict_admin"]}>
             <UserManagement />
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/settings/audit-logs"
+        element={
+          <ProtectedRoute allowedRoles={["ict_admin"]}>
+            <AuditLogs />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/settings"
+        element={
+          <ProtectedRoute allowedRoles={["ict_admin"]}>
+            <Settings />
           </ProtectedRoute>
         }
       />

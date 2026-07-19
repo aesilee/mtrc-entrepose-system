@@ -1,7 +1,7 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import api from "../api/axios.js";
-import * as XLSX from "xlsx";
 import ReportPreview from "./ReportPreview.jsx";
+import { downloadElementAsPdf } from "../utils/pdf.js";
 
 const REPORT_TYPES = [
   { key: "attendance", label: "Attendance Report" },
@@ -23,7 +23,9 @@ export default function ReportGeneratorModal({ onClose, onGenerated }) {
   const [patients, setPatients] = useState([]);
   const [report, setReport] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [downloading, setDownloading] = useState(false);
   const [error, setError] = useState("");
+  const previewRef = useRef(null);
 
   useEffect(() => {
     api.get("/users/case-managers").then(({ data }) => setCaseManagers(data.caseManagers));
@@ -56,16 +58,18 @@ export default function ReportGeneratorModal({ onClose, onGenerated }) {
     }
   }
 
-  function handleExportExcel() {
-    if (!report) return;
-    const ws = XLSX.utils.json_to_sheet(report.rows);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, report.title.slice(0, 31));
-    XLSX.writeFile(wb, `${reportType}-report-${new Date().toISOString().slice(0, 10)}.xlsx`);
-  }
-
   function handlePrint() {
     window.print();
+  }
+
+  async function handleDownload() {
+    if (!report) return;
+    setDownloading(true);
+    try {
+      await downloadElementAsPdf(previewRef.current, `${reportType}-report-${new Date().toISOString().slice(0, 10)}.pdf`);
+    } finally {
+      setDownloading(false);
+    }
   }
 
   return (
@@ -144,21 +148,27 @@ export default function ReportGeneratorModal({ onClose, onGenerated }) {
               </label>
             )}
 
-            <button type="button" style={styles.generateBtn} onClick={handleGenerate} disabled={loading}>
-              {loading ? "Generating…" : report ? "Regenerate" : "Generate Report"}
-            </button>
+            {!report && (
+              <button type="button" style={styles.generateBtn} onClick={handleGenerate} disabled={loading}>
+                {loading ? "Generating…" : "Generate Report"}
+              </button>
+            )}
 
             {report && (
               <div className="no-print" style={styles.exportRow}>
-                <button type="button" style={styles.secondaryBtn} onClick={handlePrint}>Print / Export PDF</button>
-                <button type="button" style={styles.secondaryBtn} onClick={handleExportExcel}>Export Excel</button>
+                <button type="button" style={styles.secondaryBtn} onClick={handlePrint}>Print</button>
+                <button type="button" style={styles.secondaryBtn} onClick={handleDownload} disabled={downloading}>
+                  {downloading ? "Preparing…" : "Download PDF"}
+                </button>
               </div>
             )}
           </div>
 
           {report && (
             <div style={styles.previewCol}>
-              <ReportPreview report={report} compact />
+              <div ref={previewRef}>
+                <ReportPreview report={report} compact />
+              </div>
             </div>
           )}
         </div>

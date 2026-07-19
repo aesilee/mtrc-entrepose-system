@@ -11,6 +11,7 @@ import {
   getPatientHistory,
   getPatientTimeline,
 } from "../controllers/patientController.js";
+import { generateCertificate } from "../controllers/certificateController.js";
 import { createProgressNote } from "../controllers/progressNoteController.js";
 import { getPatientFollowUps, createFollowUp } from "../controllers/followUpController.js";
 
@@ -28,6 +29,7 @@ router.post("/:id/progress-notes", requireRole("case_manager", "ict_admin"), cre
 router.get("/:id/follow-ups", getPatientFollowUps);
 router.post("/:id/follow-ups", requireRole("case_manager", "ict_admin"), createFollowUp);
 router.get("/:id/certificates", getPatientCertificates);
+router.post("/:id/certificates", requireRole("case_manager", "him_staff", "ict_admin"), generateCertificate);
 router.get("/:id/history", getPatientHistory);
 router.get("/:id/timeline", getPatientTimeline);
 

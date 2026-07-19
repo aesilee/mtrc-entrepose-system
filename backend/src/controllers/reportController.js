@@ -199,3 +199,20 @@ export async function getReport(req, res) {
     stats: r.stats_json, chart: r.chart_json, rows: r.rows_json,
   });
 }
+
+export async function deleteReport(req, res) {
+  const { id } = req.params;
+  const [[report]] = await pool.query("SELECT title FROM generated_reports WHERE id = ?", [id]);
+  if (!report) return res.status(404).json({ message: "Report not found." });
+
+  try {
+    await pool.query("DELETE FROM generated_reports WHERE id = ?", [id]);
+    await pool.query("INSERT INTO audit_log (actor_username, action) VALUES (?, ?)", [
+      req.user.username, `Deleted a generated report: "${report.title}"`,
+    ]);
+    res.json({ message: "Report deleted." });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Could not delete the report." });
+  }
+}

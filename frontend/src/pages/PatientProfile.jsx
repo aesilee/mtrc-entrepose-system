@@ -7,6 +7,9 @@ import ProgressNoteModal from "../components/ProgressNoteModal.jsx";
 import FollowUpModal from "../components/FollowUpModal.jsx";
 import CompleteFollowUpModal from "../components/CompleteFollowUpModal.jsx";
 import SharedEmptyState from "../components/EmptyState.jsx";
+import CertificateGeneratorModal from "../components/CertificateGeneratorModal.jsx";
+import CertificateViewModal from "../components/CertificateViewModal.jsx";
+import CardActionMenu from "../components/CardActionMenu.jsx";
 
 const iconProps = { viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 2, strokeLinecap: "round", strokeLinejoin: "round" };
 
@@ -74,6 +77,25 @@ export default function PatientProfile() {
   const [timeline, setTimeline] = useState([]);
   const [noteModal, setNoteModal] = useState(null); // null closed, {} = new, note object = edit
   const [followUpModalOpen, setFollowUpModalOpen] = useState(false);
+  const [certGeneratorOpen, setCertGeneratorOpen] = useState(false);
+  const [viewingCertificateId, setViewingCertificateId] = useState(null);
+  const [certAction, setCertAction] = useState(null);
+
+  function openCertificate(certId, action = null) {
+    setViewingCertificateId(certId);
+    setCertAction(action);
+  }
+
+  async function handleDeleteCertificate(certId) {
+    if (!window.confirm("Delete this certificate? This cannot be undone.")) return;
+    try {
+      await api.delete(`/certificates/${certId}`);
+      if (viewingCertificateId === certId) setViewingCertificateId(null);
+      refreshCertificates();
+    } catch (err) {
+      alert("Could not delete this certificate.");
+    }
+  }
   const [completingFollowUpId, setCompletingFollowUpId] = useState(null);
   const [form, setForm] = useState({});
   const [editing, setEditing] = useState(false);
@@ -118,6 +140,16 @@ export default function PatientProfile() {
       setCaseManagers(cm.data.caseManagers);
       setPrograms(pr.data.programs);
     }).finally(() => setLoading(false));
+  }
+
+  function refreshCertificates() {
+    Promise.all([
+      api.get(`/patients/${id}/certificates`),
+      api.get(`/patients/${id}/timeline`),
+    ]).then(([c, tl]) => {
+      setCertificates(c.data.certificates);
+      setTimeline(tl.data.timeline);
+    });
   }
 
   useEffect(loadAll, [id]);
@@ -469,10 +501,29 @@ export default function PatientProfile() {
             <div>
               <SectionHeader icon={NAV_ICONS.certificates} title="Certificates" />
               <div style={{ marginBottom: 16 }}>
-                <button type="button" style={styles.generateBtn}>+ Generate Certificate</button>
+                <button type="button" style={styles.generateBtn} onClick={() => setCertGeneratorOpen(true)}>+ Generate Certificate</button>
               </div>
               {certificates.length === 0 ? <EmptyState text="No certificates issued yet." /> : (
-                <SimpleTable columns={["Type", "Issued", "Issued By"]} rows={certificates.map((c) => [c.certificate_type, fmtDateTime(c.issued_at), c.issued_by_name || "—"])} />
+                <div style={styles.certGrid}>
+                  {certificates.map((c) => (
+                    <div key={c.id} style={{ ...styles.certCard, position: "relative", cursor: "pointer" }} onClick={() => openCertificate(c.id)}>
+                      <CardActionMenu
+                        items={[
+                          { label: "Print", onClick: () => openCertificate(c.id, "print") },
+                          { label: "Download PDF", onClick: () => openCertificate(c.id, "download") },
+                          { label: "Delete", danger: true, onClick: () => handleDeleteCertificate(c.id) },
+                        ]}
+                      />
+                      <div style={styles.certCardIcon}>{NAV_ICONS.certificates}</div>
+                      <div style={styles.certCardTitle}>Certificate of Completion</div>
+                      <div style={styles.certCardMeta}>{c.completion_date ? `Completed ${fmtDateTime(c.completion_date)}` : ""}</div>
+                      <div style={styles.certCardFooter}>
+                        <span>{c.issued_by_name || "—"}</span>
+                        <span>{fmtDateTime(c.issued_at)}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
               )}
             </div>
           ) : activeSection === "history" ? (
@@ -506,6 +557,20 @@ export default function PatientProfile() {
           followUpId={completingFollowUpId}
           onClose={() => setCompletingFollowUpId(null)}
           onSaved={() => { setCompletingFollowUpId(null); loadAll(); }}
+        />
+      )}
+      {certGeneratorOpen && (
+        <CertificateGeneratorModal
+          patientId={id}
+          onClose={() => setCertGeneratorOpen(false)}
+          onGenerated={refreshCertificates}
+        />
+      )}
+      {viewingCertificateId && (
+        <CertificateViewModal
+          certificateId={viewingCertificateId}
+          autoAction={certAction}
+          onClose={() => setViewingCertificateId(null)}
         />
       )}
     </AppShell>
@@ -679,6 +744,13 @@ const styles = {
   timelineDot: { width: 8, height: 8, borderRadius: "50%", background: "var(--color-primary)", marginTop: 6, flexShrink: 0 },
 
   generateBtn: { background: "var(--color-primary)", color: "#fff", border: "none", padding: "9px 16px", borderRadius: "var(--radius-sm)", fontSize: 13, fontWeight: 700, cursor: "pointer" },
+
+  certGrid: { display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 16 },
+  certCard: { textAlign: "left", background: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: "var(--radius-lg)", padding: 18, cursor: "pointer", display: "flex", flexDirection: "column", gap: 8 },
+  certCardIcon: { width: 36, height: 36, borderRadius: "var(--radius-sm)", background: "var(--color-primary-tint)", color: "var(--color-primary-dark)", display: "flex", alignItems: "center", justifyContent: "center" },
+  certCardTitle: { fontSize: 14, fontWeight: 700, color: "var(--color-text)" },
+  certCardMeta: { fontSize: 12, color: "var(--color-text-muted)" },
+  certCardFooter: { display: "flex", justifyContent: "space-between", fontSize: 11, color: "var(--color-text-muted)", marginTop: 6, paddingTop: 8, borderTop: "1px solid var(--color-border)" },
 
   table: { width: "100%", borderCollapse: "collapse", fontSize: 13 },
   th: { textAlign: "left", padding: "10px 12px", fontSize: 11, fontWeight: 700, textTransform: "uppercase", color: "var(--color-text-muted)", borderBottom: "1px solid var(--color-border)" },

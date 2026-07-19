@@ -5,6 +5,7 @@ import ReportGeneratorModal from "../components/ReportGeneratorModal.jsx";
 import ReportViewModal from "../components/ReportViewModal.jsx";
 import api from "../api/axios.js";
 import useViewport from "../hooks/useViewport.js";
+import CardActionMenu from "../components/CardActionMenu.jsx";
 
 const iconProps = { viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 2, strokeLinecap: "round", strokeLinejoin: "round" };
 
@@ -30,6 +31,23 @@ export default function Reports() {
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [generatorOpen, setGeneratorOpen] = useState(false);
   const [viewingId, setViewingId] = useState(null);
+  const [viewingAction, setViewingAction] = useState(null);
+
+  function openView(id, action = null) {
+    setViewingId(id);
+    setViewingAction(action);
+  }
+
+  async function handleDeleteReport(id) {
+    if (!window.confirm("Delete this report? This cannot be undone.")) return;
+    try {
+      await api.delete(`/reports/${id}`);
+      if (viewingId === id) setViewingId(null);
+      loadReports();
+    } catch (err) {
+      alert("Could not delete this report.");
+    }
+  }
 
   const [typeFilter, setTypeFilter] = useState("");
   const [dateFrom, setDateFrom] = useState("");
@@ -143,7 +161,14 @@ export default function Reports() {
       ) : (
         <div style={styles.grid}>
           {reports.map((r) => (
-            <button key={r.id} type="button" style={styles.card} onClick={() => setViewingId(r.id)}>
+            <div key={r.id} style={{ ...styles.card, position: "relative", cursor: "pointer" }} onClick={() => openView(r.id)}>
+              <CardActionMenu
+                items={[
+                  { label: "Print", onClick: () => openView(r.id, "print") },
+                  { label: "Download PDF", onClick: () => openView(r.id, "download") },
+                  { label: "Delete", danger: true, onClick: () => handleDeleteReport(r.id) },
+                ]}
+              />
               <div style={styles.cardIcon}>{REPORT_TYPE_ICONS[r.report_type]}</div>
               <div style={styles.cardTitle}>{r.title}</div>
               <div style={styles.cardMeta}>{r.date_range_label}</div>
@@ -151,7 +176,7 @@ export default function Reports() {
                 <span>{r.generated_by_name || "—"}</span>
                 <span>{new Date(r.created_at).toLocaleDateString()}</span>
               </div>
-            </button>
+            </div>
           ))}
         </div>
       )}
@@ -160,7 +185,7 @@ export default function Reports() {
         <ReportGeneratorModal onClose={() => setGeneratorOpen(false)} onGenerated={loadReports} />
       )}
       {viewingId && (
-        <ReportViewModal reportId={viewingId} onClose={() => setViewingId(null)} />
+        <ReportViewModal reportId={viewingId} autoAction={viewingAction} onClose={() => setViewingId(null)} />
       )}
     </AppShell>
   );

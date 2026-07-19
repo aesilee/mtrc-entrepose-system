@@ -1,0 +1,11 @@
+import { Router } from "express";
+import { verifyToken, requireRole } from "../middleware/auth.js";
+import { getCertificate, deleteCertificate } from "../controllers/certificateController.js";
+
+const router = Router();
+router.use(verifyToken);
+
+router.get("/:id", getCertificate);
+router.delete("/:id", requireRole("case_manager", "him_staff", "ict_admin"), deleteCertificate);
+
+export default router;

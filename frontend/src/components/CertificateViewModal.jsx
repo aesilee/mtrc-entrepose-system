@@ -1,19 +1,19 @@
 import { useEffect, useRef, useState } from "react";
 import api from "../api/axios.js";
-import ReportPreview from "./ReportPreview.jsx";
+import CertificatePreview from "./CertificatePreview.jsx";
 import { downloadElementAsPdf } from "../utils/pdf.js";
 
-export default function ReportViewModal({ reportId, autoAction, onClose }) {
-  const [report, setReport] = useState(null);
+export default function CertificateViewModal({ certificateId, autoAction, onClose }) {
+  const [certificate, setCertificate] = useState(null);
   const [downloading, setDownloading] = useState(false);
   const previewRef = useRef(null);
 
   useEffect(() => {
-    api.get(`/reports/${reportId}`).then(({ data }) => setReport(data));
-  }, [reportId]);
+    api.get(`/certificates/${certificateId}`).then(({ data }) => setCertificate(data));
+  }, [certificateId]);
 
   useEffect(() => {
-    if (!report || !autoAction) return;
+    if (!certificate || !autoAction) return;
     if (autoAction === "print") {
       const t = setTimeout(() => window.print(), 300);
       return () => clearTimeout(t);
@@ -22,32 +22,32 @@ export default function ReportViewModal({ reportId, autoAction, onClose }) {
       const t = setTimeout(async () => {
         setDownloading(true);
         try {
-          await downloadElementAsPdf(previewRef.current, `${report.reportType}-report-${new Date().toISOString().slice(0, 10)}.pdf`);
+          await downloadElementAsPdf(previewRef.current, `certificate-${certificate.patientCode}.pdf`);
         } finally {
           setDownloading(false);
         }
       }, 300);
       return () => clearTimeout(t);
     }
-  }, [report, autoAction]);
+  }, [certificate, autoAction]);
 
   return (
     <div style={styles.backdrop} onClick={onClose}>
       <div style={styles.modal} onClick={(e) => e.stopPropagation()}>
         <div style={styles.header}>
-          <div style={styles.title}>{report?.title || "Report"}</div>
+          <div style={styles.title}>Certificate of Completion</div>
           <button type="button" style={styles.closeBtn} onClick={onClose}>×</button>
         </div>
         <div style={styles.body}>
-          {report ? (
+          {certificate ? (
             <>
               {downloading && <div className="no-print" style={styles.notice}>Preparing PDF…</div>}
               <div ref={previewRef}>
-                <ReportPreview report={report} />
+                <CertificatePreview certificate={certificate} />
               </div>
             </>
           ) : (
-            <div style={{ padding: 40, textAlign: "center", color: "var(--color-text-muted)" }}>Loading report…</div>
+            <div style={{ padding: 40, textAlign: "center", color: "var(--color-text-muted)" }}>Loading certificate…</div>
           )}
         </div>
       </div>

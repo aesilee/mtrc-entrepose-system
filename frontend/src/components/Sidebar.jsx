@@ -1,9 +1,10 @@
 import { useState, useRef } from "react";
 import { createPortal } from "react-dom";
-import { NavLink, useLocation } from "react-router-dom";
+import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import { ROLE_LABELS, NAV_BY_ROLE, FOOTER_NAV } from "../config/roles.js";
 import useViewport from "../hooks/useViewport.js";
 import useOrgSettings from "../hooks/useOrgSettings.js";
+import { useAuth } from "../context/AuthContext.jsx";
 
 const NAV_ICONS = {
   dashboard: (
@@ -68,6 +69,14 @@ const NAV_ICONS = {
       <circle cx="12" cy="12" r="9" />
       <circle cx="12" cy="10" r="3" />
       <path d="M6.5 19c1-2.5 3.2-4 5.5-4s4.5 1.5 5.5 4" />
+    </svg>
+  ),
+
+  logout: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+      <polyline points="16 17 21 12 16 7" />
+      <line x1="21" y1="12" x2="9" y2="12" />
     </svg>
   ),
 };
@@ -230,6 +239,13 @@ export default function Sidebar({ user }) {
   const items = NAV_BY_ROLE[user.role] || [];
   const location = useLocation();
   const org = useOrgSettings();
+  const { logout } = useAuth();
+  const navigate = useNavigate();
+
+  function handleLogout() {
+    logout();
+    navigate("/login");
+  }
   const [collapsed, setCollapsed] = useState(
     () => sessionStorage.getItem("mtrc-sidebar-collapsed") === "true"
   );
@@ -387,26 +403,31 @@ export default function Sidebar({ user }) {
         )}
       </nav>
 
-      <div style={styles.footerNav}>
-        {FOOTER_NAV.map((item) => (
-          <NavTooltip key={item.path} label={item.label} show={collapsed}>
-            <NavLink
-              to={item.path}
-              className="mtrc-nav-item"
-              style={({ isActive }) => ({
-                ...styles.navItem,
-                ...(collapsed ? styles.navItemCollapsed : {}),
-                ...(isActive ? styles.navItemActive : {}),
-              })}
-            >
-              <span className="mtrc-nav-icon" style={styles.navIcon}>{NAV_ICONS[item.icon]}</span>
-              {!collapsed && <span style={styles.navLabel}>{item.label}</span>}
-            </NavLink>
-          </NavTooltip>
-        ))}
-      </div>
+      <div style={{ ...styles.footerBlock, ...(collapsed ? styles.footerBlockCollapsed : styles.footerBlockOpen) }}>
+        <NavTooltip label="Profile" show={collapsed}>
+          <NavLink to="/profile" end style={{ textDecoration: "none" }}>
+            <div style={styles.profileCard}>
+              {user.photoUrl ? (
+                <img src={user.photoUrl} alt={user.fullName} style={styles.profileAvatarImg} />
+              ) : (
+                <div style={styles.profileAvatarFallback}>{(user.fullName || user.username || "?").charAt(0).toUpperCase()}</div>
+              )}
+              {!collapsed && (
+                <div style={{ overflow: "hidden" }}>
+                  <div style={styles.profileName}>{user.fullName || user.username}</div>
+                  <div style={styles.profileRole}>{ROLE_LABELS[user.role]}</div>
+                </div>
+              )}
+            </div>
+          </NavLink>
+        </NavTooltip>
 
-      {!collapsed && <div style={styles.roleBadge}>{ROLE_LABELS[user.role]}</div>}
+        <NavTooltip label="Log out" show={true}>
+          <button type="button" style={styles.logoutBtn} onClick={handleLogout} aria-label="Log out">
+            <span style={styles.navIcon}>{NAV_ICONS.logout}</span>
+          </button>
+        </NavTooltip>
+      </div>
     </aside>
   );
 }
@@ -428,7 +449,7 @@ const styles = {
     border: "none", background: "transparent", padding: 0, color: "var(--color-text-muted)", cursor: "pointer", flexShrink: 0,
   },
   logoMark: {
-  width: 34, height: 34, borderRadius: "var(--radius-sm)", background: "var(--color-primary)", color: "#fff",
+  width: 34, height: 34, background: "var(--color-primary)", color: "#fff",
   fontFamily: "var(--font-display)", fontWeight: 800, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
   objectFit: "contain",
 },
@@ -474,10 +495,15 @@ const styles = {
     padding: "2px 6px", borderRadius: 999, textTransform: "uppercase", letterSpacing: 0.3,
   },
   footerNav: { display: "flex", flexDirection: "column", gap: 2, paddingTop: 10, marginTop: 10, borderTop: "1px solid var(--color-border)" },
-  roleBadge: {
-    fontSize: 11, fontWeight: 600, color: "var(--color-primary-dark)", background: "var(--color-primary-tint)",
-    padding: "6px 10px", borderRadius: 999, textAlign: "center", marginTop: 12,
-  },
+  footerBlock: { marginTop: 10, paddingTop: 10, borderTop: "1px solid var(--color-border)" },
+  footerBlockOpen: { marginLeft: -16, marginRight: -16, paddingLeft: 16, paddingRight: 16, display: "flex", flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 },
+  footerBlockCollapsed: { display: "flex", flexDirection: "column", alignItems: "center", gap: 8 },
+  profileCard: { display: "flex", alignItems: "center", gap: 10, padding: "4px 0", cursor: "pointer" },
+  logoutBtn: { display: "flex", alignItems: "center", justifyContent: "center", width: 32, height: 32, flexShrink: 0, padding: 0, background: "none", border: "none", cursor: "pointer", color: "var(--color-text-muted)" },
+  profileAvatarImg: { width: 34, height: 34, borderRadius: "50%", objectFit: "cover", flexShrink: 0 },
+  profileAvatarFallback: { width: 34, height: 34, borderRadius: "50%", background: "var(--color-primary-tint)", color: "var(--color-primary-dark)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, fontWeight: 800, flexShrink: 0 },
+  profileName: { fontSize: 13, fontWeight: 700, color: "var(--color-text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
+  profileRole: { fontSize: 11.5, color: "var(--color-text-muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
 
   // ---- Bottom bar (mobile) ----
   bottomBar: {

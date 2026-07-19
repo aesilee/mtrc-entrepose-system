@@ -31,7 +31,7 @@ export async function login(req, res) {
       { expiresIn: process.env.JWT_EXPIRES_IN || "8h" }
     );
 
-    await pool.query("UPDATE users SET last_login = NOW() WHERE id = ?", [user.id]);
+    await pool.query("UPDATE users SET last_login = NOW(), last_login_device = ? WHERE id = ?", [req.headers["user-agent"] || null, user.id]);
     await pool.query("INSERT INTO audit_log (actor_username, action) VALUES (?, ?)", [
       user.username,
       "Logged in",
@@ -44,6 +44,7 @@ export async function login(req, res) {
         fullName: user.full_name,
         username: user.username,
         role: user.role,
+        photoUrl: user.photo_url || null,
         mustResetPassword: !!user.must_reset_password,
       },
     });

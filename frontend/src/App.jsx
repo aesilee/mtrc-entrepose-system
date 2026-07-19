@@ -12,15 +12,13 @@ import Analytics from "./pages/Analytics.jsx";
 import Attendance from "./pages/Attendance.jsx";
 import AuditLogs from "./pages/AuditLogs.jsx";
 import Settings from "./pages/Settings.jsx";
+import Profile from "./pages/Profile.jsx";
 
 // Simple declarative route table: [path, title, allowedRoles?]
 // allowedRoles omitted = any authenticated user.
 // Route table: [path, title, description, allowedRoles?]
 // allowedRoles omitted = any authenticated user.
-const COMING_SOON_ROUTES = [
-  // Account
-  ["/profile", "My Profile", "View and update your account details."],
-];
+const COMING_SOON_ROUTES = [];
 
 export default function App() {
   return (
@@ -108,6 +106,15 @@ export default function App() {
         element={
           <ProtectedRoute allowedRoles={["case_manager", "him_staff", "ict_admin"]}>
             <Analytics />
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/profile"
+        element={
+          <ProtectedRoute>
+            <Profile />
           </ProtectedRoute>
         }
       />

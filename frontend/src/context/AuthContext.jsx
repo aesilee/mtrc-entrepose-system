@@ -20,9 +20,21 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    setUser(readStoredUser());
+    const stored = readStoredUser();
+    setUser(stored);
     setLoading(false);
+    if (stored) refreshPhoto();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  async function refreshPhoto() {
+    try {
+      const { data } = await api.get("/profile");
+      updateStoredUser({ photoUrl: data.profile.photo_url || null });
+    } catch {
+      // not fatal — sidebar just falls back to initials
+    }
+  }
 
   async function login(username, password, rememberMe = true) {
     const { data } = await api.post("/auth/login", { username, password });
@@ -35,6 +47,15 @@ export function AuthProvider({ children }) {
     return data.user;
   }
 
+  function updateStoredUser(partial) {
+    setUser((prev) => {
+      const next = { ...prev, ...partial };
+      if (localStorage.getItem("mtrc_user")) localStorage.setItem("mtrc_user", JSON.stringify(next));
+      if (sessionStorage.getItem("mtrc_user")) sessionStorage.setItem("mtrc_user", JSON.stringify(next));
+      return next;
+    });
+  }
+
   function logout() {
     localStorage.removeItem("mtrc_token");
     localStorage.removeItem("mtrc_user");
@@ -44,7 +65,7 @@ export function AuthProvider({ children }) {
   }
 
   return (
-    <AuthContext.Provider value={{ user, login, logout, loading }}>
+    <AuthContext.Provider value={{ user, login, logout, loading, updateStoredUser }}>
       {children}
     </AuthContext.Provider>
   );

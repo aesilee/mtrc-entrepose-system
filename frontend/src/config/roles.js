@@ -48,3 +48,33 @@ export const NAV_BY_ROLE = {
 
 // Footer items shown beneath the main nav for every role.
 export const FOOTER_NAV = [{ label: "Profile", path: "/profile", icon: "profile" }];
+
+// Human-readable capability summary for the "Roles & Permissions" section
+// on the Profile page — kept separate from NAV_BY_ROLE so it reads as
+// plain-language descriptions rather than raw page paths.
+export const ROLE_PERMISSIONS = {
+  admitting: [
+    "View and register patients",
+    "Fill out admission information",
+    "View the dashboard overview",
+  ],
+  case_manager: [
+    "View and manage assigned patients",
+    "Record attendance and progress notes",
+    "Schedule and resolve follow-ups",
+    "Generate patient certificates",
+    "View limited analytics",
+  ],
+  him_staff: [
+    "View patient and attendance records (read-only)",
+    "Generate and manage reports",
+    "View full analytics",
+  ],
+  ict_admin: [
+    "Full access to all modules",
+    "Manage user accounts, roles, and access",
+    "View audit logs",
+    "Configure system-wide settings",
+    "Back up and restore the database",
+  ],
+};

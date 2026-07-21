@@ -19,6 +19,8 @@ const ICONS = {
   restore: <svg {...iconProps}><path d="M21 15a9 9 0 1 1-3-6.7" /><path d="M21 4v5h-5" /></svg>,
   auditLogs: <svg {...iconProps}><path d="M4 20V10" /><path d="M11 20V4" /><path d="M18 20v-7" /><path d="M3 20h18" /></svg>,
   permissions: <svg {...iconProps}><path d="M12 3l7 3v6c0 5-3.5 8-7 9-3.5-1-7-4-7-9V6l7-3z" /></svg>,
+  reports: <svg {...iconProps}><path d="M6 3h9l5 5v13a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z" /><path d="M9 12h6M9 16h6M9 8h2" /></svg>,
+  analytics: <svg {...iconProps}><path d="M4 20V10M11 20V4M18 20v-7" /></svg>,
 };
 
 const RECENT_ACTIVITY = [
@@ -138,6 +140,90 @@ function IctAdminDashboard() {
   );
 }
 
+function HimStaffDashboard() {
+  const navigate = useNavigate();
+  const { isMobile, isTablet } = useViewport();
+  const statCols = isMobile ? 1 : isTablet ? 2 : 4;
+  const [overview, setOverview] = useState(null);
+  const [recentReports, setRecentReports] = useState([]);
+
+  useEffect(() => {
+    api.get("/analytics/overview").then(({ data }) => setOverview(data));
+    api.get("/reports").then(({ data }) => setRecentReports((data.reports || []).slice(0, 5)));
+  }, []);
+
+  const totalPatients = overview?.patientStatus?.reduce((sum, s) => sum + s.value, 0) ?? null;
+  const activePatients = overview?.patientStatus?.find((s) => s.label === "active")?.value ?? 0;
+  const graduatedPatients = overview?.kpis?.completedPatients ?? null;
+  const attendanceRate = overview?.kpis?.avgAttendance ?? null;
+
+  const statCards = [
+    { key: "total", label: "Total Patients", value: totalPatients ?? "—", icon: ICONS.patients },
+    { key: "active", label: "Active Patients", value: overview ? activePatients : "—", icon: ICONS.status },
+    { key: "graduated", label: "Graduated Patients", value: graduatedPatients ?? "—", icon: ICONS.users },
+    { key: "attendance", label: "Attendance Rate", value: attendanceRate !== null ? `${attendanceRate}%` : "—", icon: ICONS.online },
+  ];
+
+  const quickActions = [
+    { key: "reports", label: "Generate Report", icon: ICONS.reports, path: "/reports" },
+    { key: "analytics", label: "View Analytics", icon: ICONS.analytics, path: "/analytics" },
+    { key: "patients", label: "View Patients", icon: ICONS.patients, path: "/patients" },
+    { key: "attendance", label: "View Attendance", icon: ICONS.status, path: "/attendance" },
+  ];
+
+  return (
+    <div style={styles.grid}>
+      <div style={{ ...styles.statsRow, gridTemplateColumns: `repeat(${statCols}, 1fr)` }}>
+        {statCards.map((card) => (
+          <div key={card.key} style={styles.statCard}>
+            <div style={styles.statIcon}>{card.icon}</div>
+            <div>
+              <div style={styles.statValue}>{card.value}</div>
+              <div style={styles.statLabel}>{card.label}</div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div style={{ ...styles.twoColRow, flexDirection: isMobile ? "column" : "row" }}>
+        <div style={styles.card}>
+          <div style={styles.cardTitle}>Recent Reports</div>
+          <div style={styles.list}>
+            {recentReports.length === 0 ? (
+              <div style={styles.notificationRow}><span>No reports generated yet.</span></div>
+            ) : (
+              recentReports.map((r) => (
+                <div key={r.id} style={styles.activityRow}>
+                  <span style={styles.activityUser}>{r.title}</span>
+                  <span style={styles.activityAction}>{r.date_range_label || ""}</span>
+                  <span style={styles.activityTime}>{new Date(r.created_at).toLocaleDateString()}</span>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+
+        <div style={styles.card}>
+          <div style={styles.cardTitle}>Quick Actions</div>
+          <div style={styles.actionsGrid}>
+            {quickActions.map((action) => (
+              <button
+                key={action.key}
+                type="button"
+                style={styles.actionBtn}
+                onClick={() => navigate(action.path)}
+              >
+                <span style={styles.actionIcon}>{action.icon}</span>
+                <span>{action.label}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function GenericDashboard({ user }) {
   return (
     <div style={styles.card}>
@@ -157,7 +243,7 @@ export default function Dashboard() {
 
   return (
     <AppShell title="Dashboard" description="Overview of enrollment, attendance, and program activity.">
-      {user.role === "ict_admin" ? <IctAdminDashboard /> : <GenericDashboard user={user} />}
+      {user.role === "ict_admin" ? <IctAdminDashboard /> : user.role === "him_staff" ? <HimStaffDashboard /> : <GenericDashboard user={user} />}
     </AppShell>
   );
 }

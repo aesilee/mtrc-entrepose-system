@@ -258,7 +258,9 @@ export default function PatientProfile() {
               </button>
             </>
           ) : (
-            <button type="button" style={styles.editBtn} onClick={startEditing}>Edit profile</button>
+            user.role !== "him_staff" && (
+              <button type="button" style={styles.editBtn} onClick={startEditing}>Edit profile</button>
+            )
           )}
         </div>
       </div>

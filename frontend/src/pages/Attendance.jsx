@@ -4,6 +4,7 @@ import RecordAttendanceModal from "../components/RecordAttendanceModal.jsx";
 import EmptyState from "../components/EmptyState.jsx";
 import api from "../api/axios.js";
 import useViewport from "../hooks/useViewport.js";
+import { useAuth } from "../context/AuthContext.jsx";
 
 const iconProps = { viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 2, strokeLinecap: "round", strokeLinejoin: "round" };
 
@@ -16,6 +17,7 @@ const STATUS_COLORS = {
 
 export default function Attendance() {
   const { isMobile, isTablet } = useViewport();
+  const { user } = useAuth();
   const statCols = isMobile ? 1 : isTablet ? 2 : 4;
   const [stats, setStats] = useState(null);
   const [records, setRecords] = useState([]);
@@ -144,7 +146,9 @@ export default function Attendance() {
             </div>
           </div>
 
-          <button type="button" style={styles.recordBtn} onClick={() => setModalOpen(true)}>+ Record Attendance</button>
+          {user.role !== "him_staff" && (
+  <button type="button" style={styles.recordBtn} onClick={() => setModalOpen(true)}>+ Record Attendance</button>
+)}
         </div>
 
         <div style={{ ...styles.tableCard, flex: 1, minHeight: 0 }}>

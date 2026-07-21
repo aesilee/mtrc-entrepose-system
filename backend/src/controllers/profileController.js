@@ -1,5 +1,6 @@
 import bcrypt from "bcryptjs";
 import pool from "../config/db.js";
+import { notifyIctAdmins } from "../utils/notify.js";
 
 const PROFILE_FIELDS = `id, employee_id, first_name, last_name, full_name, gender, birthdate, address,
             email, contact_number, photo_url, username, role, status, created_at,
@@ -77,6 +78,8 @@ export async function changeOwnPassword(req, res) {
   await pool.query("INSERT INTO audit_log (actor_username, action) VALUES (?, ?)", [
     req.user.username, "Changed their own password",
   ]);
+
+  await notifyIctAdmins("users", "password_changed", `Password changed successfully for "${req.user.username}"`);
 
   res.json({ message: "Password changed." });
 }

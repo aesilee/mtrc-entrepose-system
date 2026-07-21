@@ -1,4 +1,5 @@
 import pool from "../config/db.js";
+import { notifyIctAdmins } from "../utils/notify.js";
 
 const DEFAULT_REMARKS = "Successfully completed all required rehabilitation activities";
 
@@ -36,6 +37,8 @@ export async function generateCertificate(req, res) {
       "INSERT INTO audit_log (actor_username, action, table_name, record_id) VALUES (?, ?, ?, ?)",
       [req.user.username, `Generated a completion certificate for patient "${patient.full_name}"`, "patients", id]
     );
+
+    await notifyIctAdmins("reports", "certificate_generated", `Certificate of completion generated for "${patient.full_name}" — by ${req.user.username}`);
 
     res.status(201).json({
       id: result.insertId,

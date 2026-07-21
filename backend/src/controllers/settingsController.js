@@ -1,5 +1,6 @@
 import { spawn } from "child_process";
 import pool from "../config/db.js";
+import { notifyIctAdmins } from "../utils/notify.js";
 
 const DEFAULT_SETTINGS = {
   organization_name: "MTRC ENTREPOSE",
@@ -71,6 +72,8 @@ export async function updateSettings(req, res) {
       summary,
     ]);
 
+    await notifyIctAdmins("system", "settings_updated", `System settings updated (${keysList.slice(0, 100)}) — by ${req.user.username}`);
+
     res.json({ message: "Settings saved." });
   } catch (err) {
     console.error(err);
@@ -105,7 +108,9 @@ export function backupDatabase(req, res) {
   dump.on("close", async (code) => {
     if (code === 0 && started) {
       await pool.query("INSERT INTO audit_log (actor_username, action) VALUES (?, ?)", [req.user.username, "Backed up the database"]);
+      await notifyIctAdmins("system", "backup_completed", `Database backup completed — by ${req.user.username}`);
     } else if (!res.headersSent) {
+      await notifyIctAdmins("system", "backup_failed", `Database backup failed — triggered by ${req.user.username}`);
       res.status(500).json({ message: stderrOutput || "Database backup failed." });
     }
   });
@@ -132,6 +137,7 @@ export function restoreDatabase(req, res) {
   restore.on("close", async (code) => {
     if (code === 0) {
       await pool.query("INSERT INTO audit_log (actor_username, action) VALUES (?, ?)", [req.user.username, "Restored the database from an uploaded backup file"]);
+      await notifyIctAdmins("system", "restore_completed", `Database restored from a backup file — by ${req.user.username}`);
       res.json({ message: "Database restored successfully." });
     } else if (!res.headersSent) {
       res.status(500).json({ message: `Restore failed: ${errorOutput.slice(0, 500)}` });

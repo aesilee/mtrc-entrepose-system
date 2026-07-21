@@ -1,4 +1,5 @@
 import pool from "../config/db.js";
+import { notifyIctAdmins } from "../utils/notify.js";
 
 export async function recordAttendanceBulk(req, res) {
   const { sessionId, records } = req.body;
@@ -32,6 +33,15 @@ export async function recordAttendanceBulk(req, res) {
       req.user.username,
       `Recorded attendance for ${records.length} patient(s) — session "${session.session_name}"`,
     ]);
+
+    const presentCount = records.filter((r) => r.status === "present").length;
+    const absentCount = records.filter((r) => r.status === "absent").length;
+    const lateCount = records.filter((r) => r.status === "late").length;
+    const excusedCount = records.filter((r) => r.status === "excused").length;
+    await notifyIctAdmins(
+      "reports", "attendance_summary",
+      `Attendance recorded for "${session.session_name}" (${session.session_date}): ${presentCount} present, ${absentCount} absent, ${lateCount} late, ${excusedCount} excused — by ${req.user.username}`
+    );
 
     res.status(201).json({ message: "Attendance recorded." });
   } catch (err) {

@@ -1,4 +1,5 @@
 import pool from "../config/db.js";
+import { notifyIctAdmins } from "../utils/notify.js";
 
 async function generatePatientCode() {
   const year = new Date().getFullYear();
@@ -98,6 +99,9 @@ export async function updatePatient(req, res) {
       "INSERT INTO audit_log (actor_username, action, table_name, record_id) VALUES (?, ?, ?, ?)",
       [req.user.username, statusChangeMessage || `Updated patient record #${id}`, "patients", id]
     );
+
+    const [[updatedPatient]] = await pool.query("SELECT full_name FROM patients WHERE id = ?", [id]);
+    await notifyIctAdmins("patients", "patient_updated", `Patient record updated: "${updatedPatient?.full_name || `#${id}`}" — by ${req.user.username}`);
 
     res.json({ message: "Patient updated." });
   } catch (err) {
@@ -238,6 +242,8 @@ export async function createPatient(req, res) {
       "INSERT INTO audit_log (actor_username, action, table_name, record_id) VALUES (?, ?, ?, ?)",
       [req.user.username, `Registered patient "${fullName}" (${patientCode})`, "patients", result.insertId]
     );
+
+    await notifyIctAdmins("patients", "patient_registered", `New patient registered: "${fullName}" (${patientCode}) — by ${req.user.username}`);
 
     res.status(201).json({ id: result.insertId, patientCode, message: "Patient registered." });
   } catch (err) {

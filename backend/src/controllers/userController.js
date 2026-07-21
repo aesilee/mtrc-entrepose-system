@@ -1,5 +1,6 @@
 import bcrypt from "bcryptjs";
 import pool from "../config/db.js";
+import { notifyIctAdmins } from "../utils/notify.js";
 
 const VALID_ROLES = ["admitting", "case_manager", "him_staff", "ict_admin"];
 
@@ -73,6 +74,11 @@ export async function createUser(req, res) {
       `Created user account "${username}" (${role})`,
     ]);
 
+    const notifyMsg = role === "ict_admin"
+      ? `New ICT administrator account created: "${username}" — by ${req.user.username}`
+      : `New user account created: "${username}" (${role}) — by ${req.user.username}`;
+    await notifyIctAdmins("users", "user_created", notifyMsg);
+
     res.status(201).json({ id: result.insertId, message: "User account created." });
   } catch (err) {
     if (err.code === "ER_DUP_ENTRY") {
@@ -132,6 +138,10 @@ export async function updateUser(req, res) {
       `Updated user "${existing.username}" — ${summary}`,
     ]);
 
+    if (status === "inactive" && existing.status !== "inactive") {
+      await notifyIctAdmins("users", "user_deactivated", `User account deactivated: "${existing.username}" — by ${req.user.username}`);
+    }
+
     res.json({ message: "User account updated." });
   } catch (err) {
     if (err.code === "ER_DUP_ENTRY") {
@@ -169,6 +179,8 @@ export async function resetPassword(req, res) {
     req.user.username,
     `Reset password for user "${rows[0].username}"`,
   ]);
+
+  await notifyIctAdmins("users", "password_reset", `Password reset completed for "${rows[0].username}" — by ${req.user.username}`);
 
   res.json({ message: "Password reset. The user must change it on next login." });
 }

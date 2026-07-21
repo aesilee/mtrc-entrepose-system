@@ -1,4 +1,5 @@
 import { useAuth } from "../context/AuthContext.jsx";
+import NotificationBell from "./NotificationBell.jsx";
 
 export default function Topbar({ title, description }) {
   const { user } = useAuth();
@@ -10,6 +11,7 @@ export default function Topbar({ title, description }) {
         {description && <p style={styles.description}>{description}</p>}
       </div>
       <div style={styles.right}>
+        {user.role === "ict_admin" && <NotificationBell />}
         <span style={styles.name}>{user.fullName}</span>
       </div>
     </header>

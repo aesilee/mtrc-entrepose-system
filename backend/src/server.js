@@ -17,6 +17,7 @@ import auditLogRoutes from "./routes/auditLogRoutes.js";
 import settingsRoutes from "./routes/settingsRoutes.js";
 import certificateRoutes from "./routes/certificateRoutes.js";
 import profileRoutes from "./routes/profileRoutes.js";
+import notificationRoutes from "./routes/notificationRoutes.js";
 
 dotenv.config();
 
@@ -42,6 +43,7 @@ app.use("/api/audit-logs", auditLogRoutes);
 app.use("/api/settings", settingsRoutes);
 app.use("/api/certificates", certificateRoutes);
 app.use("/api/profile", profileRoutes);
+app.use("/api/notifications", notificationRoutes);
 
 import pool from "./config/db.js";
 

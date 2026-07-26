@@ -1,5 +1,5 @@
 import pool from "../config/db.js";
-import { notifyIctAdmins } from "../utils/notify.js";
+import { notifyIctAdmins, notifyRoles } from "../utils/notify.js";
 
 async function buildAttendanceReport({ dateFrom, dateTo, caseManagerId, programStatus, patientId }) {
   const where = [];
@@ -150,7 +150,7 @@ export async function generateReport(req, res) {
       req.user.username, `Generated a ${reportType} report: "${report.title}"`,
     ]);
 
-    await notifyIctAdmins("reports", "report_generated", `Report generated: "${report.title}" — by ${req.user.username}`);
+    await notifyRoles(["ict_admin", "him_staff"], "reports", "report_generated", `Report generated: "${report.title}" — by ${req.user.username}`);
 
     res.status(201).json({ id: result.insertId, reportType, ...report });
   } catch (err) {

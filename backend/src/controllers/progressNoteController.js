@@ -1,4 +1,5 @@
 import pool from "../config/db.js";
+import { notifyRoles } from "../utils/notify.js";
 
 export async function createProgressNote(req, res) {
   const { id: patientId } = req.params;
@@ -18,10 +19,13 @@ export async function createProgressNote(req, res) {
         interventionProvided || null, patientResponse || null, recommendations || null, nextFollowUpDate || null]
     );
 
-    await pool.query(
+   await pool.query(
       "INSERT INTO audit_log (actor_username, action, table_name, record_id) VALUES (?, ?, ?, ?)",
       [req.user.username, `Added a progress note for patient #${patientId}`, "patients", patientId]
     );
+
+    const [[patientRow]] = await pool.query("SELECT full_name FROM patients WHERE id = ?", [patientId]);
+    await notifyRoles(["him_staff"], "documentation", "progress_note_added", `New progress note added for "${patientRow?.full_name || `#${patientId}`}" — pending documentation review`);
 
     res.status(201).json({ id: result.insertId });
   } catch (err) {

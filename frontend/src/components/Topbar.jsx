@@ -11,7 +11,7 @@ export default function Topbar({ title, description }) {
         {description && <p style={styles.description}>{description}</p>}
       </div>
       <div style={styles.right}>
-        {user.role === "ict_admin" && <NotificationBell />}
+        {(user.role === "ict_admin" || user.role === "him_staff") && <NotificationBell />}
         <span style={styles.name}>{user.fullName}</span>
       </div>
     </header>

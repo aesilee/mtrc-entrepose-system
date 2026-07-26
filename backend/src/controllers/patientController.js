@@ -1,5 +1,5 @@
 import pool from "../config/db.js";
-import { notifyIctAdmins } from "../utils/notify.js";
+import { notifyIctAdmins, notifyRoles } from "../utils/notify.js";
 
 async function generatePatientCode() {
   const year = new Date().getFullYear();
@@ -101,7 +101,7 @@ export async function updatePatient(req, res) {
     );
 
     const [[updatedPatient]] = await pool.query("SELECT full_name FROM patients WHERE id = ?", [id]);
-    await notifyIctAdmins("patients", "patient_updated", `Patient record updated: "${updatedPatient?.full_name || `#${id}`}" — by ${req.user.username}`);
+    await notifyRoles(["ict_admin", "him_staff"], "patients", "patient_updated", `Patient record updated: "${updatedPatient?.full_name || `#${id}`}" — by ${req.user.username}`);
 
     res.json({ message: "Patient updated." });
   } catch (err) {
@@ -243,7 +243,7 @@ export async function createPatient(req, res) {
       [req.user.username, `Registered patient "${fullName}" (${patientCode})`, "patients", result.insertId]
     );
 
-    await notifyIctAdmins("patients", "patient_registered", `New patient registered: "${fullName}" (${patientCode}) — by ${req.user.username}`);
+    await notifyRoles(["ict_admin", "him_staff"], "patients", "patient_registered", `New patient registered: "${fullName}" (${patientCode}) — by ${req.user.username}`);
 
     res.status(201).json({ id: result.insertId, patientCode, message: "Patient registered." });
   } catch (err) {

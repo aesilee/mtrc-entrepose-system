@@ -7,6 +7,8 @@ const CATEGORIES = [
   { key: "users", label: "Users" },
   { key: "patients", label: "Patients" },
   { key: "reports", label: "Reports" },
+  { key: "certificates", label: "Certificates" },
+  { key: "documentation", label: "Documentation" },
 ];
 
 const CATEGORY_STYLE = {
@@ -14,6 +16,8 @@ const CATEGORY_STYLE = {
   users: { bg: "var(--color-primary-tint)", fg: "var(--color-primary-dark)" },
   patients: { bg: "var(--color-warning-tint)", fg: "var(--color-warning)" },
   reports: { bg: "#EFE9F7", fg: "#6B4FA0" },
+  certificates: { bg: "#E8F5E9", fg: "#2E7D32" },
+  documentation: { bg: "#FFF3E0", fg: "#E65100" },
 };
 
 const CATEGORY_ICON = {
@@ -35,6 +39,16 @@ const CATEGORY_ICON = {
   reports: (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="15" height="15">
       <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><polyline points="14 2 14 8 20 8" /><line x1="16" y1="13" x2="8" y2="13" /><line x1="16" y1="17" x2="8" y2="17" />
+    </svg>
+  ),
+  certificates: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="15" height="15">
+      <circle cx="12" cy="8" r="6" /><path d="M9 13.5 7 22l5-3 5 3-2-8.5" />
+    </svg>
+  ),
+  documentation: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="15" height="15">
+      <path d="M9 2h6l5 5v13a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z" /><path d="M9 14l2 2 4-4" />
     </svg>
   ),
 };

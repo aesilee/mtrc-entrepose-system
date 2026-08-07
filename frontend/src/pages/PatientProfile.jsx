@@ -281,7 +281,7 @@ export default function PatientProfile() {
           ))}
 
           <div style={{ ...styles.sideNavGroupLabel, marginTop: 16 }}>Records</div>
-          {TAB_SECTIONS.map((s) => (
+          {TAB_SECTIONS.filter((s) => !(user.role === "case_manager" && s.key === "certificates")).map((s) => (
             <button
               key={s.key}
               type="button"
@@ -408,15 +408,28 @@ export default function PatientProfile() {
               </div>
 
               {caseSubTab === "summary" && (
-                <div style={styles.grid}>
-                  <Field label="Current status">{patient.current_status || "—"}</Field>
-                  <Field label="Program phase">{patient.program_phase || "—"}</Field>
-                  <Field label="Assigned case manager">{patient.case_manager_name || "Unassigned"}</Field>
-                  <Field label="Admission date">{fmtDate(patient.admission_date)}</Field>
-                  <Field label="Expected completion">{fmtDate(patient.expected_completion_date)}</Field>
-                  <Field label="Completion %">
-                    {patient.sessions_required ? `${Math.round((presentCount / patient.sessions_required) * 100)}%` : "—"}
-                  </Field>
+                <div>
+                  <div style={styles.grid}>
+                    <Field label="Current status">{patient.current_status || "—"}</Field>
+                    <Field label="Program phase">{patient.program_phase || "—"}</Field>
+                    <Field label="Assigned case manager">{patient.case_manager_name || "Unassigned"}</Field>
+                    <Field label="Admission date">{fmtDate(patient.admission_date)}</Field>
+                    <Field label="Expected completion">{fmtDate(patient.expected_completion_date)}</Field>
+                    <Field label="Completion %">
+                      {patient.sessions_required ? `${Math.round((presentCount / patient.sessions_required) * 100)}%` : "—"}
+                    </Field>
+                  </div>
+                  {canManageCase && !editing && (
+                    <div style={{ marginTop: 16 }}>
+                      <button
+                        type="button"
+                        style={styles.generateBtn}
+                        onClick={() => { goToSection("rehab"); startEditing(); }}
+                      >
+                        Update rehabilitation status
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -503,7 +516,9 @@ export default function PatientProfile() {
             <div>
               <SectionHeader icon={NAV_ICONS.certificates} title="Certificates" />
               <div style={{ marginBottom: 16 }}>
-                <button type="button" style={styles.generateBtn} onClick={() => setCertGeneratorOpen(true)}>+ Generate Certificate</button>
+                {user.role !== "case_manager" && (
+                  <button type="button" style={styles.generateBtn} onClick={() => setCertGeneratorOpen(true)}>+ Generate Certificate</button>
+                )}
               </div>
               {certificates.length === 0 ? <EmptyState text="No certificates issued yet." /> : (
                 <div style={styles.certGrid}>

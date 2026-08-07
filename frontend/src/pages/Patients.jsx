@@ -77,7 +77,14 @@ export default function Patients() {
   }
 
   return (
-    <AppShell title="Patients" description="Manage patient records, admissions, and registrations.">
+    <AppShell
+      title={user.role === "case_manager" ? "My Patients" : "Patients"}
+      description={
+        user.role === "case_manager"
+          ? "View and manage patients assigned to you."
+          : "Manage patient records, admissions, and registrations."
+      }
+    >
       <div style={{ ...styles.wrapper, height: "100%" }}>
         <div style={{ ...styles.toolbar, flexWrap: isMobile ? "wrap" : "nowrap" }}>
           <div style={{ ...styles.leftControls, flexWrap: isMobile ? "wrap" : "nowrap", width: isMobile ? "100%" : "auto" }}>

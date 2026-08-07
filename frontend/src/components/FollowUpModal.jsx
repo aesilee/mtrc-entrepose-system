@@ -1,18 +1,37 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import api from "../api/axios.js";
 
-export default function FollowUpModal({ patientId, onClose, onSaved }) {
+export default function FollowUpModal({ patientId: initialPatientId, onClose, onSaved }) {
+  const [selectedPatientId, setSelectedPatientId] = useState(initialPatientId || "");
+  const [patients, setPatients] = useState([]);
   const [reason, setReason] = useState("");
   const [dueDate, setDueDate] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
+  useEffect(() => {
+    if (!initialPatientId) {
+      api.get("/patients").then(({ data }) => {
+        const pts = data.patients || [];
+        setPatients(pts);
+        if (pts.length && !selectedPatientId) {
+          setSelectedPatientId(pts[0].id);
+        }
+      });
+    }
+  }, [initialPatientId]);
+
   async function handleSubmit(e) {
     e.preventDefault();
+    const targetPatientId = initialPatientId || selectedPatientId;
+    if (!targetPatientId) {
+      setError("Please select a patient.");
+      return;
+    }
     setSaving(true);
     setError("");
     try {
-      await api.post(`/patients/${patientId}/follow-ups`, { reason, dueDate });
+      await api.post(`/patients/${targetPatientId}/follow-ups`, { reason, dueDate });
       onSaved();
     } catch (err) {
       setError(err.response?.data?.message || "Could not schedule the follow-up.");
@@ -30,6 +49,22 @@ export default function FollowUpModal({ patientId, onClose, onSaved }) {
         </div>
         <form onSubmit={handleSubmit} style={styles.body}>
           {error && <div style={styles.error}>{error}</div>}
+          {!initialPatientId && (
+            <label style={styles.label}>
+              Patient
+              <select
+                style={styles.input}
+                value={selectedPatientId}
+                onChange={(e) => setSelectedPatientId(e.target.value)}
+                required
+              >
+                <option value="">Select a patient…</option>
+                {patients.map((p) => (
+                  <option key={p.id} value={p.id}>{p.full_name} ({p.patient_code})</option>
+                ))}
+              </select>
+            </label>
+          )}
           <label style={styles.label}>
             Follow-up date
             <input type="date" style={styles.input} value={dueDate} onChange={(e) => setDueDate(e.target.value)} required />

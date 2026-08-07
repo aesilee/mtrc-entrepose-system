@@ -1,4 +1,5 @@
 import pool from "../config/db.js";
+import { notifyUser } from "../utils/notify.js";
 
 export async function getPatientFollowUps(req, res) {
   const { id } = req.params;
@@ -30,6 +31,19 @@ export async function createFollowUp(req, res) {
       "INSERT INTO audit_log (actor_username, action, table_name, record_id) VALUES (?, ?, ?, ?)",
       [req.user.username, `Scheduled a follow-up for patient #${id}`, "patients", id]
     );
+
+    const [[patient]] = await pool.query(
+      "SELECT full_name, assigned_case_manager_id FROM patients WHERE id = ?",
+      [id]
+    );
+    if (patient && patient.assigned_case_manager_id && Number(patient.assigned_case_manager_id) !== Number(req.user.id)) {
+      await notifyUser(
+        patient.assigned_case_manager_id,
+        "patients",
+        "followup_scheduled",
+        `Follow-up scheduled for patient "${patient.full_name}" (Due: ${dueDate}): ${reason}`
+      );
+    }
 
     res.status(201).json({ id: result.insertId });
   } catch (err) {

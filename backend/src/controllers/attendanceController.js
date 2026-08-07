@@ -1,5 +1,5 @@
 import pool from "../config/db.js";
-import { notifyIctAdmins } from "../utils/notify.js";
+import { notifyIctAdmins, notifyUser } from "../utils/notify.js";
 
 export async function recordAttendanceBulk(req, res) {
   const { sessionId, records } = req.body;
@@ -43,6 +43,26 @@ export async function recordAttendanceBulk(req, res) {
       `Attendance recorded for "${session.session_name}" (${session.session_date}): ${presentCount} present, ${absentCount} absent, ${lateCount} late, ${excusedCount} excused — by ${req.user.username}`
     );
 
+    // Batched notifications for absent patients' assigned case managers
+    const absentRecords = records.filter((r) => r.status === "absent");
+    if (absentRecords.length > 0) {
+      const absentPatientIds = absentRecords.map((r) => r.patientId);
+      const [absentPatients] = await pool.query(
+        `SELECT id, full_name, assigned_case_manager_id FROM patients WHERE id IN (?) AND is_archived = FALSE`,
+        [absentPatientIds]
+      );
+      for (const p of absentPatients) {
+        if (p.assigned_case_manager_id && Number(p.assigned_case_manager_id) !== Number(req.user.id)) {
+          await notifyUser(
+            p.assigned_case_manager_id,
+            "patients",
+            "session_missed",
+            `Patient "${p.full_name}" missed today's session "${session.session_name}"`
+          );
+        }
+      }
+    }
+
     res.status(201).json({ message: "Attendance recorded." });
   } catch (err) {
     await connection.rollback();
@@ -59,6 +79,11 @@ export async function listAttendance(req, res) {
 
   const where = [];
   const params = [];
+
+  if (req.user.role === "case_manager") {
+    where.push("p.assigned_case_manager_id = ?");
+    params.push(req.user.id);
+  }
 
   if (dateFilter === "today") {
     where.push("a.session_date = ?");
@@ -104,18 +129,28 @@ export async function listAttendance(req, res) {
 
 export async function getAttendanceStats(req, res) {
   const today = new Date().toISOString().slice(0, 10);
+  const scopeClause = req.user.role === "case_manager"
+    ? "JOIN patients p ON p.id = a.patient_id AND p.assigned_case_manager_id = ?"
+    : "";
+  const scopeParams = req.user.role === "case_manager" ? [req.user.id] : [];
 
   const [[{ todaySessions }]] = await pool.query(
-    `SELECT COUNT(DISTINCT session_id) AS todaySessions FROM attendance WHERE session_date = ?`,
-    [today]
+    `SELECT COUNT(DISTINCT a.session_id) AS todaySessions
+     FROM attendance a ${scopeClause}
+     WHERE a.session_date = ?`,
+    [...scopeParams, today]
   );
   const [[{ total, present }]] = await pool.query(
-    `SELECT COUNT(*) AS total, SUM(status = 'present') AS present FROM attendance WHERE session_date = ?`,
-    [today]
+    `SELECT COUNT(*) AS total, SUM(a.status = 'present') AS present
+     FROM attendance a ${scopeClause}
+     WHERE a.session_date = ?`,
+    [...scopeParams, today]
   );
   const [[{ absentToday }]] = await pool.query(
-    `SELECT SUM(status = 'absent') AS absentToday FROM attendance WHERE session_date = ?`,
-    [today]
+    `SELECT SUM(a.status = 'absent') AS absentToday
+     FROM attendance a ${scopeClause}
+     WHERE a.session_date = ?`,
+    [...scopeParams, today]
   );
 
   res.json({

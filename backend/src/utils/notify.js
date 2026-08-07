@@ -27,3 +27,16 @@ export async function notifyRoles(roles, category, type, message) {
     console.error("notifyRoles failed:", err);
   }
 }
+
+// Sends a targeted notification to a single specific user with null protection.
+export async function notifyUser(userId, category, type, message) {
+  if (!userId) return;
+  try {
+    await pool.query(
+      "INSERT INTO notifications (recipient_id, type, message, category) VALUES (?, ?, ?, ?)",
+      [userId, type, message, category]
+    );
+  } catch (err) {
+    console.error("notifyUser failed:", err);
+  }
+}

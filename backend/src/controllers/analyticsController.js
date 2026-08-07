@@ -19,6 +19,13 @@ function getMonthRange(dateFrom, dateTo) {
 // ---- Snapshot data: current totals, no date range needed ----
 export async function getAnalyticsOverview(req, res) {
   try {
+    const patientClauses = ["p.is_archived = FALSE"];
+    const patientParams = [];
+    if (req.user.role === "case_manager") {
+      patientClauses.push("p.assigned_case_manager_id = ?");
+      patientParams.push(req.user.id);
+    }
+
     const [patients] = await pool.query(
       `SELECT p.id, p.gender, p.municipality, p.birthdate, p.enrollment_status,
               p.rehab_start_date, p.sessions_required, p.updated_at,
@@ -27,7 +34,8 @@ export async function getAnalyticsOverview(req, res) {
               (SELECT COUNT(*) FROM attendance a WHERE a.patient_id = p.id AND a.status = 'present') AS present_sessions
        FROM patients p
        LEFT JOIN users u ON u.id = p.assigned_case_manager_id
-       WHERE p.is_archived = FALSE`
+       WHERE ${patientClauses.join(" AND ")}`,
+      patientParams
     );
 
     const total = patients.length;
@@ -133,9 +141,17 @@ export async function getMonthlyAdmissions(req, res) {
   const months = getMonthRange(dateFrom, dateTo);
   const rangeStart = `${months[0].year}-${String(months[0].month).padStart(2, "0")}-01`;
 
+  const clauses = ["admission_date >= ?"];
+  const params = [rangeStart];
+  if (req.user.role === "case_manager") {
+    clauses.push("assigned_case_manager_id = ?");
+    params.push(req.user.id);
+  }
+
   const [rows] = await pool.query(
     `SELECT DATE_FORMAT(admission_date, '%Y-%m') AS ym, COUNT(*) AS count
-     FROM patients WHERE admission_date >= ? GROUP BY ym`, [rangeStart]
+     FROM patients WHERE ${clauses.join(" AND ")} GROUP BY ym`,
+    params
   );
   const map = Object.fromEntries(rows.map((r) => [r.ym, r.count]));
 
@@ -152,10 +168,17 @@ export async function getAttendanceTrend(req, res) {
   const months = getMonthRange(dateFrom, dateTo);
   const rangeStart = `${months[0].year}-${String(months[0].month).padStart(2, "0")}-01`;
 
+  const scopeJoin = req.user.role === "case_manager"
+    ? "JOIN patients p ON p.id = a.patient_id AND p.assigned_case_manager_id = ?"
+    : "";
+  const scopeParams = req.user.role === "case_manager" ? [req.user.id] : [];
+
   const [rows] = await pool.query(
-    `SELECT DATE_FORMAT(session_date, '%Y-%m') AS ym,
-            SUM(status = 'present') AS present, COUNT(*) AS total
-     FROM attendance WHERE session_date >= ? GROUP BY ym`, [rangeStart]
+    `SELECT DATE_FORMAT(a.session_date, '%Y-%m') AS ym,
+            SUM(a.status = 'present') AS present, COUNT(*) AS total
+     FROM attendance a ${scopeJoin}
+     WHERE a.session_date >= ? GROUP BY ym`,
+    [...scopeParams, rangeStart]
   );
   const map = Object.fromEntries(rows.map((r) => [r.ym, r.total ? Math.round((r.present / r.total) * 100) : 0]));
 

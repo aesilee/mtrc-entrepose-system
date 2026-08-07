@@ -6,6 +6,8 @@ import { ROLE_LABELS } from "../config/roles.js";
 import api from "../api/axios.js";
 import { DonutChart, LineChart } from "../components/AnalyticsCharts.jsx";
 import useViewport from "../hooks/useViewport.js";
+import ProgressNoteModal from "../components/ProgressNoteModal.jsx";
+import FollowUpModal from "../components/FollowUpModal.jsx";
 
 const kpiIconProps = { viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 2, strokeLinecap: "round", strokeLinejoin: "round", width: "18", height: "18" };
 
@@ -33,6 +35,8 @@ const ICONS = {
   permissions: <svg {...iconProps}><path d="M12 3l7 3v6c0 5-3.5 8-7 9-3.5-1-7-4-7-9V6l7-3z" /></svg>,
   reports: <svg {...iconProps}><path d="M6 3h9l5 5v13a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z" /><path d="M9 12h6M9 16h6M9 8h2" /></svg>,
   analytics: <svg {...iconProps}><path d="M4 20V10M11 20V4M18 20v-7" /></svg>,
+  therapy: <svg {...iconProps}><polyline points="3 12 7 6 11 15 15 9 18 12 21 12" /></svg>,
+  rehabStatus: <svg {...iconProps}><path d="M3 17l6-6 4 4 8-8" /><path d="M15 6h6v6" /></svg>,
 };
 
 const RECENT_ACTIVITY = [
@@ -324,6 +328,217 @@ function HimKpiCard({ label, value, suffix, icon }) {
   );
 }
 
+function formatTime(timeStr) {
+  if (!timeStr) return "";
+  const [h, m] = timeStr.split(":");
+  const hour = parseInt(h, 10);
+  const ampm = hour >= 12 ? "PM" : "AM";
+  const display = hour % 12 || 12;
+  return `${display}:${m} ${ampm}`;
+}
+
+function CaseManagerDashboard() {
+  const navigate = useNavigate();
+  const { isMobile, isTablet } = useViewport();
+  const isCompact = isMobile || isTablet;
+  const kpiCols = isMobile ? 2 : 4;
+
+  const [stats, setStats] = useState(null);
+  const [noteModalOpen, setNoteModalOpen] = useState(false);
+  const [followUpModalOpen, setFollowUpModalOpen] = useState(false);
+
+  useEffect(() => {
+    api.get("/dashboard/case-manager-stats").then(({ data }) => setStats(data));
+  }, []);
+
+  const quickActions = [
+    {
+      key: "attendance",
+      label: "Record Attendance",
+      icon: ICONS.status,
+      onClick: () => navigate("/attendance"),
+    },
+    {
+      key: "addNote",
+      label: "Add Progress Note",
+      icon: (
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+          <polyline points="14 2 14 8 20 8" />
+          <line x1="12" y1="18" x2="12" y2="12" />
+          <line x1="9" y1="15" x2="15" y2="15" />
+        </svg>
+      ),
+      onClick: () => setNoteModalOpen(true),
+    },
+    {
+      key: "patients",
+      label: "View Patients",
+      icon: ICONS.patients,
+      onClick: () => navigate("/patients"),
+    },
+    {
+      key: "followUp",
+      label: "Follow-up Case",
+      icon: (
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+          <line x1="16" y1="2" x2="16" y2="6" />
+          <line x1="8" y1="2" x2="8" y2="6" />
+          <line x1="3" y1="10" x2="21" y2="10" />
+          <path d="M12 14v4M10 16h4" />
+        </svg>
+      ),
+      onClick: () => setFollowUpModalOpen(true),
+    },
+  ];
+
+  return (
+    <div style={cmStyles.page}>
+      {/* Top 4 KPI Stat Cards */}
+      <div style={{ ...cmStyles.kpiRow, gridTemplateColumns: `repeat(${kpiCols}, 1fr)` }}>
+        <CmKpiCard label="Assigned Patients" value={stats?.assignedPatients ?? "—"} icon={HIM_KPI_ICONS.patients} />
+        <CmKpiCard label="Today's Sessions" value={stats?.todaysSessions ?? "—"} icon={HIM_KPI_ICONS.online} />
+        <CmKpiCard label="Missed Sessions" value={stats?.missedSessions ?? "—"} icon={HIM_KPI_ICONS.auditLogs} />
+        <CmKpiCard label="Follow-ups Needed" value={stats?.followUpsNeeded ?? "—"} icon={HIM_KPI_ICONS.reports} />
+      </div>
+
+      {/* Proportional Two-Column Section: Left (1.2fr / 60%), Right (1fr / 40%) */}
+      <div style={{
+        ...cmStyles.gridRow,
+        gridTemplateColumns: isCompact ? "1fr" : "1.2fr 1fr",
+      }}>
+        <CmCard title="Patients Needing Attention" isMobile={isCompact} highlight>
+          {!stats?.patientsNeedingAttention?.length ? (
+            <div style={cmStyles.emptyText}>No patients need attention right now.</div>
+          ) : (
+            <div style={cmStyles.list}>
+              {stats.patientsNeedingAttention.map((p, i) => (
+                <button
+                  key={`${p.patient_id}-${p.issue}-${i}`}
+                  type="button"
+                  style={cmStyles.attentionRow}
+                  onClick={() => navigate(`/patients/${p.patient_id}`)}
+                >
+                  <span style={cmStyles.rowMain}>{p.full_name}</span>
+                  <span style={cmStyles.issueBadge}>{p.issue}</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </CmCard>
+
+        <CmCard title="Today's Schedule" isMobile={isCompact}>
+          {!stats?.todaysSchedule?.length ? (
+            <div style={cmStyles.emptyText}>No sessions scheduled for today.</div>
+          ) : (
+            <div style={cmStyles.list}>
+              {stats.todaysSchedule.map((s) => (
+                <div key={s.id} style={cmStyles.scheduleRow}>
+                  <span style={cmStyles.scheduleTime}>{formatTime(s.session_time) || "—"}</span>
+                  <div>
+                    <div style={cmStyles.rowMain}>{s.session_name}</div>
+                    {s.program_name && <div style={cmStyles.scheduleMeta}>{s.program_name}</div>}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </CmCard>
+      </div>
+
+      {/* Recent Progress Notes - Full Width */}
+      <div style={cmStyles.fullWidthRow}>
+        <CmCard title="Recent Progress Notes" isMobile={isCompact}>
+          {!stats?.recentProgressNotes?.length ? (
+            <div style={cmStyles.emptyText}>No progress notes yet.</div>
+          ) : (
+            <div style={cmStyles.list}>
+              {stats.recentProgressNotes.map((n) => (
+                <button
+                  key={n.id}
+                  type="button"
+                  style={cmStyles.noteRow}
+                  onClick={() => navigate(`/patients/${n.patient_id}`)}
+                >
+                  <span style={cmStyles.rowMain}>{n.patient_name}</span>
+                  <span style={cmStyles.rowMid}>{n.session_type || n.note_type || "Progress note"}</span>
+                  <span style={cmStyles.rowTime}>{timeAgo(n.created_at)}</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </CmCard>
+      </div>
+
+      {/* Quick Actions Row - Exactly 4 Buttons Evenly Spaced */}
+      <div style={cmStyles.card}>
+        <div style={cmStyles.cardTitle}>Quick Actions</div>
+        <div style={{
+          ...cmStyles.compactActionsGrid,
+          gridTemplateColumns: isCompact ? "repeat(2, 1fr)" : "repeat(4, 1fr)",
+        }}>
+          {quickActions.map((action) => (
+            <button key={action.key} type="button" style={cmStyles.compactActionBtn} onClick={action.onClick}>
+              <span style={cmStyles.compactActionIcon}>{action.icon}</span>
+              <span>{action.label}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Modal dialogs */}
+      {noteModalOpen && (
+        <ProgressNoteModal
+          onClose={() => setNoteModalOpen(false)}
+          onSaved={() => {
+            setNoteModalOpen(false);
+            api.get("/dashboard/case-manager-stats").then(({ data }) => setStats(data));
+          }}
+        />
+      )}
+      {followUpModalOpen && (
+        <FollowUpModal
+          onClose={() => setFollowUpModalOpen(false)}
+          onSaved={() => {
+            setFollowUpModalOpen(false);
+            api.get("/dashboard/case-manager-stats").then(({ data }) => setStats(data));
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+function CmCard({ title, span, maxSpan, center, isMobile, highlight, children }) {
+  const effectiveSpan = maxSpan ? Math.min(span, maxSpan) : span;
+  return (
+    <div style={{
+      ...cmStyles.card,
+      gridColumn: `span ${effectiveSpan}`,
+      overflow: isMobile ? "visible" : "auto",
+      borderColor: highlight ? "var(--color-primary)" : "var(--color-border)",
+    }}>
+      <div style={cmStyles.cardTitle}>{title}</div>
+      <div style={{ display: "flex", justifyContent: center ? "center" : "flex-start", alignItems: "center", flex: 1 }}>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+function CmKpiCard({ label, value, icon }) {
+  return (
+    <div style={cmStyles.kpiCard}>
+      <div style={cmStyles.kpiIcon}>{icon}</div>
+      <div>
+        <div style={cmStyles.kpiValue}>{value}</div>
+        <div style={cmStyles.kpiLabel}>{label}</div>
+      </div>
+    </div>
+  );
+}
+
 function GenericDashboard({ user }) {
   return (
     <div style={styles.card}>
@@ -343,7 +558,15 @@ export default function Dashboard() {
 
   return (
     <AppShell title="Dashboard" description="Overview of enrollment, attendance, and program activity.">
-      {user.role === "ict_admin" ? <IctAdminDashboard /> : user.role === "him_staff" ? <HimStaffDashboard /> : <GenericDashboard user={user} />}
+      {user.role === "ict_admin" ? (
+        <IctAdminDashboard />
+      ) : user.role === "him_staff" ? (
+        <HimStaffDashboard />
+      ) : user.role === "case_manager" ? (
+        <CaseManagerDashboard />
+      ) : (
+        <GenericDashboard user={user} />
+      )}
     </AppShell>
   );
 }
@@ -512,4 +735,133 @@ const himStyles = {
   kpiIcon: { width: 36, height: 36, borderRadius: "var(--radius-sm)", background: "var(--color-primary-tint)", color: "var(--color-primary-dark)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 },
   kpiValue: { fontSize: 20, fontWeight: 800, color: "var(--color-text)" },
   kpiLabel: { fontSize: 11, color: "var(--color-text-muted)", marginTop: 2 },
+};
+
+const cmStyles = {
+  page: { display: "flex", flexDirection: "column", gap: 16, width: "100%", boxSizing: "border-box" },
+  kpiRow: { display: "grid", gap: 16, width: "100%" },
+  gridRow: { display: "grid", gap: 16, alignItems: "stretch", width: "100%" },
+  fullWidthRow: { width: "100%" },
+  card: {
+    background: "var(--color-surface)",
+    border: "1px solid var(--color-border)",
+    borderRadius: "var(--radius-lg)",
+    padding: "18px 20px",
+    display: "flex",
+    flexDirection: "column",
+    gap: 12,
+    minHeight: 90,
+    width: "100%",
+    boxSizing: "border-box",
+  },
+  cardTitle: { fontSize: 14, fontWeight: 700, color: "var(--color-text)" },
+  emptyText: { color: "var(--color-text-muted)", fontSize: 13, textAlign: "center", padding: "20px 0", width: "100%" },
+  list: { display: "flex", flexDirection: "column", gap: 10, width: "100%" },
+  row: {
+    display: "flex",
+    justifyContent: "space-between",
+    gap: 10,
+    fontSize: 13,
+    color: "var(--color-text-muted)",
+    paddingBottom: 10,
+    borderBottom: "1px solid var(--color-border)",
+  },
+  rowMain: { fontWeight: 700, color: "var(--color-text)" },
+  rowMid: { flex: 1, marginLeft: 8, textTransform: "capitalize" },
+  rowTime: { color: "var(--color-text-muted)", whiteSpace: "nowrap" },
+  attentionRow: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: 10,
+    fontSize: 13,
+    padding: "10px 0",
+    background: "none",
+    border: "none",
+    borderBottom: "1px solid var(--color-border)",
+    cursor: "pointer",
+    textAlign: "left",
+    width: "100%",
+  },
+  issueBadge: {
+    fontSize: 11,
+    fontWeight: 600,
+    padding: "3px 8px",
+    borderRadius: 999,
+    background: "#FFF3D6",
+    color: "#9A6B00",
+    whiteSpace: "nowrap",
+  },
+  scheduleRow: {
+    display: "flex",
+    gap: 12,
+    alignItems: "flex-start",
+    paddingBottom: 10,
+    borderBottom: "1px solid var(--color-border)",
+  },
+  scheduleTime: {
+    fontWeight: 700,
+    fontSize: 13,
+    color: "var(--color-primary-dark)",
+    minWidth: 72,
+  },
+  scheduleMeta: { fontSize: 12, color: "var(--color-text-muted)", marginTop: 2 },
+  noteRow: {
+    display: "flex",
+    justifyContent: "space-between",
+    gap: 10,
+    fontSize: 13,
+    paddingBottom: 10,
+    background: "none",
+    border: "none",
+    borderBottom: "1px solid var(--color-border)",
+    cursor: "pointer",
+    textAlign: "left",
+    width: "100%",
+    color: "inherit",
+  },
+  compactActionsGrid: { display: "grid", gap: 16, width: "100%" },
+  compactActionBtn: {
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    padding: "16px 12px",
+    fontSize: 12,
+    fontWeight: 600,
+    color: "var(--color-text)",
+    background: "var(--color-primary-tint)",
+    border: "none",
+    borderRadius: "var(--radius-sm)",
+    cursor: "pointer",
+    textAlign: "center",
+    width: "100%",
+    boxSizing: "border-box",
+  },
+  compactActionIcon: { width: 20, height: 20, color: "var(--color-primary-dark)", display: "flex", alignItems: "center", justifyContent: "center" },
+  kpiCard: {
+    display: "flex",
+    alignItems: "center",
+    gap: 14,
+    background: "var(--color-surface)",
+    border: "1px solid var(--color-border)",
+    borderRadius: "var(--radius-lg)",
+    padding: "16px 18px",
+    width: "100%",
+    boxSizing: "border-box",
+  },
+  kpiIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: "var(--radius-sm)",
+    background: "var(--color-primary-tint)",
+    color: "var(--color-primary-dark)",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    flexShrink: 0,
+  },
+  kpiValue: { fontSize: 22, fontWeight: 800, color: "var(--color-text)" },
+  kpiLabel: { fontSize: 12, color: "var(--color-text-muted)", marginTop: 2 },
 };

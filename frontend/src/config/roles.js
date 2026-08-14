@@ -17,8 +17,9 @@ export const NAV_BY_ROLE = {
   ],
   case_manager: [
     { label: "Dashboard", path: "/dashboard", icon: "dashboard" },
-    { label: "Patients", path: "/patients", icon: "patients" },
+    { label: "My Patients", path: "/patients", icon: "patients" },
     { label: "Attendance", path: "/attendance", icon: "attendance" },
+    { label: "Case Management", path: "/patients", icon: "caseManagement" },
     { label: "Analytics", path: "/analytics", icon: "analytics", badge: "Limited" },
   ],
   him_staff: [
@@ -60,9 +61,10 @@ export const ROLE_PERMISSIONS = {
   ],
   case_manager: [
     "View and manage assigned patients",
-    "Record attendance and progress notes",
+    "Record attendance and therapy participation",
+    "Add progress notes and observations",
     "Schedule and resolve follow-ups",
-    "Generate patient certificates",
+    "Update rehabilitation status",
     "View limited analytics",
   ],
   him_staff: [

@@ -1,5 +1,5 @@
 import pool from "../config/db.js";
-import { notifyIctAdmins, notifyRoles } from "../utils/notify.js";
+import { notifyIctAdmins, notifyRoles, notifyUser } from "../utils/notify.js";
 
 async function generatePatientCode() {
   const year = new Date().getFullYear();
@@ -12,6 +12,14 @@ async function generatePatientCode() {
 }
 
 export async function listPatients(req, res) {
+  const clauses = ["p.is_archived = FALSE"];
+  const params = [];
+
+  if (req.user.role === "case_manager") {
+    clauses.push("p.assigned_case_manager_id = ?");
+    params.push(req.user.id);
+  }
+
   const [rows] = await pool.query(
     `SELECT p.id, p.patient_code, p.full_name, p.gender, p.municipality,
             p.admission_date, p.enrollment_status, p.is_archived,
@@ -21,8 +29,9 @@ export async function listPatients(req, res) {
             (SELECT COUNT(*) FROM attendance a WHERE a.patient_id = p.id AND a.status = 'present') AS present_sessions
      FROM patients p
      LEFT JOIN users u ON u.id = p.assigned_case_manager_id
-     WHERE p.is_archived = FALSE
-     ORDER BY p.created_at DESC`
+     WHERE ${clauses.join(" AND ")}
+     ORDER BY p.created_at DESC`,
+    params
   );
 
   const patients = rows.map((p) => ({
@@ -67,27 +76,27 @@ export async function updatePatient(req, res) {
     return res.status(400).json({ message: "No fields to update." });
   }
 
+  // Single consolidated pre-fetch query to check current patient state
+  const [[current]] = await pool.query(
+    "SELECT first_name, middle_name, last_name, full_name, enrollment_status, assigned_case_manager_id FROM patients WHERE id = ?",
+    [id]
+  );
+
   if (fields.firstName || fields.middleName || fields.lastName) {
-    const [[current]] = await pool.query(
-      "SELECT first_name, middle_name, last_name FROM patients WHERE id = ?", [id]
-    );
     const fullName = [
-      fields.firstName ?? current.first_name,
-      fields.middleName ?? current.middle_name,
-      fields.lastName ?? current.last_name,
+      fields.firstName ?? current?.first_name,
+      fields.middleName ?? current?.middle_name,
+      fields.lastName ?? current?.last_name,
     ].filter(Boolean).join(" ");
     setClauses.push("full_name = ?");
     values.push(fullName);
   }
 
-  // Check for an enrollment status change so the audit log entry can be specific about it
+  // Check for an enrollment status change
   let statusChangeMessage = null;
-  if (fields.enrollmentStatus) {
-    const [[current]] = await pool.query("SELECT enrollment_status FROM patients WHERE id = ?", [id]);
-    if (current && current.enrollment_status !== fields.enrollmentStatus) {
-      statusChangeMessage = `Changed enrollment status from "${current.enrollment_status}" to "${fields.enrollmentStatus}"`;
-      if (fields.statusRemark) statusChangeMessage += ` — ${fields.statusRemark}`;
-    }
+  if (fields.enrollmentStatus && current && current.enrollment_status !== fields.enrollmentStatus) {
+    statusChangeMessage = `Changed enrollment status from "${current.enrollment_status}" to "${fields.enrollmentStatus}"`;
+    if (fields.statusRemark) statusChangeMessage += ` — ${fields.statusRemark}`;
   }
 
   values.push(id);
@@ -102,6 +111,21 @@ export async function updatePatient(req, res) {
 
     const [[updatedPatient]] = await pool.query("SELECT full_name FROM patients WHERE id = ?", [id]);
     await notifyRoles(["ict_admin", "him_staff"], "patients", "patient_updated", `Patient record updated: "${updatedPatient?.full_name || `#${id}`}" — by ${req.user.username}`);
+
+    // Notify newly assigned case manager on reassignment (with self-notification guard)
+    if (
+      fields.assignedCaseManagerId &&
+      current &&
+      Number(fields.assignedCaseManagerId) !== Number(current.assigned_case_manager_id) &&
+      Number(fields.assignedCaseManagerId) !== Number(req.user.id)
+    ) {
+      await notifyUser(
+        fields.assignedCaseManagerId,
+        "patients",
+        "patient_assigned",
+        `Patient "${current.full_name}" has been assigned to you`
+      );
+    }
 
     res.json({ message: "Patient updated." });
   } catch (err) {
@@ -121,6 +145,9 @@ export async function getPatient(req, res) {
     [id]
   );
   if (!rows[0]) return res.status(404).json({ message: "Patient not found." });
+  if (req.user.role === "case_manager" && rows[0].assigned_case_manager_id !== req.user.id) {
+    return res.status(403).json({ message: "You do not have access to this patient." });
+  }
   res.json({ patient: rows[0] });
 }
 
@@ -244,6 +271,15 @@ export async function createPatient(req, res) {
     );
 
     await notifyRoles(["ict_admin", "him_staff"], "patients", "patient_registered", `New patient registered: "${fullName}" (${patientCode}) — by ${req.user.username}`);
+
+    if (assignedCaseManagerId && Number(assignedCaseManagerId) !== Number(req.user.id)) {
+      await notifyUser(
+        assignedCaseManagerId,
+        "patients",
+        "patient_assigned",
+        `New patient assigned: "${fullName}" (${patientCode})`
+      );
+    }
 
     res.status(201).json({ id: result.insertId, patientCode, message: "Patient registered." });
   } catch (err) {

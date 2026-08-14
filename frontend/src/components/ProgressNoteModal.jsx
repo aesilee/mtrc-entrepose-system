@@ -1,7 +1,9 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import api from "../api/axios.js";
 
-export default function ProgressNoteModal({ patientId, note, onClose, onSaved }) {
+export default function ProgressNoteModal({ patientId: initialPatientId, note, onClose, onSaved }) {
+  const [selectedPatientId, setSelectedPatientId] = useState(initialPatientId || "");
+  const [patients, setPatients] = useState([]);
   const [form, setForm] = useState({
     sessionDate: note?.session_date?.slice(0, 10) || new Date().toISOString().slice(0, 10),
     sessionType: note?.session_type || "",
@@ -14,19 +16,36 @@ export default function ProgressNoteModal({ patientId, note, onClose, onSaved })
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
+  useEffect(() => {
+    if (!initialPatientId) {
+      api.get("/patients").then(({ data }) => {
+        const pts = data.patients || [];
+        setPatients(pts);
+        if (pts.length && !selectedPatientId) {
+          setSelectedPatientId(pts[0].id);
+        }
+      });
+    }
+  }, [initialPatientId]);
+
   function update(field, value) {
     setForm((prev) => ({ ...prev, [field]: value }));
   }
 
   async function handleSubmit(e) {
     e.preventDefault();
+    const targetPatientId = initialPatientId || selectedPatientId;
+    if (!targetPatientId) {
+      setError("Please select a patient.");
+      return;
+    }
     setSaving(true);
     setError("");
     try {
       if (note) {
         await api.put(`/progress-notes/${note.id}`, form);
       } else {
-        await api.post(`/patients/${patientId}/progress-notes`, form);
+        await api.post(`/patients/${targetPatientId}/progress-notes`, form);
       }
       onSaved();
     } catch (err) {
@@ -46,6 +65,22 @@ export default function ProgressNoteModal({ patientId, note, onClose, onSaved })
 
         <form onSubmit={handleSubmit} style={styles.body}>
           {error && <div style={styles.error}>{error}</div>}
+          {!initialPatientId && (
+            <label style={styles.label}>
+              Patient
+              <select
+                style={styles.input}
+                value={selectedPatientId}
+                onChange={(e) => setSelectedPatientId(e.target.value)}
+                required
+              >
+                <option value="">Select a patient…</option>
+                {patients.map((p) => (
+                  <option key={p.id} value={p.id}>{p.full_name} ({p.patient_code})</option>
+                ))}
+              </select>
+            </label>
+          )}
           <div style={styles.grid}>
             <label style={styles.label}>
               Date

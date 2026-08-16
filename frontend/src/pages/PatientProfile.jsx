@@ -281,7 +281,11 @@ export default function PatientProfile() {
           ))}
 
           <div style={{ ...styles.sideNavGroupLabel, marginTop: 16 }}>Records</div>
-          {TAB_SECTIONS.filter((s) => !(user.role === "case_manager" && s.key === "certificates")).map((s) => (
+          {TAB_SECTIONS.filter((s) => {
+              if (user.role === "case_manager" && s.key === "certificates") return false;
+              if (user.role === "admitting" && (s.key === "case-notes" || s.key === "attendance")) return false;
+              return true;
+            }).map((s) => (
             <button
               key={s.key}
               type="button"
@@ -528,7 +532,7 @@ export default function PatientProfile() {
                         items={[
                           { label: "Print", onClick: () => openCertificate(c.id, "print") },
                           { label: "Download PDF", onClick: () => openCertificate(c.id, "download") },
-                          { label: "Delete", danger: true, onClick: () => handleDeleteCertificate(c.id) },
+                          ...(user.role !== "admitting" ? [{ label: "Delete", danger: true, onClick: () => handleDeleteCertificate(c.id) }] : []),
                         ]}
                       />
                       <div style={styles.certCardIcon}>{NAV_ICONS.certificates}</div>

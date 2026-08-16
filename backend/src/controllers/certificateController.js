@@ -38,7 +38,7 @@ export async function generateCertificate(req, res) {
       [req.user.username, `Generated a completion certificate for patient "${patient.full_name}"`, "patients", id]
     );
 
-   await notifyRoles(["ict_admin", "him_staff"], "certificates", "certificate_generated", `Certificate of completion generated for "${patient.full_name}" — by ${req.user.username}`);
+   await notifyRoles(["ict_admin", "him_staff", "admitting"], "certificates", "certificate_generated", `Certificate of completion generated for "${patient.full_name}" — by ${req.user.username}`);
 
     res.status(201).json({
       id: result.insertId,

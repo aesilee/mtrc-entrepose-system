@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import AppShell from "../components/AppShell.jsx";
 import { useAuth } from "../context/AuthContext.jsx";
-import { ROLE_LABELS } from "../config/roles.js";
+
 import api from "../api/axios.js";
 import { DonutChart, LineChart } from "../components/AnalyticsCharts.jsx";
 import useViewport from "../hooks/useViewport.js";
@@ -39,13 +39,7 @@ const ICONS = {
   rehabStatus: <svg {...iconProps}><path d="M3 17l6-6 4 4 8-8" /><path d="M15 6h6v6" /></svg>,
 };
 
-const RECENT_ACTIVITY = [
-  { user: "—", action: "No recent activity yet", time: "—" },
-];
-
-const SYSTEM_NOTIFICATIONS = [
-  { message: "No notifications yet", time: "—" },
-];
+// recentActivity and systemNotifications are loaded at runtime from the dashboard APIs
 
 const SYSTEM_HEALTH = [
   { label: "Database", value: "—" },
@@ -68,9 +62,31 @@ function IctAdminDashboard() {
   const { isMobile, isTablet } = useViewport();
   const statCols = isMobile ? 1 : isTablet ? 2 : 4;
   const [stats, setStats] = useState(null);
+  const [recentActivity, setRecentActivity] = useState([]);
+  const [systemNotifications, setSystemNotifications] = useState([]);
+  const [dashboardExtrasLoading, setDashboardExtrasLoading] = useState(true);
 
   useEffect(() => {
-    api.get("/dashboard/stats").then(({ data }) => setStats(data));
+    api.get("/dashboard/stats").then(({ data }) => setStats(data)).catch(() => {});
+
+    Promise.allSettled([
+      api.get("/dashboard/him-stats"),
+      // Request only system-category notifications from the API
+      api.get("/notifications?category=system"),
+    ]).then((results) => {
+      const [himRes, notifRes] = results;
+      if (himRes.status === "fulfilled") {
+        setRecentActivity(himRes.value.data.recentActivity || []);
+      }
+      if (notifRes.status === "fulfilled") {
+        // Filter system notifications to only those likely indicating bugs/errors/critical issues
+        const raw = notifRes.value.data.notifications || [];
+        const errRegex = /error|fail|exception|critical|bug/i;
+        const filtered = raw.filter(n => n.type === 'error' || (n.message && errRegex.test(n.message)));
+        setSystemNotifications(filtered);
+      }
+      setDashboardExtrasLoading(false);
+    });
   }, []);
 
   const statCards = [
@@ -98,25 +114,40 @@ function IctAdminDashboard() {
         <div style={styles.card}>
           <div style={styles.cardTitle}>Recent User Activity</div>
           <div style={styles.list}>
-            {RECENT_ACTIVITY.map((item, i) => (
-              <div key={i} style={styles.activityRow}>
-                <span style={styles.activityUser}>{item.user}</span>
-                <span style={styles.activityAction}>{item.action}</span>
-                <span style={styles.activityTime}>{item.time}</span>
+            {recentActivity && recentActivity.length ? (
+              recentActivity.map((item, i) => (
+                <div key={i} style={styles.activityRow}>
+                  <span style={styles.activityUser}>{item.actor_username || item.user || '—'}</span>
+                  <span style={styles.activityAction}>{item.action || item.activity || '—'}</span>
+                  <span style={styles.activityTime}>{timeAgo(item.created_at || item.time || new Date())}</span>
+                </div>
+              ))
+            ) : (
+              <div style={styles.activityRow}>
+                <span style={styles.activityUser}>—</span>
+                <span style={styles.activityAction}>No recent activity yet</span>
+                <span style={styles.activityTime}>—</span>
               </div>
-            ))}
+            )}
           </div>
         </div>
 
         <div style={styles.card}>
           <div style={styles.cardTitle}>System Notifications</div>
           <div style={styles.list}>
-            {SYSTEM_NOTIFICATIONS.map((item, i) => (
-              <div key={i} style={styles.notificationRow}>
-                <span>{item.message}</span>
-                <span style={styles.activityTime}>{item.time}</span>
+            {systemNotifications && systemNotifications.length ? (
+              systemNotifications.map((item, i) => (
+                <div key={i} style={styles.notificationRow}>
+                  <span>{item.message}</span>
+                  <span style={styles.activityTime}>{timeAgo(item.created_at)}</span>
+                </div>
+              ))
+            ) : (
+              <div style={styles.notificationRow}>
+                <span>No notifications yet.</span>
+                <span style={styles.activityTime}>—</span>
               </div>
-            ))}
+            )}
           </div>
         </div>
       </div>
@@ -539,16 +570,254 @@ function CmKpiCard({ label, value, icon }) {
   );
 }
 
-function GenericDashboard({ user }) {
+const STATUS_BADGE_COLORS = {
+  pending:     { bg: "#FFF3D6", color: "#9A6B00" },
+  active:      { bg: "#D8F5E9", color: "#1A7F4B" },
+  completed:   { bg: "#E1F0FF", color: "#0B5FA5" },
+  dropped:     { bg: "#FDE2E2", color: "#B3261E" },
+  transferred: { bg: "#EDEAFB", color: "#5B3EC9" },
+};
+
+function AdmittingDashboard() {
+  const navigate = useNavigate();
+  const { isMobile, isTablet } = useViewport();
+  const isCompact = isMobile || isTablet;
+  const kpiCols = isMobile ? 2 : 4;
+
+  const [stats, setStats] = useState(null);
+
+  function loadStats() {
+    api.get("/dashboard/admitting-stats").then(({ data }) => setStats(data));
+  }
+
+  useEffect(() => {
+    loadStats();
+  }, []);
+
+  const kpiCards = [
+    {
+      key: "todayAdmissions",
+      label: "Today's New Admissions",
+      value: stats?.todayAdmissions ?? "—",
+      icon: (
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" width={18} height={18}>
+          <path d="M12 5v14M5 12h14" />
+        </svg>
+      ),
+    },
+    {
+      key: "totalPatients",
+      label: "Total Registered Patients",
+      value: stats?.totalPatients ?? "—",
+      icon: (
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" width={18} height={18}>
+          <circle cx="9" cy="8" r="3.2" />
+          <path d="M3.5 20c0-3.5 2.9-6 5.5-6s5.5 2.5 5.5 6" />
+          <circle cx="17" cy="8" r="2.6" />
+          <path d="M15.5 14.2c2.4.3 4.5 2.6 4.5 5.8" />
+        </svg>
+      ),
+    },
+    {
+      key: "pendingRegistrations",
+      label: "Pending Registrations",
+      value: stats?.pendingRegistrations ?? "—",
+      icon: (
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" width={18} height={18}>
+          <rect x="3" y="5" width="18" height="16" rx="2" />
+          <path d="M3 10h18M8 3v4M16 3v4" />
+        </svg>
+      ),
+    },
+    {
+      key: "certsToday",
+      label: "Certificates Generated Today",
+      value: stats?.certsToday ?? "—",
+      icon: (
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" width={18} height={18}>
+          <circle cx="12" cy="8" r="5" />
+          <path d="M8.5 12.5L7 21l5-3 5 3-1.5-8.5" />
+        </svg>
+      ),
+    },
+  ];
+
+  const quickActions = [
+    {
+      key: "register",
+      label: "Register New Patient",
+      icon: (
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" width={16} height={16}>
+          <path d="M12 5v14M5 12h14" />
+        </svg>
+      ),
+      onClick: () => navigate("/patients/register"),
+    },
+    {
+      key: "patients",
+      label: "Search Patients",
+      icon: (
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" width={16} height={16}>
+          <circle cx="11" cy="11" r="7" />
+          <path d="M21 21l-4.35-4.35" />
+        </svg>
+      ),
+      onClick: () => navigate("/patients"),
+    },
+  ];
+
+  function fmtDate(d) {
+    if (!d) return "—";
+    return new Date(d).toLocaleDateString("en-PH", { month: "short", day: "numeric", year: "numeric" });
+  }
+
   return (
-    <div style={styles.card}>
-      <h2 style={styles.heading}>Welcome, {user.fullName.split(" ")[0]}</h2>
-      <p style={styles.text}>
-        You're signed in as <strong>{ROLE_LABELS[user.role]}</strong>. Real
-        summary statistics (enrollment, attendance rate, flagged sessions)
-        will appear here once the Client Profiling and Attendance modules
-        are connected.
-      </p>
+    <div style={apStyles.page}>
+      {/* KPI row */}
+      <div style={{ ...apStyles.kpiRow, gridTemplateColumns: `repeat(${kpiCols}, 1fr)` }}>
+        {kpiCards.map((card) => (
+          <div key={card.key} style={apStyles.kpiCard}>
+            <div style={apStyles.kpiIcon}>{card.icon}</div>
+            <div>
+              <div style={apStyles.kpiValue}>{card.value}</div>
+              <div style={apStyles.kpiLabel}>{card.label}</div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Main two-column grid */}
+      <div style={{ ...apStyles.gridRow, gridTemplateColumns: isCompact ? "1fr" : "1.4fr 1fr" }}>
+        {/* Recent Admissions */}
+        <div style={apStyles.card}>
+          <div style={apStyles.cardHeader}>
+            <span style={apStyles.cardTitle}>Recent Admissions</span>
+            <button
+              type="button"
+              style={apStyles.linkBtn}
+              onClick={() => navigate("/patients")}
+            >
+              View all
+            </button>
+          </div>
+
+          {!stats?.recentAdmissions?.length ? (
+            <div style={apStyles.emptyText}>No patients registered yet.</div>
+          ) : (
+            <div style={apStyles.tableWrap}>
+              <table style={apStyles.table}>
+                <thead>
+                  <tr>
+                    <th style={apStyles.th}>Name</th>
+                    <th style={apStyles.th}>ID</th>
+                    <th style={apStyles.th}>Admission Date</th>
+                    <th style={apStyles.th}>Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {stats.recentAdmissions.map((p) => {
+                    const sc = STATUS_BADGE_COLORS[p.enrollment_status] || STATUS_BADGE_COLORS.pending;
+                    return (
+                      <tr
+                        key={p.id}
+                        style={apStyles.tr}
+                        onClick={() => navigate(`/patients/${p.id}`)}
+                      >
+                        <td style={apStyles.td}>{p.full_name}</td>
+                        <td style={{ ...apStyles.td, color: "var(--color-text-muted)", fontSize: 12 }}>{p.patient_code}</td>
+                        <td style={apStyles.td}>{fmtDate(p.admission_date || p.created_at)}</td>
+                        <td style={apStyles.td}>
+                          <span style={{ ...apStyles.statusBadge, background: sc.bg, color: sc.color }}>
+                            {p.enrollment_status}
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+
+        {/* Right column: Pending / Incomplete Records */}
+        <div style={apStyles.card}>
+          <div style={apStyles.cardHeader}>
+            <span style={apStyles.cardTitle}>Incomplete Records</span>
+            {!!stats?.incompleteRecords?.length && (
+              <span style={apStyles.warnBadge}>{stats.incompleteRecords.length} pending</span>
+            )}
+          </div>
+
+          {!stats?.incompleteRecords?.length ? (
+            <div style={apStyles.emptyText}>All registered patients have complete records.</div>
+          ) : (
+            <div style={apStyles.list}>
+              {stats.incompleteRecords.map((p) => (
+                <button
+                  key={p.id}
+                  type="button"
+                  style={apStyles.incompleteRow}
+                  onClick={() => navigate(`/patients/${p.id}`)}
+                >
+                  <div>
+                    <div style={apStyles.incompleteRowName}>{p.full_name}</div>
+                    <div style={apStyles.incompleteRowCode}>{p.patient_code}</div>
+                  </div>
+                  <span style={apStyles.missingTag}>{p.missing_info}</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Bottom row: quick actions + notifications */}
+      <div style={{ ...apStyles.gridRow, gridTemplateColumns: isCompact ? "1fr" : "1fr 1.4fr" }}>
+        {/* Quick Actions */}
+        <div style={apStyles.card}>
+          <div style={apStyles.cardTitle}>Quick Actions</div>
+          <div style={apStyles.actionsGrid}>
+            {quickActions.map((action) => (
+              <button
+                key={action.key}
+                type="button"
+                style={apStyles.actionBtn}
+                onClick={action.onClick}
+              >
+                <span style={apStyles.actionIcon}>{action.icon}</span>
+                <span>{action.label}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Admission Notifications */}
+        <div style={apStyles.card}>
+          <div style={apStyles.cardTitle}>Recent Activity</div>
+          {!stats?.recentNotifications?.length ? (
+            <div style={apStyles.emptyText}>No recent admission-related activity.</div>
+          ) : (
+            <div style={apStyles.list}>
+              {stats.recentNotifications.map((n) => (
+                <div
+                  key={n.id}
+                  style={{
+                    ...apStyles.notifRow,
+                    opacity: n.is_read ? 0.65 : 1,
+                  }}
+                >
+                  <div style={apStyles.notifDot(n.is_read)} />
+                  <div style={{ flex: 1 }}>
+                    <div style={apStyles.notifMsg}>{n.message}</div>
+                    <div style={apStyles.notifTime}>{timeAgo(n.created_at)}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
@@ -564,9 +833,9 @@ export default function Dashboard() {
         <HimStaffDashboard />
       ) : user.role === "case_manager" ? (
         <CaseManagerDashboard />
-      ) : (
-        <GenericDashboard user={user} />
-      )}
+      ) : user.role === "admitting" ? (
+        <AdmittingDashboard />
+      ) : null}
     </AppShell>
   );
 }
@@ -864,4 +1133,168 @@ const cmStyles = {
   },
   kpiValue: { fontSize: 22, fontWeight: 800, color: "var(--color-text)" },
   kpiLabel: { fontSize: 12, color: "var(--color-text-muted)", marginTop: 2 },
+};
+
+const apStyles = {
+  page: { display: "flex", flexDirection: "column", gap: 16, width: "100%", boxSizing: "border-box" },
+  kpiRow: { display: "grid", gap: 16, width: "100%" },
+  gridRow: { display: "grid", gap: 16, alignItems: "stretch", width: "100%" },
+  card: {
+    background: "var(--color-surface)",
+    border: "1px solid var(--color-border)",
+    borderRadius: "var(--radius-lg)",
+    padding: "18px 20px",
+    display: "flex",
+    flexDirection: "column",
+    gap: 12,
+    minHeight: 100,
+    width: "100%",
+    boxSizing: "border-box",
+  },
+  cardHeader: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 4,
+  },
+  cardTitle: { fontSize: 14, fontWeight: 700, color: "var(--color-text)" },
+  emptyText: { color: "var(--color-text-muted)", fontSize: 13, textAlign: "center", padding: "24px 0" },
+  list: { display: "flex", flexDirection: "column", gap: 0, width: "100%" },
+  kpiCard: {
+    display: "flex",
+    alignItems: "center",
+    gap: 14,
+    background: "var(--color-surface)",
+    border: "1px solid var(--color-border)",
+    borderRadius: "var(--radius-lg)",
+    padding: "16px 18px",
+    width: "100%",
+    boxSizing: "border-box",
+  },
+  kpiIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: "var(--radius-sm)",
+    background: "var(--color-primary-tint)",
+    color: "var(--color-primary-dark)",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    flexShrink: 0,
+  },
+  kpiValue: { fontSize: 22, fontWeight: 800, color: "var(--color-text)" },
+  kpiLabel: { fontSize: 12, color: "var(--color-text-muted)", marginTop: 2 },
+
+  tableWrap: { overflowX: "auto", width: "100%" },
+  table: { width: "100%", borderCollapse: "collapse", fontSize: 13 },
+  th: {
+    textAlign: "left",
+    padding: "6px 10px",
+    fontWeight: 600,
+    fontSize: 11,
+    color: "var(--color-text-muted)",
+    borderBottom: "1px solid var(--color-border)",
+    whiteSpace: "nowrap",
+  },
+  td: {
+    padding: "10px 10px",
+    fontSize: 13,
+    color: "var(--color-text)",
+    borderBottom: "1px solid var(--color-border)",
+    verticalAlign: "middle",
+  },
+  tr: { cursor: "pointer" },
+  statusBadge: {
+    display: "inline-block",
+    fontSize: 11,
+    fontWeight: 700,
+    padding: "3px 9px",
+    borderRadius: 999,
+    textTransform: "capitalize",
+    whiteSpace: "nowrap",
+  },
+  warnBadge: {
+    fontSize: 11,
+    fontWeight: 700,
+    padding: "3px 9px",
+    borderRadius: 999,
+    background: "#FFF3D6",
+    color: "#9A6B00",
+    whiteSpace: "nowrap",
+  },
+  incompleteRow: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: 10,
+    padding: "10px 0",
+    background: "none",
+    border: "none",
+    borderBottom: "1px solid var(--color-border)",
+    cursor: "pointer",
+    textAlign: "left",
+    width: "100%",
+  },
+  incompleteRowName: { fontSize: 13, fontWeight: 600, color: "var(--color-text)" },
+  incompleteRowCode: { fontSize: 11, color: "var(--color-text-muted)", marginTop: 2 },
+  missingTag: {
+    fontSize: 11,
+    fontWeight: 600,
+    padding: "3px 8px",
+    borderRadius: 999,
+    background: "#FDE2E2",
+    color: "#B3261E",
+    whiteSpace: "nowrap",
+    flexShrink: 0,
+  },
+  actionsGrid: { display: "flex", flexDirection: "column", gap: 10 },
+  actionBtn: {
+    display: "flex",
+    alignItems: "center",
+    gap: 10,
+    padding: "12px 14px",
+    fontSize: 13,
+    fontWeight: 600,
+    color: "var(--color-text)",
+    background: "var(--color-primary-tint)",
+    border: "none",
+    borderRadius: "var(--radius-sm)",
+    cursor: "pointer",
+    textAlign: "left",
+  },
+  actionIcon: {
+    width: 18,
+    height: 18,
+    flexShrink: 0,
+    color: "var(--color-primary-dark)",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  linkBtn: {
+    background: "none",
+    border: "none",
+    padding: 0,
+    fontSize: 12,
+    fontWeight: 600,
+    color: "var(--color-primary-dark)",
+    cursor: "pointer",
+  },
+  notifRow: {
+    display: "flex",
+    alignItems: "flex-start",
+    gap: 10,
+    padding: "10px 0",
+    borderBottom: "1px solid var(--color-border)",
+  },
+  notifDot: (read) => ({
+    width: 7,
+    height: 7,
+    borderRadius: "50%",
+    background: read ? "var(--color-border)" : "var(--color-primary)",
+    marginTop: 5,
+    flexShrink: 0,
+  }),
+  notifMsg: { fontSize: 13, color: "var(--color-text)", lineHeight: 1.45 },
+  notifTime: { fontSize: 11, color: "var(--color-text-muted)", marginTop: 3 },
 };

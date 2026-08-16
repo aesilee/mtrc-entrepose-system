@@ -146,6 +146,82 @@ export async function getCaseManagerStats(req, res) {
   }
 }
 
+export async function getAdmittingStats(req, res) {
+  try {
+    const [[{ todayAdmissions }]] = await pool.query(
+      `SELECT COUNT(*) AS todayAdmissions FROM patients WHERE DATE(created_at) = CURDATE() AND is_archived = FALSE`
+    );
+
+    const [[{ totalPatients }]] = await pool.query(
+      `SELECT COUNT(*) AS totalPatients FROM patients WHERE is_archived = FALSE`
+    );
+
+    // Pending registrations: patients still in 'pending' status
+    const [[{ pendingRegistrations }]] = await pool.query(
+      `SELECT COUNT(*) AS pendingRegistrations FROM patients WHERE enrollment_status = 'pending' AND is_archived = FALSE`
+    );
+
+    const [[{ certsToday }]] = await pool.query(
+      `SELECT COUNT(*) AS certsToday FROM certificates WHERE DATE(issued_at) = CURDATE()`
+    );
+
+    // Recent admissions, newest first, capped at 8
+    const [recentAdmissions] = await pool.query(
+      `SELECT p.id, p.patient_code, p.full_name, p.admission_date, p.enrollment_status, p.municipality,
+              p.created_at
+       FROM patients p
+       WHERE p.is_archived = FALSE
+       ORDER BY p.created_at DESC
+       LIMIT 8`
+    );
+
+    // Patients that may still have missing info (no emergency contact or no program assigned)
+    const [incompleteRecords] = await pool.query(
+      `SELECT id, full_name, patient_code,
+              CASE
+                WHEN emergency_contact_name IS NULL OR emergency_contact_name = '' THEN 'Missing Emergency Contact'
+                WHEN program_id IS NULL THEN 'No Program Assigned'
+                WHEN initial_assessment IS NULL OR initial_assessment = '' THEN 'Missing Initial Assessment'
+                ELSE 'Incomplete Record'
+              END AS missing_info
+       FROM patients
+       WHERE is_archived = FALSE
+         AND enrollment_status = 'pending'
+         AND (
+           emergency_contact_name IS NULL OR emergency_contact_name = ''
+           OR program_id IS NULL
+           OR initial_assessment IS NULL OR initial_assessment = ''
+         )
+       ORDER BY created_at DESC
+       LIMIT 6`
+    );
+
+    // Admission-related notifications for this user
+    const [recentNotifications] = await pool.query(
+      `SELECT id, type, category, message, is_read, created_at
+       FROM notifications
+       WHERE recipient_id = ?
+         AND category IN ('patients', 'certificates')
+       ORDER BY created_at DESC
+       LIMIT 6`,
+      [req.user.id]
+    );
+
+    res.json({
+      todayAdmissions,
+      totalPatients,
+      pendingRegistrations,
+      certsToday,
+      recentAdmissions,
+      incompleteRecords,
+      recentNotifications,
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Could not load admitting dashboard stats." });
+  }
+}
+
 export async function getHimStaffStats(req, res) {
   try {
     const [[{ reportsToday }]] = await pool.query(

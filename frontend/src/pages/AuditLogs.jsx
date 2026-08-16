@@ -18,7 +18,7 @@ export default function AuditLogs() {
 
   useEffect(() => {
     setLoading(true);
-    const params = {};
+    const params = { limit: 20000 };
     if (userFilter !== "all") params.user = userFilter;
     if (actionFilter) params.action = actionFilter;
     if (dateFilter) params.date = dateFilter;
@@ -26,7 +26,10 @@ export default function AuditLogs() {
 
     const t = setTimeout(() => {
       api.get("/audit-logs", { params }).then(({ data }) => {
-        setLogs(data.logs);
+        setLogs(data.logs || []);
+        setLoading(false);
+      }).catch(() => {
+        setLogs([]);
         setLoading(false);
       });
     }, 300);

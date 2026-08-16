@@ -14,6 +14,7 @@ export const NAV_BY_ROLE = {
   admitting: [
     { label: "Dashboard", path: "/dashboard", icon: "dashboard" },
     { label: "Patients", path: "/patients", icon: "patients" },
+    { label: "Register Patient", path: "/patients/register", icon: "caseManagement" },
   ],
   case_manager: [
     { label: "Dashboard", path: "/dashboard", icon: "dashboard" },

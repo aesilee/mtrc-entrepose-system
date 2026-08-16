@@ -241,11 +241,21 @@ export default function Sidebar({ user }) {
   const org = useOrgSettings();
   const { logout } = useAuth();
   const navigate = useNavigate();
+  const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false);
 
-  function handleLogout() {
+  const logoutName = user?.fullName || user?.username || "User";
+  const logoutRole = user?.role ? ROLE_LABELS[user.role] : "User";
+
+  function handleLogoutRequest() {
+    setLogoutConfirmOpen(true);
+  }
+
+  function confirmLogout() {
     logout();
+    setLogoutConfirmOpen(false);
     navigate("/login");
   }
+
   const [collapsed, setCollapsed] = useState(
     () => sessionStorage.getItem("mtrc-sidebar-collapsed") === "true"
   );
@@ -423,11 +433,39 @@ export default function Sidebar({ user }) {
         </NavTooltip>
 
         <NavTooltip label="Log out" show={true}>
-          <button type="button" style={styles.logoutBtn} onClick={handleLogout} aria-label="Log out">
+          <button type="button" style={styles.logoutBtn} onClick={handleLogoutRequest} aria-label="Log out">
             <span style={styles.navIcon}>{NAV_ICONS.logout}</span>
           </button>
         </NavTooltip>
       </div>
+
+      {logoutConfirmOpen &&
+        createPortal(
+          <div style={styles.confirmOverlay} onClick={() => setLogoutConfirmOpen(false)}>
+            <div style={styles.confirmModal} onClick={(e) => e.stopPropagation()}>
+              <div style={styles.confirmHeader}>Log out</div>
+              <div style={styles.confirmText}>Are you sure you want to log out?</div>
+
+              <div style={styles.confirmUserBox}>
+                <div style={styles.confirmAvatar}>{(logoutName || "U").charAt(0).toUpperCase()}</div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={styles.confirmUserName}>{logoutName}</div>
+                  <div style={styles.confirmUserRole}>{logoutRole}</div>
+                </div>
+              </div>
+
+              <div style={styles.confirmActions}>
+                <button type="button" style={styles.confirmCancelBtn} onClick={() => setLogoutConfirmOpen(false)}>
+                  Cancel
+                </button>
+                <button type="button" style={styles.confirmLogoutBtn} onClick={confirmLogout}>
+                  Log out
+                </button>
+              </div>
+            </div>
+          </div>,
+          document.body
+        )}
     </aside>
   );
 }
@@ -504,6 +542,35 @@ const styles = {
   profileAvatarFallback: { width: 34, height: 34, borderRadius: "50%", background: "var(--color-primary-tint)", color: "var(--color-primary-dark)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, fontWeight: 800, flexShrink: 0 },
   profileName: { fontSize: 13, fontWeight: 700, color: "var(--color-text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
   profileRole: { fontSize: 11.5, color: "var(--color-text-muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
+  confirmOverlay: {
+    position: "fixed", inset: 0, background: "rgba(15, 23, 42, 0.5)", display: "flex", alignItems: "center",
+    justifyContent: "center", zIndex: 2000, padding: 16,
+  },
+  confirmModal: {
+    width: 420, maxWidth: "100%", background: "var(--color-surface)", border: "1px solid var(--color-border)",
+    borderRadius: "var(--radius-lg)", boxShadow: "0 18px 50px rgba(15, 23, 42, 0.22)", padding: 24,
+  },
+  confirmHeader: { fontSize: 20, fontWeight: 800, color: "var(--color-primary-dark)", marginBottom: 12 },
+  confirmText: { margin: 0, color: "var(--color-text)", fontSize: 15, lineHeight: 1.5 },
+  confirmUserBox: {
+    marginTop: 18, display: "flex", alignItems: "center", gap: 12, padding: "12px 14px",
+    background: "var(--color-primary-tint)", borderRadius: "var(--radius-md)", border: "1px solid rgba(95, 117, 255, 0.15)",
+  },
+  confirmAvatar: {
+    width: 36, height: 36, borderRadius: "50%", background: "var(--color-primary)", color: "#fff",
+    display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, fontSize: 15,
+  },
+  confirmUserName: { fontSize: 14, fontWeight: 700, color: "var(--color-text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
+  confirmUserRole: { fontSize: 12, color: "var(--color-text-muted)", marginTop: 2 },
+  confirmActions: { display: "flex", justifyContent: "flex-end", gap: 12, marginTop: 22 },
+  confirmCancelBtn: {
+    border: "1px solid var(--color-border)", background: "var(--color-surface)", color: "var(--color-text)",
+    padding: "10px 14px", borderRadius: "var(--radius-sm)", fontWeight: 600, cursor: "pointer",
+  },
+  confirmLogoutBtn: {
+    border: "none", background: "var(--color-primary)", color: "#fff", padding: "10px 16px",
+    borderRadius: "var(--radius-sm)", fontWeight: 700, cursor: "pointer",
+  },
 
   // ---- Bottom bar (mobile) ----
   bottomBar: {

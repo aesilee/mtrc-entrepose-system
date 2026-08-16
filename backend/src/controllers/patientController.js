@@ -110,7 +110,7 @@ export async function updatePatient(req, res) {
     );
 
     const [[updatedPatient]] = await pool.query("SELECT full_name FROM patients WHERE id = ?", [id]);
-    await notifyRoles(["ict_admin", "him_staff"], "patients", "patient_updated", `Patient record updated: "${updatedPatient?.full_name || `#${id}`}" — by ${req.user.username}`);
+    await notifyRoles(["ict_admin", "him_staff", "admitting"], "patients", "patient_updated", `Patient record updated: "${updatedPatient?.full_name || `#${id}`}" — by ${req.user.username}`);
 
     // Notify newly assigned case manager on reassignment (with self-notification guard)
     if (
@@ -270,7 +270,7 @@ export async function createPatient(req, res) {
       [req.user.username, `Registered patient "${fullName}" (${patientCode})`, "patients", result.insertId]
     );
 
-    await notifyRoles(["ict_admin", "him_staff"], "patients", "patient_registered", `New patient registered: "${fullName}" (${patientCode}) — by ${req.user.username}`);
+    await notifyRoles(["ict_admin", "him_staff", "admitting"], "patients", "patient_registered", `New patient registered: "${fullName}" (${patientCode}) — by ${req.user.username}`);
 
     if (assignedCaseManagerId && Number(assignedCaseManagerId) !== Number(req.user.id)) {
       await notifyUser(

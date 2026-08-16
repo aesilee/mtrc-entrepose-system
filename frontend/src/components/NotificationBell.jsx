@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useAuth } from "../context/AuthContext.jsx";
 import api from "../api/axios.js";
 
-const CATEGORIES = [
+const ALL_CATEGORIES = [
   { key: "all", label: "All" },
   { key: "system", label: "System" },
   { key: "users", label: "Users" },
@@ -9,6 +10,12 @@ const CATEGORIES = [
   { key: "reports", label: "Reports" },
   { key: "certificates", label: "Certificates" },
   { key: "documentation", label: "Documentation" },
+];
+
+const ADMITTING_CATEGORIES = [
+  { key: "all", label: "All" },
+  { key: "patients", label: "Patients" },
+  { key: "certificates", label: "Certificates" },
 ];
 
 const CATEGORY_STYLE = {
@@ -66,6 +73,7 @@ function timeAgo(dateStr) {
 }
 
 export default function NotificationBell() {
+  const { user } = useAuth();
   const [open, setOpen] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
   const [allNotifications, setAllNotifications] = useState([]);
@@ -118,8 +126,19 @@ export default function NotificationBell() {
     }
   }
 
+  const categories = useMemo(() => {
+    if (!user) return ALL_CATEGORIES;
+    return user.role === "admitting" ? ADMITTING_CATEGORIES : ALL_CATEGORIES;
+  }, [user]);
+
+  useEffect(() => {
+    if (!categories.some((c) => c.key === category)) {
+      setCategory("all");
+    }
+  }, [categories, category]);
+
   const counts = { all: allNotifications.length };
-  CATEGORIES.forEach((c) => {
+  categories.forEach((c) => {
     if (c.key !== "all") counts[c.key] = allNotifications.filter((n) => n.category === c.key).length;
   });
 
@@ -148,7 +167,7 @@ export default function NotificationBell() {
           </div>
 
           <div style={styles.tabBar}>
-            {CATEGORIES.map((c) => (
+            {categories.map((c) => (
               <button
                 key={c.key}
                 type="button"

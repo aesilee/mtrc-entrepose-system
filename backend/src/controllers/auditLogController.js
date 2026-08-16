@@ -1,7 +1,7 @@
 import pool from "../config/db.js";
 
 export async function listAuditLogs(req, res) {
-  const { user, action, date, search } = req.query;
+  const { user, action, date, search, limit } = req.query;
   const clauses = [];
   const params = [];
 
@@ -10,10 +10,12 @@ export async function listAuditLogs(req, res) {
   if (date) { clauses.push("DATE(created_at) = ?"); params.push(date); }
   if (search) { clauses.push("(action LIKE ? OR actor_username LIKE ?)"); params.push(`%${search}%`, `%${search}%`); }
 
+  const rawLimit = Number(limit);
+  const safeLimit = Number.isFinite(rawLimit) ? Math.min(Math.max(rawLimit, 1), 20000) : 5000;
   const where = clauses.length ? `WHERE ${clauses.join(" AND ")}` : "";
   const [rows] = await pool.query(
-    `SELECT id, actor_username, action, created_at FROM audit_log ${where} ORDER BY created_at DESC LIMIT 500`,
-    params
+    `SELECT id, actor_username, action, created_at FROM audit_log ${where} ORDER BY created_at DESC LIMIT ?`,
+    [...params, safeLimit]
   );
   res.json({ logs: rows });
 }

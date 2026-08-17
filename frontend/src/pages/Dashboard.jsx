@@ -4,7 +4,7 @@ import AppShell from "../components/AppShell.jsx";
 import { useAuth } from "../context/AuthContext.jsx";
 
 import api from "../api/axios.js";
-import { DonutChart, LineChart } from "../components/AnalyticsCharts.jsx";
+import { BarChart, DonutChart, LineChart } from "../components/AnalyticsCharts.jsx";
 import useViewport from "../hooks/useViewport.js";
 import ProgressNoteModal from "../components/ProgressNoteModal.jsx";
 import FollowUpModal from "../components/FollowUpModal.jsx";
@@ -253,13 +253,23 @@ function HimStaffDashboard() {
         </HimCard>
       </div>
 
-      {/* Row 3: Recent Patient Updates, Recent Certificates */}
+      {/* Row 3: Gender, Municipality */}
       <div style={{ ...himStyles.gridRow, gridTemplateColumns: `repeat(${gridCols}, 1fr)` }}>
-        <HimCard title="Recent Patient Record Updates" span={2} maxSpan={gridCols} isMobile={isCompact}>
+        <HimCard title="Gender Distribution" span={2} maxSpan={gridCols} center>
+          {overview?.genderDistribution?.length ? <DonutChart data={overview.genderDistribution} size={110} /> : <div style={himStyles.emptyText}>No data yet.</div>}
+        </HimCard>
+        <HimCard title="Patients by Municipality" span={2} maxSpan={gridCols}>
+          {overview?.municipalityDistribution?.length ? <BarChart data={overview.municipalityDistribution} /> : <div style={himStyles.emptyText}>No data yet.</div>}
+        </HimCard>
+      </div>
+
+      {/* Row 4: Recent Patient Updates, Recent Certificates */}
+      <div style={{ ...himStyles.gridRow, gridTemplateColumns: `repeat(${gridCols}, 1fr)` }}>
+        <HimCard title="Recent Patient Record Updates" span={2} maxSpan={gridCols} isMobile={isCompact} scrollable>
           {!himStats?.recentPatientUpdates?.length ? (
             <div style={himStyles.emptyText}>No recent updates.</div>
           ) : (
-            <div style={himStyles.list}>
+            <div style={himStyles.scrollList}>
               {himStats.recentPatientUpdates.map((p) => (
                 <div key={p.id} style={himStyles.row}>
                   <span style={himStyles.rowMain}>{p.full_name}</span>
@@ -270,11 +280,11 @@ function HimStaffDashboard() {
             </div>
           )}
         </HimCard>
-        <HimCard title="Recent Certificates" span={2} maxSpan={gridCols} isMobile={isCompact}>
+        <HimCard title="Recent Certificates" span={2} maxSpan={gridCols} isMobile={isCompact} scrollable>
           {!himStats?.recentCertificates?.length ? (
             <div style={himStyles.emptyText}>No certificates issued yet.</div>
           ) : (
-            <div style={himStyles.list}>
+            <div style={himStyles.scrollList}>
               {himStats.recentCertificates.map((c) => (
                 <div key={c.id} style={himStyles.row}>
                   <span style={himStyles.rowMain}>{c.patient_name}</span>
@@ -287,13 +297,13 @@ function HimStaffDashboard() {
         </HimCard>
       </div>
 
-      {/* Row 4: Activity Timeline, Recent Reports */}
+      {/* Row 5: Activity Timeline, Recent Reports */}
       <div style={{ ...himStyles.gridRow, gridTemplateColumns: `repeat(${gridCols}, 1fr)` }}>
-        <HimCard title="Record Activity Timeline" span={2} maxSpan={gridCols} isMobile={isCompact}>
+        <HimCard title="Record Activity Timeline" span={2} maxSpan={gridCols} isMobile={isCompact} scrollable>
           {!himStats?.recentActivity?.length ? (
             <div style={himStyles.emptyText}>No recent activity.</div>
           ) : (
-            <div style={himStyles.list}>
+            <div style={himStyles.scrollList}>
               {himStats.recentActivity.map((a, i) => (
                 <div key={i} style={himStyles.row}>
                   <span style={himStyles.rowMain}>{a.actor_username}</span>
@@ -304,11 +314,11 @@ function HimStaffDashboard() {
             </div>
           )}
         </HimCard>
-        <HimCard title="Recent Reports" span={2} maxSpan={gridCols} isMobile={isCompact}>
+        <HimCard title="Recent Reports" span={2} maxSpan={gridCols} isMobile={isCompact} scrollable>
           {recentReports.length === 0 ? (
             <div style={himStyles.emptyText}>No reports generated yet.</div>
           ) : (
-            <div style={himStyles.list}>
+            <div style={himStyles.scrollList}>
               {recentReports.map((r) => (
                 <div key={r.id} style={himStyles.row}>
                   <span style={himStyles.rowMain}>{r.title}</span>
@@ -321,8 +331,8 @@ function HimStaffDashboard() {
         </HimCard>
       </div>
 
-      {/* Quick Actions — compact */}
-      <div style={himStyles.card}>
+      {/* Quick Actions — floating */}
+      <div style={himStyles.floatingActionsWrap}>
         <div style={himStyles.cardTitle}>Quick Actions</div>
         <div style={himStyles.compactActionsGrid}>
           {quickActions.map((action) => (
@@ -337,12 +347,21 @@ function HimStaffDashboard() {
   );
 }
 
-function HimCard({ title, span, maxSpan, center, isMobile, children }) {
+function HimCard({ title, span, maxSpan, center, isMobile, scrollable, children }) {
   const effectiveSpan = maxSpan ? Math.min(span, maxSpan) : span;
   return (
-    <div style={{ ...himStyles.card, gridColumn: `span ${effectiveSpan}`, overflow: isMobile ? "visible" : "auto" }}>
+    <div style={{ ...himStyles.card, gridColumn: `span ${effectiveSpan}`, overflow: isMobile ? "visible" : "hidden" }}>
       <div style={himStyles.cardTitle}>{title}</div>
-      <div style={{ display: "flex", justifyContent: center ? "center" : "flex-start", alignItems: "center", flex: 1 }}>
+      <div
+        style={{
+          display: "flex",
+          justifyContent: center ? "center" : "flex-start",
+          alignItems: "stretch",
+          flex: 1,
+          minHeight: 0,
+          overflow: scrollable ? "hidden" : "visible",
+        }}
+      >
         {children}
       </div>
     </div>
@@ -978,27 +997,50 @@ const styles = {
 };
 
 const himStyles = {
-  page: { display: "flex", flexDirection: "column", gap: 14 },
-  kpiRow: { display: "grid", gap: 14 },
-  gridRow: { display: "grid", gap: 14, alignItems: "stretch" },
+  page: { display: "flex", flexDirection: "column", gap: 10 },
+  kpiRow: { display: "grid", gap: 10 },
+  gridRow: { display: "grid", gap: 10, alignItems: "stretch" },
   card: {
-    background: "#fff", borderRadius: 18, padding: 14, boxShadow: "0 2px 10px rgba(20,20,40,0.05)",
+    background: "#fff", borderRadius: 16, padding: 12, boxShadow: "0 2px 10px rgba(20,20,40,0.05)",
     display: "flex", flexDirection: "column", gap: 8, minHeight: 90,
   },
-  cardTitle: { fontSize: 13, fontWeight: 700, color: "var(--color-text)" },
-  emptyText: { color: "var(--color-text-muted)", fontSize: 13, textAlign: "center", padding: "20px 0" },
-  list: { display: "flex", flexDirection: "column", gap: 10, width: "100%" },
-  row: {
-    display: "flex", justifyContent: "space-between", gap: 10, fontSize: 13,
-    color: "var(--color-text-muted)", paddingBottom: 10, borderBottom: "1px solid var(--color-border)",
+  cardTitle: { fontSize: 12.5, fontWeight: 700, color: "var(--color-text)" },
+  emptyText: { color: "var(--color-text-muted)", fontSize: 12.5, textAlign: "center", padding: "16px 0" },
+  list: { display: "flex", flexDirection: "column", gap: 8, width: "100%" },
+  scrollList: {
+    display: "flex",
+    flexDirection: "column",
+    gap: 8,
+    width: "100%",
+    maxHeight: 180,
+    overflowY: "auto",
+    paddingRight: 6,
   },
-  rowMain: { fontWeight: 700, color: "var(--color-text)" },
-  rowMid: { flex: 1, marginLeft: 8, textTransform: "capitalize" },
-  rowTime: { color: "var(--color-text-muted)", whiteSpace: "nowrap" },
-  compactActionsGrid: { display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 8 },
+  row: {
+    display: "flex", justifyContent: "space-between", gap: 8, fontSize: 12.5,
+    color: "var(--color-text-muted)", paddingBottom: 8, borderBottom: "1px solid var(--color-border)",
+  },
+  rowMain: { fontWeight: 700, color: "var(--color-text)", minWidth: 0 },
+  rowMid: { flex: 1, marginLeft: 6, textTransform: "capitalize", minWidth: 0 },
+  rowTime: { color: "var(--color-text-muted)", whiteSpace: "nowrap", flexShrink: 0 },
+  floatingActionsWrap: {
+    position: "sticky",
+    bottom: 12,
+    zIndex: 20,
+    alignSelf: "center",
+    width: "min(100%, 720px)",
+    background: "rgba(255,255,255,0.96)",
+    backdropFilter: "blur(6px)",
+    border: "1px solid var(--color-border)",
+    borderRadius: 16,
+    boxShadow: "0 8px 24px rgba(20,20,40,0.08)",
+    padding: "10px 12px 12px",
+    marginTop: 4,
+  },
+  compactActionsGrid: { display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: 8 },
   compactActionBtn: {
-    display: "flex", flexDirection: "column", alignItems: "center", gap: 6, padding: "10px 8px",
-    fontSize: 11, fontWeight: 600, color: "var(--color-text)", background: "#F6F5F1",
+    display: "flex", flexDirection: "column", alignItems: "center", gap: 6, padding: "9px 6px",
+    fontSize: 10.5, fontWeight: 600, color: "var(--color-text)", background: "#F6F5F1",
     border: "none", borderRadius: 12, cursor: "pointer", textAlign: "center",
   },
   compactActionIcon: { width: 16, height: 16, color: "var(--color-primary-dark)" },

@@ -128,6 +128,18 @@ export async function getCaseManagerStats(req, res) {
       [cmId]
     );
 
+    const [recentProgressNotes] = await pool.query(
+      `SELECT pn.id, pn.session_type, pn.note_type, pn.created_at, pn.updated_at,
+              p.id AS patient_id, p.full_name AS patient_name
+       FROM progress_notes pn
+       JOIN patients p ON p.id = pn.patient_id
+       WHERE (p.assigned_case_manager_id = ? OR pn.case_manager_id = ?)
+         AND p.is_archived = FALSE
+       ORDER BY COALESCE(pn.updated_at, pn.created_at) DESC
+       LIMIT 6`,
+      [cmId, cmId]
+    );
+
     const [[caseStatusOverview]] = await pool.query(
       `SELECT
          SUM(CASE
@@ -203,6 +215,7 @@ export async function getCaseManagerStats(req, res) {
       patientsNeedingAttention,
       todaysSchedule,
       recentPatients,
+      recentProgressNotes,
       caseStatusOverview: {
         active: Number(caseStatusOverview?.active || 0),
         followUp: Number(caseStatusOverview?.followUp || 0),

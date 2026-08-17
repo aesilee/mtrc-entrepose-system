@@ -603,7 +603,10 @@ function CaseManagerDashboard() {
         </CmCard>
       </div>
 
-      <div style={cmStyles.fullWidthRow}>
+      <div style={{
+        ...cmStyles.patientNotesRow,
+        gridTemplateColumns: isCompact ? "1fr" : "minmax(0, 1.75fr) minmax(300px, 0.75fr)",
+      }}>
         <CmCard
           title="My Patients"
           height={patientsPanelHeight}
@@ -715,6 +718,33 @@ function CaseManagerDashboard() {
               <div style={cmStyles.patientListFooter}>
                 Showing {filteredPatients.length} of {recentPatients.length} recent patients
               </div>
+            </div>
+          )}
+        </CmCard>
+
+        <CmCard title="Recent Progress Notes" height={patientsPanelHeight}>
+          {!stats?.recentProgressNotes?.length ? (
+            <div style={cmStyles.emptyText}>No progress notes yet.</div>
+          ) : (
+            <div style={{ ...cmStyles.list, ...cmStyles.scrollArea }}>
+              {stats.recentProgressNotes.map((note) => (
+                <button
+                  key={note.id}
+                  type="button"
+                  style={cmStyles.progressNoteRow}
+                  onClick={() => navigate(`/patients/${note.patient_id}`)}
+                >
+                  <span style={cmStyles.patientAvatar}>{getInitials(note.patient_name)}</span>
+                  <span style={cmStyles.progressNoteContent}>
+                    <span style={cmStyles.progressNotePatient}>{note.patient_name}</span>
+                    <span style={cmStyles.progressNoteMeta}>
+                      {note.session_type || note.note_type || "Progress note"}
+                    </span>
+                  </span>
+                  <span style={cmStyles.rowTime}>{timeAgo(note.updated_at || note.created_at)}</span>
+                  <span aria-hidden="true" style={cmStyles.rowChevron}>›</span>
+                </button>
+              ))}
             </div>
           )}
         </CmCard>
@@ -1320,6 +1350,7 @@ const cmStyles = {
   dashboardMain: { display: "flex", flexDirection: "column", gap: 16, width: "100%", minWidth: 0 },
   gridRow: { display: "grid", gap: 16, alignItems: "stretch", width: "100%" },
   fullWidthRow: { width: "100%", maxWidth: 1080 },
+  patientNotesRow: { display: "grid", gap: 16, alignItems: "stretch", width: "100%", minWidth: 0 },
   card: {
     background: "var(--color-surface)",
     border: "1px solid var(--color-border)",
@@ -1537,6 +1568,24 @@ const cmStyles = {
   patientStatus: { justifySelf: "start", padding: "3px 9px", borderRadius: 999, fontSize: 11, fontWeight: 700, textTransform: "capitalize", whiteSpace: "nowrap" },
   rowChevron: { color: "var(--color-text-muted)", fontSize: 20, lineHeight: 1, flexShrink: 0 },
   patientListFooter: { color: "var(--color-text-muted)", fontSize: 11, textAlign: "center", flexShrink: 0 },
+  progressNoteRow: {
+    display: "flex",
+    alignItems: "center",
+    gap: 10,
+    width: "100%",
+    minHeight: 58,
+    padding: "9px 0",
+    background: "none",
+    border: "none",
+    borderBottom: "1px solid var(--color-border)",
+    color: "inherit",
+    textAlign: "left",
+    cursor: "pointer",
+    flexShrink: 0,
+  },
+  progressNoteContent: { display: "flex", flexDirection: "column", gap: 3, flex: 1, minWidth: 0 },
+  progressNotePatient: { color: "var(--color-text)", fontSize: 12, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
+  progressNoteMeta: { color: "var(--color-text-muted)", fontSize: 11, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
   statusOverview: { display: "flex", flexDirection: "column", gap: 18, width: "100%", minWidth: 0 },
   statusTotalRow: { display: "flex", alignItems: "baseline", gap: 9 },
   statusTotalValue: { fontSize: 30, lineHeight: 1, fontWeight: 800, color: "var(--color-text)" },

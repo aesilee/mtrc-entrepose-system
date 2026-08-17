@@ -4,7 +4,7 @@ import AppShell from "../components/AppShell.jsx";
 import { useAuth } from "../context/AuthContext.jsx";
 
 import api from "../api/axios.js";
-import { DonutChart } from "../components/AnalyticsCharts.jsx";
+import { DonutChart, BarChart } from "../components/AnalyticsCharts.jsx";
 import useViewport from "../hooks/useViewport.js";
 import ProgressNoteModal from "../components/ProgressNoteModal.jsx";
 import FollowUpModal from "../components/FollowUpModal.jsx";
@@ -353,22 +353,31 @@ function HimStaffDashboard() {
 
       {/* Row 2: Patient Status, Monthly Admissions */}
       <div style={{ ...himStyles.gridRow, gridTemplateColumns: `repeat(${gridCols}, 1fr)` }}>
-        <HimCard title="Patient Status Overview" span={1} maxSpan={gridCols} center compact>
-          {overview?.patientStatus?.length ? (
-            <div style={himStyles.chartWrapCompact}><DonutChart data={overview.patientStatus} size={96} /></div>
-          ) : (
-            <div style={himStyles.emptyText}>No data yet.</div>
-          )}
-        </HimCard>
-        <HimCard title="Monthly Admissions" span={3} maxSpan={gridCols}>
-          {monthlyAdmissions.length ? (
-            <div style={himStyles.monthlyChartWrap}>
-              <DashboardMonthlyAdmissionsChart data={monthlyAdmissions} color="#2FBF8F" suffix="" />
-            </div>
-          ) : (
-            <div style={himStyles.emptyText}>No data yet.</div>
-          )}
-        </HimCard>
+       <HimCard title="Patient Status Overview" span={1} maxSpan={gridCols} center compact>
+         {overview?.patientStatus?.length ? (
+           <div style={himStyles.chartWrapCompact}><DonutChart data={overview.patientStatus} size={96} /></div>
+         ) : (
+           <div style={himStyles.emptyText}>No data yet.</div>
+         )}
+       </HimCard>
+       <HimCard title="Monthly Admissions" span={2} maxSpan={gridCols}>
+         {monthlyAdmissions.length ? (
+           <div style={himStyles.monthlyChartWrap}>
+             <DashboardMonthlyAdmissionsChart data={monthlyAdmissions} color="#2FBF8F" suffix="" />
+           </div>
+         ) : (
+           <div style={himStyles.emptyText}>No data yet.</div>
+         )}
+       </HimCard>
+       <HimCard title="Patients by Municipality" span={1} maxSpan={gridCols} compact>
+         {overview?.municipalityDistribution?.length ? (
+           <div style={himStyles.municipalityChartWrap}>
+             <BarChart data={overview.municipalityDistribution} />
+           </div>
+         ) : (
+           <div style={himStyles.emptyText}>No municipality data yet.</div>
+         )}
+       </HimCard>
       </div>
 
       {/* Row 3: Recent Patient Updates, Recent Certificates */}
@@ -1139,6 +1148,13 @@ const himStyles = {
     boxSizing: "border-box",
     padding: "0 8%",
     minWidth: 0,
+  },
+  municipalityChartWrap: {
+    width: "100%",
+    minWidth: 0,
+    marginRight: -8,
+    display: "flex",
+    justifyContent: "center",
   },
   list: { display: "flex", flexDirection: "column", gap: 8, width: "100%" },
   scrollList: {

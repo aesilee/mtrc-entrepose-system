@@ -34,7 +34,8 @@ export default function ReportGeneratorModal({ onClose, onGenerated }) {
 
   const showPatientField = reportType === "attendance" || reportType === "patient";
   const filteredPatients = patients.filter((p) =>
-    !patientSearch || p.full_name.toLowerCase().includes(patientSearch.toLowerCase()) || p.patient_code.toLowerCase().includes(patientSearch.toLowerCase())
+    !p.is_archived &&
+    (!patientSearch || p.full_name.toLowerCase().includes(patientSearch.toLowerCase()) || p.patient_code.toLowerCase().includes(patientSearch.toLowerCase()))
   );
 
   async function handleGenerate() {

@@ -14,14 +14,13 @@ export const NAV_BY_ROLE = {
   admitting: [
     { label: "Dashboard", path: "/dashboard", icon: "dashboard" },
     { label: "Patients", path: "/patients", icon: "patients" },
-    { label: "Register Patient", path: "/patients/register", icon: "caseManagement" },
   ],
   case_manager: [
     { label: "Dashboard", path: "/dashboard", icon: "dashboard" },
-    { label: "My Patients", path: "/patients", icon: "patients" },
+    { label: "Patients", path: "/patients", icon: "patients" },
     { label: "Attendance", path: "/attendance", icon: "attendance" },
-    { label: "Case Management", path: "/patients", icon: "caseManagement" },
     { label: "Analytics", path: "/analytics", icon: "analytics", badge: "Limited" },
+    { label: "Archives", path: "/settings/archives", icon: "archives", badge: "Limited" },
   ],
   him_staff: [
     { label: "Dashboard", path: "/dashboard", icon: "dashboard" },
@@ -29,6 +28,7 @@ export const NAV_BY_ROLE = {
     { label: "Attendance", path: "/attendance", icon: "attendance", badge: "View" },
     { label: "Reports", path: "/reports", icon: "reports" },
     { label: "Analytics", path: "/analytics", icon: "analytics" },
+    { label: "Archives", path: "/settings/archives", icon: "archives", badge: "View" },
   ],
   ict_admin: [
     { label: "Dashboard", path: "/dashboard", icon: "dashboard" },
@@ -42,6 +42,7 @@ export const NAV_BY_ROLE = {
       children: [
         { label: "User Management", path: "/settings/users" },
         { label: "Audit Logs", path: "/settings/audit-logs" },
+        { label: "Archives", path: "/settings/archives" },
         { label: "Settings", path: "/settings" },
       ],
     },
@@ -62,21 +63,23 @@ export const ROLE_PERMISSIONS = {
   ],
   case_manager: [
     "View and manage assigned patients",
-    "Record attendance and therapy participation",
-    "Add progress notes and observations",
+    "Record attendance and progress notes",
     "Schedule and resolve follow-ups",
-    "Update rehabilitation status",
+    "Generate patient certificates",
     "View limited analytics",
+    "View archived records for their assigned patients",
   ],
   him_staff: [
     "View patient and attendance records (read-only)",
     "Generate and manage reports",
     "View full analytics",
+    "View all archived records (read-only)",
   ],
   ict_admin: [
     "Full access to all modules",
     "Manage user accounts, roles, and access",
     "View audit logs",
+    "Archive and restore patient records",
     "Configure system-wide settings",
     "Back up and restore the database",
   ],

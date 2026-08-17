@@ -15,12 +15,12 @@ export const NAV_BY_ROLE = {
     { label: "Dashboard", path: "/dashboard", icon: "dashboard" },
     { label: "Patients", path: "/patients", icon: "patients" },
     { label: "Register Patient", path: "/patients/register", icon: "caseManagement" },
+    { label: "Certificates", path: "/certificates", icon: "certificates" },
   ],
   case_manager: [
     { label: "Dashboard", path: "/dashboard", icon: "dashboard" },
     { label: "My Patients", path: "/patients", icon: "patients" },
     { label: "Attendance", path: "/attendance", icon: "attendance" },
-    { label: "Case Management", path: "/patients", icon: "caseManagement" },
     { label: "Analytics", path: "/analytics", icon: "analytics", badge: "Limited" },
   ],
   him_staff: [
@@ -58,6 +58,9 @@ export const ROLE_PERMISSIONS = {
   admitting: [
     "View and register patients",
     "Fill out admission information",
+    "Edit patient information",
+    "Generate and print enrollment certificates",
+    "Search patient records",
     "View the dashboard overview",
   ],
   case_manager: [

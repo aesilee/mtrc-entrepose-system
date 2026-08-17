@@ -3,11 +3,16 @@ import api from "../api/axios.js";
 import CertificatePreview from "./CertificatePreview.jsx";
 import { downloadElementAsPdf } from "../utils/pdf.js";
 
-const DEFAULT_REMARKS = "Successfully completed all required rehabilitation activities";
+const DEFAULT_REMARKS = {
+  enrollment: "Officially enrolled in the rehabilitation program",
+  completion: "Successfully completed all required rehabilitation activities",
+};
 
-export default function CertificateGeneratorModal({ patientId, onClose, onGenerated }) {
+export default function CertificateGeneratorModal({ patientId, certificateType = "completion", onClose, onGenerated }) {
+  const isEnrollment = certificateType === "enrollment";
+  const certificateLabel = isEnrollment ? "Enrollment" : "Completion";
   const [completionDate, setCompletionDate] = useState(new Date().toISOString().slice(0, 10));
-  const [remarks, setRemarks] = useState(DEFAULT_REMARKS);
+  const [remarks, setRemarks] = useState(DEFAULT_REMARKS[certificateType] || DEFAULT_REMARKS.completion);
   const [certificate, setCertificate] = useState(null);
   const [loading, setLoading] = useState(false);
   const [downloading, setDownloading] = useState(false);
@@ -18,9 +23,13 @@ export default function CertificateGeneratorModal({ patientId, onClose, onGenera
     setLoading(true);
     setError("");
     try {
-      const { data } = await api.post(`/patients/${patientId}/certificates`, { completionDate, remarks });
+      const { data } = await api.post(`/patients/${patientId}/certificates`, {
+        certificateType,
+        completionDate: isEnrollment ? undefined : completionDate,
+        remarks,
+      });
       setCertificate(data);
-      onGenerated();
+      onGenerated?.();
     } catch (err) {
       setError(err.response?.data?.message || "Could not generate the certificate.");
     } finally {
@@ -36,7 +45,10 @@ export default function CertificateGeneratorModal({ patientId, onClose, onGenera
     if (!certificate) return;
     setDownloading(true);
     try {
-      await downloadElementAsPdf(previewRef.current, `certificate-${certificate.patientCode}.pdf`);
+      await downloadElementAsPdf(
+        previewRef.current,
+        `certificate-${certificate.certificateType}-${certificate.patientCode}.pdf`
+      );
     } finally {
       setDownloading(false);
     }
@@ -46,7 +58,7 @@ export default function CertificateGeneratorModal({ patientId, onClose, onGenera
     <div style={styles.backdrop} onClick={onClose}>
       <div style={{ ...styles.modal, width: certificate ? 920 : 480 }} onClick={(e) => e.stopPropagation()}>
         <div style={styles.header}>
-          <div style={styles.title}>Generate Certificate</div>
+          <div style={styles.title}>Generate Certificate of {certificateLabel}</div>
           <button type="button" style={styles.closeBtn} onClick={onClose}>×</button>
         </div>
 
@@ -54,10 +66,18 @@ export default function CertificateGeneratorModal({ patientId, onClose, onGenera
           <div style={{ ...styles.formCol, width: certificate ? 320 : "100%" }}>
             {error && <div style={styles.error}>{error}</div>}
 
-            <label style={styles.label}>
-              Completion date
-              <input type="date" style={styles.input} value={completionDate} onChange={(e) => setCompletionDate(e.target.value)} />
-            </label>
+            {!isEnrollment && (
+              <label style={styles.label}>
+                Completion date
+                <input type="date" style={styles.input} value={completionDate} onChange={(e) => setCompletionDate(e.target.value)} />
+              </label>
+            )}
+
+            {isEnrollment && (
+              <div style={styles.infoText}>
+                The patient name, program, assigned case manager, and enrollment date will be filled from the patient record.
+              </div>
+            )}
 
             <label style={styles.label}>
               Remarks
@@ -66,7 +86,7 @@ export default function CertificateGeneratorModal({ patientId, onClose, onGenera
 
             {!certificate && (
               <button type="button" style={styles.generateBtn} onClick={handleGenerate} disabled={loading}>
-                {loading ? "Generating…" : "Generate Certificate"}
+                {loading ? "Generating…" : `Generate ${certificateLabel} Certificate`}
               </button>
             )}
 
@@ -104,6 +124,7 @@ const styles = {
   formCol: { padding: 20, display: "flex", flexDirection: "column", gap: 14, overflowY: "auto", borderRight: "1px solid var(--color-border)", flexShrink: 0 },
   previewCol: { flex: 1, padding: 20, overflowY: "auto" },
   error: { background: "#FDE2E2", color: "#B3261E", fontSize: 13, padding: "8px 12px", borderRadius: "var(--radius-sm)" },
+  infoText: { background: "var(--color-primary-tint)", color: "var(--color-primary-dark)", fontSize: 12, lineHeight: 1.5, padding: "10px 12px", borderRadius: "var(--radius-sm)" },
   label: { display: "flex", flexDirection: "column", gap: 6, fontSize: 13, fontWeight: 600 },
   input: { padding: "8px 10px", borderRadius: "var(--radius-sm)", border: "1px solid var(--color-border)", fontSize: 13, fontFamily: "inherit", width: "100%", boxSizing: "border-box" },
   generateBtn: { background: "var(--color-primary)", color: "#fff", border: "none", padding: "10px 18px", borderRadius: "var(--radius-sm)", fontWeight: 700, fontSize: 13, cursor: "pointer" },

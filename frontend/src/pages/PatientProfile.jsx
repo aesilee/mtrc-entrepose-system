@@ -536,8 +536,16 @@ export default function PatientProfile() {
                         ]}
                       />
                       <div style={styles.certCardIcon}>{NAV_ICONS.certificates}</div>
-                      <div style={styles.certCardTitle}>Certificate of Completion</div>
-                      <div style={styles.certCardMeta}>{c.completion_date ? `Completed ${fmtDateTime(c.completion_date)}` : ""}</div>
+                      <div style={styles.certCardTitle}>
+                        Certificate of {c.certificate_type === "enrollment" ? "Enrollment" : "Completion"}
+                      </div>
+                      <div style={styles.certCardMeta}>
+                        {c.certificate_type === "enrollment"
+                          ? `Issued ${fmtDateTime(c.issued_at)}`
+                          : c.completion_date
+                            ? `Completed ${fmtDateTime(c.completion_date)}`
+                            : `Issued ${fmtDateTime(c.issued_at)}`}
+                      </div>
                       <div style={styles.certCardFooter}>
                         <span>{c.issued_by_name || "—"}</span>
                         <span>{fmtDateTime(c.issued_at)}</span>
@@ -583,6 +591,7 @@ export default function PatientProfile() {
       {certGeneratorOpen && (
         <CertificateGeneratorModal
           patientId={id}
+          certificateType={user.role === "admitting" ? "enrollment" : "completion"}
           onClose={() => setCertGeneratorOpen(false)}
           onGenerated={refreshCertificates}
         />

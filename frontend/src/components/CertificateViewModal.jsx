@@ -35,7 +35,9 @@ export default function CertificateViewModal({ certificateId, autoAction, onClos
     <div style={styles.backdrop} onClick={onClose}>
       <div style={styles.modal} onClick={(e) => e.stopPropagation()}>
         <div style={styles.header}>
-          <div style={styles.title}>Certificate of Completion</div>
+          <div style={styles.title}>
+            Certificate{certificate ? ` of ${certificate.certificateType === "enrollment" ? "Enrollment" : "Completion"}` : ""}
+          </div>
           <button type="button" style={styles.closeBtn} onClick={onClose}>×</button>
         </div>
         <div style={styles.body}>

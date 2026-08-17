@@ -13,6 +13,7 @@ import Attendance from "./pages/Attendance.jsx";
 import AuditLogs from "./pages/AuditLogs.jsx";
 import Settings from "./pages/Settings.jsx";
 import Profile from "./pages/Profile.jsx";
+import Certificates from "./pages/Certificates.jsx";
 
 // Simple declarative route table: [path, title, allowedRoles?]
 // allowedRoles omitted = any authenticated user.
@@ -98,6 +99,15 @@ export default function App() {
         element={
           <ProtectedRoute allowedRoles={["him_staff", "ict_admin"]}>
             <Reports />
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/certificates"
+        element={
+          <ProtectedRoute allowedRoles={["admitting", "him_staff", "ict_admin"]}>
+            <Certificates />
           </ProtectedRoute>
         }
       />

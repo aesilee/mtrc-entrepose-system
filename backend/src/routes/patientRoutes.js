@@ -29,7 +29,7 @@ router.post("/:id/progress-notes", requireRole("case_manager", "ict_admin"), cre
 router.get("/:id/follow-ups", getPatientFollowUps);
 router.post("/:id/follow-ups", requireRole("case_manager", "ict_admin"), createFollowUp);
 router.get("/:id/certificates", getPatientCertificates);
-router.post("/:id/certificates", requireRole("admitting", "case_manager", "him_staff", "ict_admin"), generateCertificate);
+router.post("/:id/certificates", requireRole("admitting", "him_staff", "ict_admin"), generateCertificate);
 router.get("/:id/history", getPatientHistory);
 router.get("/:id/timeline", getPatientTimeline);
 

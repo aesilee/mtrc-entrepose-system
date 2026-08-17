@@ -8,6 +8,7 @@ function fmtDate(d) {
 export default function CertificatePreview({ certificate, compact }) {
   const org = useOrgSettings();
   const c = certificate;
+  const isEnrollment = c.certificateType === "enrollment";
 
   return (
     <div className="report-print-area" style={{ ...styles.card, padding: compact ? 24 : 36 }}>
@@ -34,16 +35,24 @@ export default function CertificatePreview({ certificate, compact }) {
       )}
 
       <div style={styles.frame}>
-        <div style={styles.eyebrow}>Certificate of Completion</div>
+        <div style={styles.eyebrow}>Certificate of {isEnrollment ? "Enrollment" : "Completion"}</div>
         <div style={styles.intro}>This is to certify that</div>
         <div style={styles.patientName}>{c.patientName}</div>
         <div style={styles.patientCode}>Patient ID: {c.patientCode}</div>
-        <p style={styles.body}>
-          has successfully completed the <strong>{c.program}</strong> program,
-          having been admitted on <strong>{fmtDate(c.admissionDate)}</strong> and
-          completing the program on <strong>{fmtDate(c.completionDate)}</strong>.
-        </p>
-        <p style={styles.remarks}>&ldquo;{c.remarks}&rdquo;</p>
+        {isEnrollment ? (
+          <p style={styles.body}>
+            is officially enrolled in the <strong>{c.program}</strong> program as of
+            <strong> {fmtDate(c.admissionDate)}</strong>. The assigned case manager is
+            <strong> {c.caseManager || "Unassigned"}</strong>.
+          </p>
+        ) : (
+          <p style={styles.body}>
+            has successfully completed the <strong>{c.program}</strong> program,
+            having been admitted on <strong>{fmtDate(c.admissionDate)}</strong> and
+            completing the program on <strong>{fmtDate(c.completionDate)}</strong>.
+          </p>
+        )}
+        {c.remarks && <p style={styles.remarks}>&ldquo;{c.remarks}&rdquo;</p>}
 
         <div style={styles.footerRow}>
           <div style={styles.signatureBlock}>

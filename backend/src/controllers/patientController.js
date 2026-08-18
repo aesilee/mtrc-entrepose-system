@@ -203,11 +203,11 @@ export async function getPatientTimeline(req, res) {
 
 export async function getPatientCertificates(req, res) {
   const { id } = req.params;
-  const [rows] = await pool.query(
+    const [rows] = await pool.query(
     `SELECT c.id, c.certificate_type, c.completion_date, c.issued_at, u.full_name AS issued_by_name
      FROM certificates c
      LEFT JOIN users u ON u.id = c.issued_by
-     WHERE c.patient_id = ? ORDER BY c.issued_at DESC`,
+     WHERE c.patient_id = ? AND c.is_archived = FALSE ORDER BY c.issued_at DESC`,
     [id]
   );
   res.json({ certificates: rows });

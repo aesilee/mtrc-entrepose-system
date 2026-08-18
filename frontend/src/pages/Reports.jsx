@@ -298,11 +298,11 @@ export default function Reports() {
               </div>
               <div style={styles.listRowRight} onClick={(e) => e.stopPropagation()}>
                 <span style={styles.listRowDate}>{new Date(r.created_at).toLocaleDateString()}</span>
-                <CardActionMenu
+                                <CardActionMenu
                   items={[
                     { label: "Print", onClick: () => openView(r.id, "print") },
                     { label: "Download PDF", onClick: () => openView(r.id, "download") },
-                    { label: "Delete", danger: true, onClick: () => handleDeleteReport(r.id) },
+                    { label: "Archive", onClick: () => setArchivingReportId(r.id) },
                   ]}
                 />
               </div>
@@ -346,11 +346,11 @@ export default function Reports() {
                   </div>
                 </div>
                 <div onClick={(e) => e.stopPropagation()}>
-                  <CardActionMenu
+                                    <CardActionMenu
                     items={[
                       { label: "Print", onClick: () => openView(r.id, "print") },
                       { label: "Download PDF", onClick: () => openView(r.id, "download") },
-                      { label: "Delete", danger: true, onClick: () => handleDeleteReport(r.id) },
+                      { label: "Archive", onClick: () => setArchivingReportId(r.id) },
                     ]}
                   />
                 </div>
@@ -402,7 +402,7 @@ export default function Reports() {
                 items={[
                   { label: "Print", onClick: () => openView(r.id, "print") },
                   { label: "Download PDF", onClick: () => openView(r.id, "download") },
-                  { label: "Delete", danger: true, onClick: () => handleDeleteReport(r.id) },
+                  { label: "Archive", onClick: () => setArchivingReportId(r.id) },
                 ]}
               />
               <div

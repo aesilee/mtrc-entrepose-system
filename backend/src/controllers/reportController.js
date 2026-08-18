@@ -161,7 +161,7 @@ export async function generateReport(req, res) {
 
 export async function listReports(req, res) {
   const { reportType, dateFrom, dateTo, caseManagerId, programStatus, patientId, search } = req.query;
-  const where = [];
+  const where = ["gr.is_archived = FALSE"];
   const params = [];
 
   if (reportType) { where.push("gr.report_type = ?"); params.push(reportType); }

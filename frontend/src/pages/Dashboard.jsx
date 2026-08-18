@@ -60,7 +60,7 @@ const QUICK_ACTIONS = [
 function IctAdminDashboard() {
   const navigate = useNavigate();
   const { isMobile, isTablet } = useViewport();
-  const statCols = isMobile ? 1 : isTablet ? 2 : 4;
+  const statCols = isMobile ? 1 : isTablet ? 2 : 5;
   const [stats, setStats] = useState(null);
   const [recentActivity, setRecentActivity] = useState([]);
   const [systemNotifications, setSystemNotifications] = useState([]);
@@ -93,7 +93,7 @@ function IctAdminDashboard() {
     { key: "totalUsers", label: "Total Users", value: stats?.totalUsers ?? "—", icon: ICONS.users },
     { key: "onlineUsers", label: "Online Users", value: stats?.onlineUsers ?? "—", icon: ICONS.online },
     { key: "totalPatients", label: "Total Patients", value: stats?.totalPatients ?? "—", icon: ICONS.patients },
-    { key: "archivedPatients", label: "Archived Patients", value: stats?.archivedPatients ?? "—", icon: ICONS.status },
+    { key: "archivedRecords", label: "Archived Records", value: stats?.archivedRecords ?? stats?.archivedPatients ?? "—", icon: ICONS.status },
     { key: "systemStatus", label: "System Status", value: stats?.systemStatus ?? "—", icon: ICONS.status },
   ];
 
@@ -854,13 +854,13 @@ const styles = {
     gap: 16,
   },
   statCard: {
-    display: "flex",
-    alignItems: "center",
-    gap: 14,
-    background: "var(--color-surface)",
-    border: "1px solid var(--color-border)",
-    borderRadius: "var(--radius-lg)",
-    padding: 20,
+  display: "flex",
+  alignItems: "center",
+  gap: 14,
+  background: "var(--color-surface)",
+  border: "1px solid var(--color-border)",
+  borderRadius: "var(--radius-lg)",
+  padding: 20,
   },
   statIcon: {
     width: 40,

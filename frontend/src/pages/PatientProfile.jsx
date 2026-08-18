@@ -10,6 +10,9 @@ import SharedEmptyState from "../components/EmptyState.jsx";
 import CertificateGeneratorModal from "../components/CertificateGeneratorModal.jsx";
 import CertificateViewModal from "../components/CertificateViewModal.jsx";
 import CardActionMenu from "../components/CardActionMenu.jsx";
+import ArchiveConfirmModal from "../components/ArchiveConfirmModal.jsx";
+import ConfirmModal from "../components/ConfirmModal.jsx";
+import Toast from "../components/Toast.jsx";
 
 const iconProps = { viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 2, strokeLinecap: "round", strokeLinejoin: "round" };
 
@@ -86,15 +89,37 @@ export default function PatientProfile() {
     setCertAction(action);
   }
 
-  async function handleDeleteCertificate(certId) {
-    if (!window.confirm("Delete this certificate? This cannot be undone.")) return;
-    try {
-      await api.delete(`/certificates/${certId}`);
-      if (viewingCertificateId === certId) setViewingCertificateId(null);
-      refreshCertificates();
-    } catch (err) {
-      alert("Could not delete this certificate.");
-    }
+  const [archivingCertificate, setArchivingCertificate] = useState(null);
+  const [archivingPatient, setArchivingPatient] = useState(false);
+  const [restoringPatient, setRestoringPatient] = useState(false);
+  const [toast, setToast] = useState("");
+
+  useEffect(() => {
+    if (!toast) return;
+    const t = setTimeout(() => setToast(""), 3000);
+    return () => clearTimeout(t);
+  }, [toast]);
+
+  async function handleArchiveCertificate(reason) {
+    await api.post(`/certificates/${archivingCertificate.id}/archive`, { reason });
+    if (viewingCertificateId === archivingCertificate.id) setViewingCertificateId(null);
+    setArchivingCertificate(null);
+    setToast("Certificate archived.");
+    refreshCertificates();
+  }
+
+  async function handleArchivePatient(reason) {
+    await api.post(`/archives/patients/${id}/archive`, { reason });
+    setArchivingPatient(false);
+    setToast("Patient archived.");
+    loadAll();
+  }
+
+  async function handleRestorePatient() {
+    await api.post(`/archives/patients/${id}/restore`);
+    setRestoringPatient(false);
+    setToast("Patient restored.");
+    loadAll();
   }
   const [completingFollowUpId, setCompletingFollowUpId] = useState(null);
   const [form, setForm] = useState({});
@@ -261,7 +286,7 @@ export default function PatientProfile() {
             <div style={styles.headerMeta}>{patient.patient_code} · {patient.municipality || "—"}</div>
           </div>
         </div>
-        <div style={styles.headerRight}>
+                <div style={styles.headerRight}>
           {patient.is_archived && <span style={styles.archivedBadge}>Archived</span>}
           <span style={{ ...styles.statusBadge, background: statusStyle.bg, color: statusStyle.color }}>
             {patient.enrollment_status}
@@ -279,14 +304,11 @@ export default function PatientProfile() {
                 <button type="button" style={styles.editBtn} onClick={startEditing}>Edit profile</button>
               )}
               {user.role === "ict_admin" && (
-                <button
-                  type="button"
-                  style={patient.is_archived ? styles.restoreProfileBtn : styles.archiveProfileBtn}
-                  onClick={handleArchiveToggle}
-                  disabled={archiving}
-                >
-                  {archiving ? "Working…" : patient.is_archived ? "Restore" : "Archive"}
-                </button>
+                patient.is_archived ? (
+                  <button type="button" style={styles.editBtn} onClick={() => setRestoringPatient(true)}>Restore</button>
+                ) : (
+                  <button type="button" style={styles.cancelBtn} onClick={() => setArchivingPatient(true)}>Archive</button>
+                )
               )}
             </>
           )}
@@ -560,7 +582,7 @@ export default function PatientProfile() {
                         items={[
                           { label: "Print", onClick: () => openCertificate(c.id, "print") },
                           { label: "Download PDF", onClick: () => openCertificate(c.id, "download") },
-                          ...(user.role !== "admitting" ? [{ label: "Delete", danger: true, onClick: () => handleDeleteCertificate(c.id) }] : []),
+                          ...(user.role !== "admitting" ? [{ label: "Archive", onClick: () => setArchivingCertificate(c) }] : []),
                         ]}
                       />
                       <div style={styles.certCardIcon}>{NAV_ICONS.certificates}</div>
@@ -615,13 +637,39 @@ export default function PatientProfile() {
           onGenerated={refreshCertificates}
         />
       )}
-      {viewingCertificateId && (
+            {viewingCertificateId && (
         <CertificateViewModal
           certificateId={viewingCertificateId}
           autoAction={certAction}
           onClose={() => setViewingCertificateId(null)}
         />
       )}
+      {archivingCertificate && (
+        <ArchiveConfirmModal
+          title="Archive certificate"
+          description="This certificate will be hidden from the certificates list. It can be restored from the Archives page."
+          onConfirm={handleArchiveCertificate}
+          onClose={() => setArchivingCertificate(null)}
+        />
+      )}
+      {archivingPatient && (
+        <ArchiveConfirmModal
+          title="Archive patient"
+          description="This patient will be hidden from the main Patients list. Their record and history stay intact and can be restored from the Archives page."
+          onConfirm={handleArchivePatient}
+          onClose={() => setArchivingPatient(false)}
+        />
+      )}
+      {restoringPatient && (
+        <ConfirmModal
+          title="Restore patient"
+          description="This patient will reappear in the main Patients list."
+          confirmLabel="Restore"
+          onConfirm={handleRestorePatient}
+          onClose={() => setRestoringPatient(false)}
+        />
+      )}
+      <Toast message={toast} onDismiss={() => setToast("")} />
     </AppShell>
   );
 }
@@ -731,7 +779,7 @@ const styles = {
   editBtn: { background: "var(--color-primary)", color: "#fff", border: "none", padding: "10px 18px", borderRadius: "var(--radius-sm)", fontWeight: 700, fontSize: 13, cursor: "pointer" },
   cancelBtn: { background: "none", border: "1px solid var(--color-border)", padding: "10px 16px", borderRadius: "var(--radius-sm)", fontWeight: 600, fontSize: 13, cursor: "pointer" },
   saveBtn: { background: "var(--color-primary)", color: "#fff", border: "none", padding: "10px 18px", borderRadius: "var(--radius-sm)", fontWeight: 700, fontSize: 13, cursor: "pointer" },
-
+  archivedBadge: { fontSize: 12, fontWeight: 700, padding: "6px 12px", borderRadius: 999, background: "#F1F1EE", color: "var(--color-text-muted)" },
   layout: { display: "flex", gap: 20, alignItems: "flex-start" },
   sideNav: {
     width: 220, flexShrink: 0, background: "var(--color-surface)", border: "1px solid var(--color-border)",

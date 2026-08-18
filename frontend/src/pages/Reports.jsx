@@ -6,6 +6,8 @@ import ReportViewModal from "../components/ReportViewModal.jsx";
 import api from "../api/axios.js";
 import useViewport from "../hooks/useViewport.js";
 import CardActionMenu from "../components/CardActionMenu.jsx";
+import ArchiveConfirmModal from "../components/ArchiveConfirmModal.jsx";
+import Toast from "../components/Toast.jsx";
 
 const iconProps = { viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 2, strokeLinecap: "round", strokeLinejoin: "round" };
 
@@ -75,15 +77,21 @@ export default function Reports() {
     setViewingAction(action);
   }
 
-  async function handleDeleteReport(id) {
-    if (!window.confirm("Delete this report? This cannot be undone.")) return;
-    try {
-      await api.delete(`/reports/${id}`);
-      if (viewingId === id) setViewingId(null);
-      loadReports();
-    } catch (err) {
-      alert("Could not delete this report.");
-    }
+  const [archivingReportId, setArchivingReportId] = useState(null);
+  const [toast, setToast] = useState("");
+
+  useEffect(() => {
+    if (!toast) return;
+    const t = setTimeout(() => setToast(""), 3000);
+    return () => clearTimeout(t);
+  }, [toast]);
+
+  async function handleArchiveReport(reason) {
+    await api.post(`/reports/${archivingReportId}/archive`, { reason });
+    if (viewingId === archivingReportId) setViewingId(null);
+    setArchivingReportId(null);
+    setToast("Report archived.");
+    loadReports();
   }
 
   const [typeFilter, setTypeFilter] = useState("");
@@ -267,7 +275,7 @@ export default function Reports() {
                       items={[
                         { label: "Print", onClick: () => openView(r.id, "print") },
                         { label: "Download PDF", onClick: () => openView(r.id, "download") },
-                        { label: "Delete", danger: true, onClick: () => handleDeleteReport(r.id) },
+                        { label: "Archive", onClick: () => setArchivingReportId(r.id) },
                       ]}
                     />
                   </td>
@@ -430,6 +438,15 @@ export default function Reports() {
       {viewingId && (
         <ReportViewModal reportId={viewingId} autoAction={viewingAction} onClose={() => setViewingId(null)} />
       )}
+      {archivingReportId && (
+        <ArchiveConfirmModal
+          title="Archive report"
+          description="This report will be hidden from the reports list. It can be restored from the Archives page."
+          onConfirm={handleArchiveReport}
+          onClose={() => setArchivingReportId(null)}
+        />
+      )}
+      <Toast message={toast} onDismiss={() => setToast("")} />
     </AppShell>
   );
 }
@@ -510,4 +527,4 @@ const styles = {
   contentMetaLabel: { fontWeight: 600, color: "var(--color-text-muted)" },
   contentCardFooter: { display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 12, color: "var(--color-text-muted)" },
   previewLink: { color: "var(--color-primary-dark)", fontWeight: 700, fontSize: 12 },
-};
+};

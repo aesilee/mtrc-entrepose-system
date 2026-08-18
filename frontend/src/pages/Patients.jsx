@@ -6,6 +6,8 @@ import AppShell from "../components/AppShell.jsx";
 import EmptyState from "../components/EmptyState.jsx";
 import api from "../api/axios.js";
 import useViewport from "../hooks/useViewport.js";
+import ArchiveConfirmModal from "../components/ArchiveConfirmModal.jsx";
+import Toast from "../components/Toast.jsx";
 
 const iconProps = { viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 2, strokeLinecap: "round", strokeLinejoin: "round" };
 
@@ -37,10 +39,31 @@ export default function Patients() {
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
 
-  useEffect(() => {
+  function loadPatients() {
+    setLoading(true);
     api.get("/patients").then(({ data }) => setPatients(data.patients)).finally(() => setLoading(false));
+  }
+
+  useEffect(() => {
+    loadPatients();
     api.get("/users/case-managers").then(({ data }) => setCaseManagers(data.caseManagers));
   }, []);
+
+  const [archivingPatientId, setArchivingPatientId] = useState(null);
+  const [toast, setToast] = useState("");
+
+  useEffect(() => {
+    if (!toast) return;
+    const t = setTimeout(() => setToast(""), 3000);
+    return () => clearTimeout(t);
+  }, [toast]);
+
+  async function handleArchivePatient(reason) {
+    await api.post(`/archives/patients/${archivingPatientId}/archive`, { reason });
+    setArchivingPatientId(null);
+    setToast("Patient archived.");
+    loadPatients();
+  }
 
   const municipalities = useMemo(() => {
     const set = new Set(patients.map((p) => p.municipality).filter(Boolean));
@@ -250,6 +273,7 @@ export default function Patients() {
                           onToggle={() => setOpenMenuId(openMenuId === p.id ? null : p.id)}
                           onClose={() => setOpenMenuId(null)}
                           navigate={navigate}
+                          onArchiveClick={() => setArchivingPatientId(p.id)}
                         />
                       </td>
                     </tr>
@@ -260,11 +284,21 @@ export default function Patients() {
           </table>
         </div>
       </div>
+
+      {archivingPatientId && (
+        <ArchiveConfirmModal
+          title="Archive patient"
+          description="This patient will be hidden from the main Patients list. Their record and history stay intact and can be restored from the Archives page."
+          onConfirm={handleArchivePatient}
+          onClose={() => setArchivingPatientId(null)}
+        />
+      )}
+      <Toast message={toast} onDismiss={() => setToast("")} />
     </AppShell>
   );
 }
 
-function RowMenu({ patientId, isOpen, onToggle, onClose, navigate }) {
+function RowMenu({ patientId, isOpen, onToggle, onClose, navigate, onArchiveClick }) {
   const btnRef = useRef(null);
   const [coords, setCoords] = useState({ top: 0, left: 0 });
 
@@ -293,7 +327,11 @@ function RowMenu({ patientId, isOpen, onToggle, onClose, navigate }) {
               <button type="button" style={styles.menuItem} onClick={() => { onClose(); navigate(`/patients/${patientId}`); }}>
                 View
               </button>
-              <button type="button" style={{ ...styles.menuItem, color: "var(--color-danger, #B3261E)" }} disabled title="Coming soon">
+              <button
+                type="button"
+                style={{ ...styles.menuItem, color: "var(--color-danger, #B3261E)" }}
+                onClick={() => { onClose(); onArchiveClick(); }}
+              >
                 Archive
               </button>
             </div>

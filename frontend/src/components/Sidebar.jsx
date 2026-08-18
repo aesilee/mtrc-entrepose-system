@@ -64,6 +64,13 @@ const NAV_ICONS = {
       <path d="M9.5 12l2 2 3.5-3.5" />
     </svg>
   ),
+  archives: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M21 8H3v13h18V8z" />
+      <path d="M1 3h22v5H1z" />
+      <line x1="10" y1="12" x2="14" y2="12" />
+    </svg>
+  ),
   profile: (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <circle cx="12" cy="12" r="9" />

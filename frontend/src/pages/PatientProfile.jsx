@@ -100,6 +100,21 @@ export default function PatientProfile() {
   const [form, setForm] = useState({});
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [archiving, setArchiving] = useState(false);
+
+  async function handleArchiveToggle() {
+    const action = patient.is_archived ? "restore" : "archive";
+    if (!window.confirm(patient.is_archived ? "Restore this patient?" : "Archive this patient? They'll be hidden from the main patients list.")) return;
+    setArchiving(true);
+    try {
+      await api.post(`/archives/patients/${id}/${action}`);
+      loadAll();
+    } catch (err) {
+      alert(err.response?.data?.message || `Could not ${action} this patient.`);
+    } finally {
+      setArchiving(false);
+    }
+  }
   const [caseManagers, setCaseManagers] = useState([]);
   const [programs, setPrograms] = useState([]);
 
@@ -247,6 +262,7 @@ export default function PatientProfile() {
           </div>
         </div>
         <div style={styles.headerRight}>
+          {patient.is_archived && <span style={styles.archivedBadge}>Archived</span>}
           <span style={{ ...styles.statusBadge, background: statusStyle.bg, color: statusStyle.color }}>
             {patient.enrollment_status}
           </span>
@@ -258,9 +274,21 @@ export default function PatientProfile() {
               </button>
             </>
           ) : (
-            user.role !== "him_staff" && (
-              <button type="button" style={styles.editBtn} onClick={startEditing}>Edit profile</button>
-            )
+            <>
+              {user.role !== "him_staff" && (
+                <button type="button" style={styles.editBtn} onClick={startEditing}>Edit profile</button>
+              )}
+              {user.role === "ict_admin" && (
+                <button
+                  type="button"
+                  style={patient.is_archived ? styles.restoreProfileBtn : styles.archiveProfileBtn}
+                  onClick={handleArchiveToggle}
+                  disabled={archiving}
+                >
+                  {archiving ? "Working…" : patient.is_archived ? "Restore" : "Archive"}
+                </button>
+              )}
+            </>
           )}
         </div>
       </div>
@@ -785,4 +813,7 @@ const styles = {
   table: { width: "100%", borderCollapse: "collapse", fontSize: 13 },
   th: { textAlign: "left", padding: "10px 12px", fontSize: 11, fontWeight: 700, textTransform: "uppercase", color: "var(--color-text-muted)", borderBottom: "1px solid var(--color-border)" },
   td: { padding: "10px 12px", borderBottom: "1px solid var(--color-border)", textTransform: "capitalize" },
+  archivedBadge: { fontSize: 12, fontWeight: 700, padding: "6px 12px", borderRadius: 999, background: "#F1F1EE", color: "var(--color-text-muted)" },
+  archiveProfileBtn: { background: "none", border: "1px solid var(--color-border)", padding: "10px 16px", borderRadius: "var(--radius-sm)", fontWeight: 600, fontSize: 13, cursor: "pointer" },
+  restoreProfileBtn: { background: "var(--color-primary)", color: "#fff", border: "none", padding: "10px 16px", borderRadius: "var(--radius-sm)", fontWeight: 700, fontSize: 13, cursor: "pointer" },
 };

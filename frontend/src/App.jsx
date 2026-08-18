@@ -14,6 +14,7 @@ import AuditLogs from "./pages/AuditLogs.jsx";
 import Settings from "./pages/Settings.jsx";
 import Profile from "./pages/Profile.jsx";
 import Certificates from "./pages/Certificates.jsx";
+import Archives from "./pages/Archives.jsx";
 
 // Simple declarative route table: [path, title, allowedRoles?]
 // allowedRoles omitted = any authenticated user.
@@ -57,6 +58,14 @@ export default function App() {
         element={
           <ProtectedRoute allowedRoles={["ict_admin"]}>
             <Settings />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/settings/archives"
+        element={
+          <ProtectedRoute allowedRoles={["ict_admin", "him_staff", "case_manager"]}>
+            <Archives />
           </ProtectedRoute>
         }
       />

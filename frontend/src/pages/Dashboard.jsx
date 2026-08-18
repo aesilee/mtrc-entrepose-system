@@ -93,6 +93,7 @@ function IctAdminDashboard() {
     { key: "totalUsers", label: "Total Users", value: stats?.totalUsers ?? "—", icon: ICONS.users },
     { key: "onlineUsers", label: "Online Users", value: stats?.onlineUsers ?? "—", icon: ICONS.online },
     { key: "totalPatients", label: "Total Patients", value: stats?.totalPatients ?? "—", icon: ICONS.patients },
+    { key: "archivedPatients", label: "Archived Patients", value: stats?.archivedPatients ?? "—", icon: ICONS.status },
     { key: "systemStatus", label: "System Status", value: stats?.systemStatus ?? "—", icon: ICONS.status },
   ];
 
@@ -226,6 +227,7 @@ function HimStaffDashboard() {
     { key: "analytics", label: "View Analytics", icon: ICONS.analytics, path: "/analytics" },
     { key: "patients", label: "View Patients", icon: ICONS.patients, path: "/patients" },
     { key: "attendance", label: "View Attendance", icon: ICONS.status, path: "/attendance" },
+    { key: "archives", label: "View Archives", icon: HIM_KPI_ICONS.status, path: "/settings/archives" },
   ];
 
   return (

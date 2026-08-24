@@ -17,7 +17,7 @@ export const NAV_BY_ROLE = {
   ],
   case_manager: [
     { label: "Dashboard", path: "/dashboard", icon: "dashboard" },
-    { label: "Patients", path: "/patients", icon: "patients" },
+    { label: "My Patients", path: "/patients", icon: "patients" },
     { label: "Attendance", path: "/attendance", icon: "attendance" },
     { label: "Analytics", path: "/analytics", icon: "analytics", badge: "Limited" },
     { label: "Archives", path: "/settings/archives", icon: "archives", badge: "Limited" },

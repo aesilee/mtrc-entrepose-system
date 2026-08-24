@@ -513,65 +513,114 @@ function formatTime(timeStr) {
   return `${display}:${m} ${ampm}`;
 }
 
+function getInitials(name) {
+  return String(name || "")
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0])
+    .join("")
+    .toUpperCase() || "—";
+}
+
 function CaseManagerDashboard() {
   const navigate = useNavigate();
   const { isMobile, isTablet } = useViewport();
   const isCompact = isMobile || isTablet;
-  const kpiCols = isMobile ? 2 : 4;
+  const kpiCols = isCompact ? 2 : 4;
+  const primaryPanelHeight = isMobile ? 280 : 300;
+  const patientsPanelHeight = isMobile ? 520 : 440;
+  const overviewPanelHeight = isMobile ? 310 : 300;
 
   const [stats, setStats] = useState(null);
+  const [loadError, setLoadError] = useState("");
+  const [loading, setLoading] = useState(true);
   const [noteModalOpen, setNoteModalOpen] = useState(false);
   const [followUpModalOpen, setFollowUpModalOpen] = useState(false);
+  const [patientSearch, setPatientSearch] = useState("");
+  const [patientFilter, setPatientFilter] = useState("all");
+
+  async function loadStats() {
+    setLoadError("");
+    setLoading(true);
+    try {
+      const { data } = await api.get("/dashboard/case-manager-stats");
+      setStats(data);
+    } catch (err) {
+      setLoadError(err.response?.data?.message || "Could not load the case manager dashboard.");
+    } finally {
+      setLoading(false);
+    }
+  }
 
   useEffect(() => {
-    api.get("/dashboard/case-manager-stats").then(({ data }) => setStats(data));
+    loadStats();
   }, []);
+
+  const statusOverview = [
+    { key: "active", label: "Active", value: stats?.caseStatusOverview?.active || 0, color: "#2F855A", tint: "#D8F5E9" },
+    { key: "followUp", label: "Follow-up", value: stats?.caseStatusOverview?.followUp || 0, color: "#B7791F", tint: "#FFF3D6" },
+    { key: "completed", label: "Completed", value: stats?.caseStatusOverview?.completed || 0, color: "#2B6CB0", tint: "#E1F0FF" },
+    { key: "dropped", label: "Dropped", value: stats?.caseStatusOverview?.dropped || 0, color: "#B3261E", tint: "#FDE2E2" },
+    { key: "transferred", label: "Transferred", value: stats?.caseStatusOverview?.transferred || 0, color: "#5B3EC9", tint: "#EDEAFB" },
+  ];
+  const statusTotal = statusOverview.reduce((total, item) => total + Number(item.value), 0);
 
   const quickActions = [
     {
       key: "attendance",
       label: "Record Attendance",
-      icon: ICONS.status,
+      icon: HIM_KPI_ICONS.status,
       onClick: () => navigate("/attendance"),
     },
     {
-      key: "addNote",
+      key: "note",
       label: "Add Progress Note",
-      icon: (
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-          <polyline points="14 2 14 8 20 8" />
-          <line x1="12" y1="18" x2="12" y2="12" />
-          <line x1="9" y1="15" x2="15" y2="15" />
-        </svg>
-      ),
+      icon: <svg {...iconProps} width={18} height={18}><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><path d="M14 2v6h6M12 12v6M9 15h6" /></svg>,
       onClick: () => setNoteModalOpen(true),
     },
     {
       key: "patients",
-      label: "View Patients",
-      icon: ICONS.patients,
+      label: "View My Patients",
+      icon: HIM_KPI_ICONS.patients,
       onClick: () => navigate("/patients"),
     },
     {
       key: "followUp",
       label: "Follow-up Case",
-      icon: (
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
-          <line x1="16" y1="2" x2="16" y2="6" />
-          <line x1="8" y1="2" x2="8" y2="6" />
-          <line x1="3" y1="10" x2="21" y2="10" />
-          <path d="M12 14v4M10 16h4" />
-        </svg>
-      ),
+      icon: <svg {...iconProps} width={18} height={18}><rect x="3" y="4" width="18" height="18" rx="2" /><path d="M8 2v4M16 2v4M3 10h18M12 14v4M10 16h4" /></svg>,
       onClick: () => setFollowUpModalOpen(true),
     },
   ];
 
+  const recentPatients = stats?.recentPatients || [];
+  const attentionPatientIds = new Set((stats?.patientsNeedingAttention || []).map((patient) => patient.patient_id));
+  const patientFilters = [
+    { key: "all", label: "All", count: recentPatients.length },
+    { key: "active", label: "Active", count: recentPatients.filter((patient) => patient.enrollment_status === "active").length },
+    { key: "pending", label: "Pending", count: recentPatients.filter((patient) => patient.enrollment_status === "pending").length },
+    { key: "completed", label: "Completed", count: recentPatients.filter((patient) => patient.enrollment_status === "completed").length },
+    { key: "attention", label: "Needs attention", count: recentPatients.filter((patient) => attentionPatientIds.has(patient.id)).length },
+  ];
+  const normalizedPatientSearch = patientSearch.trim().toLowerCase();
+  const filteredPatients = recentPatients.filter((patient) => {
+    const matchesSearch = !normalizedPatientSearch
+      || patient.full_name?.toLowerCase().includes(normalizedPatientSearch)
+      || patient.patient_code?.toLowerCase().includes(normalizedPatientSearch);
+    const matchesFilter = patientFilter === "all"
+      || (patientFilter === "attention" ? attentionPatientIds.has(patient.id) : patient.enrollment_status === patientFilter);
+    return matchesSearch && matchesFilter;
+  });
+
   return (
-    <div style={cmStyles.page}>
-      {/* Top 4 KPI Stat Cards */}
+    <div style={cmStyles.page} aria-busy={loading}>
+      {loadError && (
+        <div role="alert" style={cmStyles.errorBanner}>
+          <span>{loadError}</span>
+          <button type="button" style={cmStyles.retryBtn} onClick={loadStats}>Retry</button>
+        </div>
+      )}
+
       <div style={{ ...cmStyles.kpiRow, gridTemplateColumns: `repeat(${kpiCols}, 1fr)` }}>
         <CmKpiCard label="Assigned Patients" value={stats?.assignedPatients ?? "—"} icon={HIM_KPI_ICONS.patients} />
         <CmKpiCard label="Today's Sessions" value={stats?.todaysSessions ?? "—"} icon={HIM_KPI_ICONS.online} />
@@ -579,16 +628,20 @@ function CaseManagerDashboard() {
         <CmKpiCard label="Follow-ups Needed" value={stats?.followUpsNeeded ?? "—"} icon={HIM_KPI_ICONS.reports} />
       </div>
 
-      {/* Proportional Two-Column Section: Left (1.2fr / 60%), Right (1fr / 40%) */}
       <div style={{
         ...cmStyles.gridRow,
         gridTemplateColumns: isCompact ? "1fr" : "1.2fr 1fr",
       }}>
-        <CmCard title="Patients Needing Attention" isMobile={isCompact} highlight>
+        <CmCard
+          title="Patients Needing Attention"
+          height={primaryPanelHeight}
+          highlight
+          headerAction={<button type="button" style={cmStyles.viewAllBtn} onClick={() => navigate("/patients")}>View all →</button>}
+        >
           {!stats?.patientsNeedingAttention?.length ? (
-            <div style={cmStyles.emptyText}>No patients need attention right now.</div>
+            <DashboardEmptyState loading={loading} emptyText="No patients need attention right now." />
           ) : (
-            <div style={cmStyles.list}>
+            <div style={{ ...cmStyles.list, ...cmStyles.scrollArea }}>
               {stats.patientsNeedingAttention.map((p, i) => (
                 <button
                   key={`${p.patient_id}-${p.issue}-${i}`}
@@ -596,25 +649,34 @@ function CaseManagerDashboard() {
                   style={cmStyles.attentionRow}
                   onClick={() => navigate(`/patients/${p.patient_id}`)}
                 >
+                  <span style={cmStyles.patientAvatar}>{getInitials(p.full_name)}</span>
                   <span style={cmStyles.rowMain}>{p.full_name}</span>
                   <span style={cmStyles.issueBadge}>{p.issue}</span>
+                  <span aria-hidden="true" style={cmStyles.rowChevron}>›</span>
                 </button>
               ))}
             </div>
           )}
         </CmCard>
 
-        <CmCard title="Today's Schedule" isMobile={isCompact}>
+        <CmCard title="Today's Schedule" height={primaryPanelHeight}>
           {!stats?.todaysSchedule?.length ? (
-            <div style={cmStyles.emptyText}>No sessions scheduled for today.</div>
+            <DashboardEmptyState loading={loading} emptyText="No sessions scheduled for today." />
           ) : (
-            <div style={cmStyles.list}>
+            <div style={{ ...cmStyles.list, ...cmStyles.scrollArea }}>
               {stats.todaysSchedule.map((s) => (
                 <div key={s.id} style={cmStyles.scheduleRow}>
-                  <span style={cmStyles.scheduleTime}>{formatTime(s.session_time) || "—"}</span>
-                  <div>
+                  <span style={cmStyles.scheduleIcon} aria-hidden="true">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="18" height="18">
+                      <rect x="3" y="5" width="18" height="16" rx="2" />
+                      <path d="M8 3v4M16 3v4M3 10h18" />
+                    </svg>
+                  </span>
+                  <div style={cmStyles.scheduleIdentity}>
                     <div style={cmStyles.rowMain}>{s.session_name}</div>
-                    {s.program_name && <div style={cmStyles.scheduleMeta}>{s.program_name}</div>}
+                    <div style={cmStyles.scheduleMeta}>
+                      {formatTime(s.session_time) || "Time not set"}{s.program_name ? ` · ${s.program_name}` : ""}
+                    </div>
                   </div>
                 </div>
               ))}
@@ -623,23 +685,138 @@ function CaseManagerDashboard() {
         </CmCard>
       </div>
 
-      {/* Recent Progress Notes - Full Width */}
-      <div style={cmStyles.fullWidthRow}>
-        <CmCard title="Recent Progress Notes" isMobile={isCompact}>
-          {!stats?.recentProgressNotes?.length ? (
-            <div style={cmStyles.emptyText}>No progress notes yet.</div>
+      <div style={{
+        ...cmStyles.patientNotesRow,
+        gridTemplateColumns: isCompact ? "1fr" : "minmax(0, 1.75fr) minmax(300px, 0.75fr)",
+      }}>
+        <CmCard
+          title="My Patients"
+          height={patientsPanelHeight}
+          headerAction={<button type="button" style={cmStyles.viewAllBtn} onClick={() => navigate("/patients")}>View all patients →</button>}
+        >
+          {!recentPatients.length ? (
+            <DashboardEmptyState loading={loading} emptyText="No patients are assigned to you yet." />
           ) : (
-            <div style={cmStyles.list}>
-              {stats.recentProgressNotes.map((n) => (
+            <div style={cmStyles.patientDirectory}>
+              <label style={cmStyles.patientSearchBox}>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={cmStyles.patientSearchIcon}>
+                  <circle cx="11" cy="11" r="7" />
+                  <path d="M20 20l-4-4" />
+                </svg>
+                <input
+                  type="search"
+                  value={patientSearch}
+                  onChange={(event) => setPatientSearch(event.target.value)}
+                  placeholder="Search by name or patient ID"
+                  aria-label="Search assigned patients"
+                  style={cmStyles.patientSearchInput}
+                />
+              </label>
+
+              <div style={cmStyles.patientFilters} aria-label="Filter assigned patients">
+                {patientFilters.map((filter) => {
+                  const selected = patientFilter === filter.key;
+                  return (
+                    <button
+                      key={filter.key}
+                      type="button"
+                      aria-pressed={selected}
+                      style={{ ...cmStyles.patientFilterBtn, ...(selected ? cmStyles.patientFilterBtnActive : {}) }}
+                      onClick={() => setPatientFilter(filter.key)}
+                    >
+                      {filter.label} · {filter.count}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {!isMobile && (
+                <div style={cmStyles.patientTableHeader} aria-hidden="true">
+                  <span>Patient</span>
+                  <span>Program</span>
+                  <span>Status</span>
+                  <span />
+                  <span />
+                </div>
+              )}
+
+              {!filteredPatients.length ? (
+                <div style={cmStyles.patientFilterEmpty}>No patients match this search or filter.</div>
+              ) : (
+                <div style={{ ...cmStyles.patientList, ...cmStyles.scrollArea }}>
+                  {filteredPatients.map((patient) => {
+                    const badge = STATUS_BADGE_COLORS[patient.enrollment_status] || STATUS_BADGE_COLORS.pending;
+                    return (
+                      <button
+                        key={patient.id}
+                        type="button"
+                        style={{ ...cmStyles.patientRow, ...(isMobile ? cmStyles.patientRowMobile : {}) }}
+                        onClick={() => navigate(`/patients/${patient.id}`)}
+                      >
+                        {isMobile ? (
+                          <>
+                            <span style={cmStyles.patientAvatar}>{getInitials(patient.full_name)}</span>
+                            <span style={cmStyles.patientIdentity}>
+                              <span style={cmStyles.rowMain}>{patient.full_name}</span>
+                              <span style={cmStyles.patientMeta}>
+                                {patient.patient_code}{patient.program_name ? ` · ${patient.program_name}` : ""} · {timeAgo(patient.last_activity)}
+                              </span>
+                            </span>
+                            <span style={cmStyles.patientRowAside}>
+                              <span style={{ ...cmStyles.patientStatus, background: badge.bg, color: badge.color }}>
+                                {patient.enrollment_status}
+                              </span>
+                              <span aria-hidden="true" style={cmStyles.rowChevron}>›</span>
+                            </span>
+                          </>
+                        ) : (
+                          <>
+                            <span style={cmStyles.patientCell}>
+                              <span style={cmStyles.patientAvatar}>{getInitials(patient.full_name)}</span>
+                              <span style={cmStyles.patientIdentity}>
+                                <span style={cmStyles.rowMain}>{patient.full_name}</span>
+                                <span style={cmStyles.patientMeta}>{patient.patient_code}</span>
+                              </span>
+                            </span>
+                            <span style={cmStyles.patientProgram}>{patient.program_name || "Not assigned"}</span>
+                            <span style={{ ...cmStyles.patientStatus, background: badge.bg, color: badge.color }}>
+                              {patient.enrollment_status}
+                            </span>
+                            <span style={cmStyles.rowTime}>{timeAgo(patient.last_activity)}</span>
+                            <span aria-hidden="true" style={cmStyles.rowChevron}>›</span>
+                          </>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+              <div style={cmStyles.patientListFooter}>
+                Showing {filteredPatients.length} of {recentPatients.length} assigned patients
+              </div>
+            </div>
+          )}
+        </CmCard>
+
+        <CmCard title="Recent Progress Notes" height={patientsPanelHeight}>
+          {!stats?.recentProgressNotes?.length ? (
+            <DashboardEmptyState loading={loading} emptyText="No progress notes yet." />
+          ) : (
+            <div style={{ ...cmStyles.list, ...cmStyles.scrollArea }}>
+              {stats.recentProgressNotes.map((note) => (
                 <button
-                  key={n.id}
+                  key={note.id}
                   type="button"
-                  style={cmStyles.noteRow}
-                  onClick={() => navigate(`/patients/${n.patient_id}`)}
+                  style={cmStyles.progressNoteRow}
+                  onClick={() => navigate(`/patients/${note.patient_id}`)}
                 >
-                  <span style={cmStyles.rowMain}>{n.patient_name}</span>
-                  <span style={cmStyles.rowMid}>{n.session_type || n.note_type || "Progress note"}</span>
-                  <span style={cmStyles.rowTime}>{timeAgo(n.created_at)}</span>
+                  <span style={cmStyles.patientAvatar}>{getInitials(note.patient_name)}</span>
+                  <span style={cmStyles.progressNoteContent}>
+                    <span style={cmStyles.progressNotePatient}>{note.patient_name}</span>
+                    <span style={cmStyles.progressNoteMeta}>{note.session_type || note.note_type || "Progress note"}</span>
+                  </span>
+                  <span style={cmStyles.rowTime}>{timeAgo(note.updated_at || note.created_at)}</span>
+                  <span aria-hidden="true" style={cmStyles.rowChevron}>›</span>
                 </button>
               ))}
             </div>
@@ -647,56 +824,107 @@ function CaseManagerDashboard() {
         </CmCard>
       </div>
 
-      {/* Quick Actions Row - Exactly 4 Buttons Evenly Spaced */}
-      <div style={cmStyles.card}>
-        <div style={cmStyles.cardTitle}>Quick Actions</div>
-        <div style={{
-          ...cmStyles.compactActionsGrid,
-          gridTemplateColumns: isCompact ? "repeat(2, 1fr)" : "repeat(4, 1fr)",
-        }}>
+      <div style={{ ...cmStyles.gridRow, gridTemplateColumns: isCompact ? "1fr" : "0.85fr 1.15fr" }}>
+        <CmCard title="Case Status Overview" height={overviewPanelHeight}>
+          <div style={{ ...cmStyles.statusOverview, ...cmStyles.scrollArea }}>
+            <div style={cmStyles.statusTotalRow}>
+              <span style={cmStyles.statusTotalValue}>{statusTotal}</span>
+              <span style={cmStyles.statusTotalLabel}>Current cases</span>
+            </div>
+            <div style={cmStyles.statusBars}>
+              {statusOverview.map((item) => {
+                const percentage = statusTotal ? Math.round((Number(item.value) / statusTotal) * 100) : 0;
+                return (
+                  <div key={item.key} style={cmStyles.statusBarRow}>
+                    <div style={cmStyles.statusBarHeader}>
+                      <span style={cmStyles.statusBarLabel}>
+                        <span style={{ ...cmStyles.statusDot, background: item.color }} />
+                        {item.label}
+                      </span>
+                      <span style={cmStyles.statusCount}>{item.value} · {percentage}%</span>
+                    </div>
+                    <div style={{ ...cmStyles.statusTrack, background: item.tint }}>
+                      <div style={{ ...cmStyles.statusFill, width: `${percentage}%`, background: item.color }} />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </CmCard>
+
+        <CmCard title="Recent Case Activity" height={overviewPanelHeight}>
+          {!stats?.recentCaseActivity?.length ? (
+            <DashboardEmptyState loading={loading} emptyText="No recent case activity yet." />
+          ) : (
+            <div style={{ ...cmStyles.list, ...cmStyles.scrollArea }}>
+              {stats.recentCaseActivity.map((activity) => (
+                <button
+                  key={activity.activity_id}
+                  type="button"
+                  style={cmStyles.activityRow}
+                  onClick={() => navigate(`/patients/${activity.patient_id}`)}
+                >
+                  <span style={cmStyles.activityMarker} />
+                  <span style={cmStyles.activityContent}>
+                    <span style={cmStyles.activityTitle}>{activity.activity_label}</span>
+                    <span style={cmStyles.activityMeta}>{activity.patient_name} · {activity.activity_detail}</span>
+                  </span>
+                  <span style={cmStyles.rowTime}>{timeAgo(activity.activity_at)}</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </CmCard>
+      </div>
+
+      <section aria-label="Case manager quick actions" style={cmStyles.quickActionsCard}>
+        <div style={cmStyles.quickActionsTitle}>Quick Actions</div>
+        <div style={{ ...cmStyles.quickActionsGrid, gridTemplateColumns: `repeat(${isCompact ? 2 : 4}, minmax(0, 1fr))` }}>
           {quickActions.map((action) => (
-            <button key={action.key} type="button" style={cmStyles.compactActionBtn} onClick={action.onClick}>
-              <span style={cmStyles.compactActionIcon}>{action.icon}</span>
+            <button key={action.key} type="button" style={cmStyles.quickActionBtn} onClick={action.onClick}>
+              <span style={cmStyles.quickActionIcon}>{action.icon}</span>
               <span>{action.label}</span>
             </button>
           ))}
         </div>
-      </div>
+      </section>
 
-      {/* Modal dialogs */}
       {noteModalOpen && (
         <ProgressNoteModal
           onClose={() => setNoteModalOpen(false)}
-          onSaved={() => {
-            setNoteModalOpen(false);
-            api.get("/dashboard/case-manager-stats").then(({ data }) => setStats(data));
-          }}
+          onSaved={() => { setNoteModalOpen(false); loadStats(); }}
         />
       )}
       {followUpModalOpen && (
         <FollowUpModal
           onClose={() => setFollowUpModalOpen(false)}
-          onSaved={() => {
-            setFollowUpModalOpen(false);
-            api.get("/dashboard/case-manager-stats").then(({ data }) => setStats(data));
-          }}
+          onSaved={() => { setFollowUpModalOpen(false); loadStats(); }}
         />
       )}
     </div>
   );
 }
 
-function CmCard({ title, span, maxSpan, center, isMobile, highlight, children }) {
+function DashboardEmptyState({ loading, emptyText }) {
+  return <div style={cmStyles.emptyText}>{loading ? "Loading dashboard…" : emptyText}</div>;
+}
+
+function CmCard({ title, span = 1, maxSpan, center, height, highlight, headerAction, children }) {
   const effectiveSpan = maxSpan ? Math.min(span, maxSpan) : span;
   return (
     <div style={{
       ...cmStyles.card,
       gridColumn: `span ${effectiveSpan}`,
-      overflow: isMobile ? "visible" : "auto",
+      height,
+      overflow: "hidden",
       borderColor: highlight ? "var(--color-primary)" : "var(--color-border)",
     }}>
-      <div style={cmStyles.cardTitle}>{title}</div>
-      <div style={{ display: "flex", justifyContent: center ? "center" : "flex-start", alignItems: "center", flex: 1 }}>
+      <div style={cmStyles.cardHeader}>
+        <div style={cmStyles.cardTitle}>{title}</div>
+        {headerAction}
+      </div>
+      <div style={{ ...cmStyles.cardBody, justifyContent: center ? "center" : "flex-start" }}>
         {children}
       </div>
     </div>
@@ -969,16 +1197,25 @@ function AdmittingDashboard() {
 
 export default function Dashboard() {
   const { user } = useAuth();
+  const isCaseManager = user.role === "case_manager";
+  const isAdmitting = user.role === "admitting";
 
   return (
-    <AppShell title="Dashboard" description="Overview of enrollment, attendance, and program activity.">
+    <AppShell
+      title={isCaseManager ? "Case Manager Dashboard" : isAdmitting ? "Admitting Dashboard" : "Dashboard"}
+      description={isCaseManager
+        ? "Assigned patients, today's schedule, and recent case activity."
+        : isAdmitting
+          ? "Patient registrations, record completion, and today's admission activity."
+          : "Overview of enrollment, attendance, and program activity."}
+    >
       {user.role === "ict_admin" ? (
         <IctAdminDashboard />
       ) : user.role === "him_staff" ? (
         <HimStaffDashboard />
-      ) : user.role === "case_manager" ? (
+      ) : isCaseManager ? (
         <CaseManagerDashboard />
-      ) : user.role === "admitting" ? (
+      ) : isAdmitting ? (
         <AdmittingDashboard />
       ) : null}
     </AppShell>
@@ -1201,10 +1438,19 @@ const himStyles = {
 };
 
 const cmStyles = {
-  page: { display: "flex", flexDirection: "column", gap: 16, width: "100%", boxSizing: "border-box" },
+  page: {
+    display: "flex",
+    flexDirection: "column",
+    gap: 16,
+    width: "100%",
+    maxWidth: 1440,
+    margin: "0 auto",
+    paddingBottom: 8,
+    boxSizing: "border-box",
+  },
   kpiRow: { display: "grid", gap: 16, width: "100%" },
-  gridRow: { display: "grid", gap: 16, alignItems: "stretch", width: "100%" },
-  fullWidthRow: { width: "100%" },
+  gridRow: { display: "grid", gap: 16, alignItems: "stretch", width: "100%", minWidth: 0 },
+  patientNotesRow: { display: "grid", gap: 16, alignItems: "stretch", width: "100%", minWidth: 0 },
   card: {
     background: "var(--color-surface)",
     border: "1px solid var(--color-border)",
@@ -1214,23 +1460,54 @@ const cmStyles = {
     flexDirection: "column",
     gap: 12,
     minHeight: 90,
+    minWidth: 0,
     width: "100%",
     boxSizing: "border-box",
   },
+  cardHeader: { display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, minWidth: 0 },
   cardTitle: { fontSize: 14, fontWeight: 700, color: "var(--color-text)" },
+  cardBody: {
+    display: "flex",
+    alignItems: "stretch",
+    flex: 1,
+    minHeight: 0,
+    minWidth: 0,
+    width: "100%",
+  },
   emptyText: { color: "var(--color-text-muted)", fontSize: 13, textAlign: "center", padding: "20px 0", width: "100%" },
-  list: { display: "flex", flexDirection: "column", gap: 10, width: "100%" },
-  row: {
+  list: { display: "flex", flexDirection: "column", gap: 0, width: "100%", minWidth: 0 },
+  scrollArea: { flex: 1, minHeight: 0, overflowY: "auto", paddingRight: 6 },
+  errorBanner: {
     display: "flex",
     justifyContent: "space-between",
-    gap: 10,
+    alignItems: "center",
+    gap: 12,
+    padding: "10px 14px",
+    background: "#FDE2E2",
+    color: "#B3261E",
+    borderRadius: "var(--radius-sm)",
     fontSize: 13,
-    color: "var(--color-text-muted)",
-    paddingBottom: 10,
-    borderBottom: "1px solid var(--color-border)",
   },
-  rowMain: { fontWeight: 700, color: "var(--color-text)" },
-  rowMid: { flex: 1, marginLeft: 8, textTransform: "capitalize" },
+  retryBtn: { background: "none", border: "none", color: "inherit", fontWeight: 700, cursor: "pointer" },
+  viewAllBtn: {
+    flexShrink: 0,
+    padding: 0,
+    background: "none",
+    border: "none",
+    color: "var(--color-primary-dark)",
+    fontSize: 12,
+    fontWeight: 700,
+    cursor: "pointer",
+  },
+  rowMain: {
+    flex: 1,
+    fontWeight: 700,
+    color: "var(--color-text)",
+    minWidth: 0,
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+  },
   rowTime: { color: "var(--color-text-muted)", whiteSpace: "nowrap" },
   attentionRow: {
     display: "flex",
@@ -1245,6 +1522,22 @@ const cmStyles = {
     cursor: "pointer",
     textAlign: "left",
     width: "100%",
+    minHeight: 54,
+    flexShrink: 0,
+    color: "inherit",
+  },
+  patientAvatar: {
+    width: 34,
+    height: 34,
+    borderRadius: "50%",
+    background: "var(--color-primary-tint)",
+    color: "var(--color-primary-dark)",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    fontSize: 11,
+    fontWeight: 800,
+    flexShrink: 0,
   },
   issueBadge: {
     fontSize: 11,
@@ -1258,51 +1551,191 @@ const cmStyles = {
   scheduleRow: {
     display: "flex",
     gap: 12,
-    alignItems: "flex-start",
-    paddingBottom: 10,
+    alignItems: "center",
+    padding: "10px 0",
     borderBottom: "1px solid var(--color-border)",
+    minHeight: 54,
+    flexShrink: 0,
   },
-  scheduleTime: {
-    fontWeight: 700,
-    fontSize: 13,
+  scheduleIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: "var(--radius-sm)",
+    background: "var(--color-primary-tint)",
     color: "var(--color-primary-dark)",
-    minWidth: 72,
-  },
-  scheduleMeta: { fontSize: 12, color: "var(--color-text-muted)", marginTop: 2 },
-  noteRow: {
     display: "flex",
-    justifyContent: "space-between",
+    alignItems: "center",
+    justifyContent: "center",
+    flexShrink: 0,
+  },
+  scheduleMeta: { fontSize: 11, color: "var(--color-text-muted)", marginTop: 3 },
+  scheduleIdentity: { flex: 1, minWidth: 0 },
+  patientDirectory: { display: "flex", flexDirection: "column", gap: 10, width: "100%", minWidth: 0, minHeight: 0, height: "100%", flex: 1 },
+  patientSearchBox: {
+    display: "flex",
+    alignItems: "center",
     gap: 10,
+    width: "100%",
+    height: 40,
+    padding: "0 12px",
+    border: "1px solid var(--color-border)",
+    borderRadius: "var(--radius-sm)",
+    background: "var(--color-surface)",
+    boxSizing: "border-box",
+    flexShrink: 0,
+  },
+  patientSearchIcon: { width: 17, height: 17, color: "var(--color-text-muted)", flexShrink: 0 },
+  patientSearchInput: {
+    width: "100%",
+    minWidth: 0,
+    padding: 0,
+    border: "none",
+    outline: "none",
+    background: "transparent",
+    color: "var(--color-text)",
+    font: "inherit",
     fontSize: 13,
-    paddingBottom: 10,
+  },
+  patientFilters: { display: "flex", gap: 8, width: "100%", overflowX: "auto", paddingBottom: 2, flexShrink: 0 },
+  patientFilterBtn: {
+    padding: "6px 11px",
+    border: "1px solid var(--color-border)",
+    borderRadius: 999,
+    background: "var(--color-surface)",
+    color: "var(--color-text-muted)",
+    fontSize: 11,
+    fontWeight: 700,
+    whiteSpace: "nowrap",
+    cursor: "pointer",
+  },
+  patientFilterBtnActive: {
+    background: "var(--color-primary-dark)",
+    borderColor: "var(--color-primary-dark)",
+    color: "#fff",
+  },
+  patientTableHeader: {
+    display: "grid",
+    gridTemplateColumns: "minmax(220px, 1.5fr) minmax(120px, 0.8fr) 94px 72px 18px",
+    alignItems: "center",
+    gap: 12,
+    padding: "2px 8px 7px",
+    borderBottom: "1px solid var(--color-border)",
+    color: "var(--color-text-muted)",
+    fontSize: 10.5,
+    fontWeight: 700,
+    flexShrink: 0,
+  },
+  patientList: { display: "flex", flexDirection: "column", gap: 0, width: "100%", minWidth: 0 },
+  patientFilterEmpty: { flex: 1, display: "flex", alignItems: "center", justifyContent: "center", color: "var(--color-text-muted)", fontSize: 12 },
+  patientRow: {
+    display: "grid",
+    gridTemplateColumns: "minmax(220px, 1.5fr) minmax(120px, 0.8fr) 94px 72px 18px",
+    alignItems: "center",
+    gap: 12,
+    width: "100%",
+    minHeight: 54,
+    padding: "9px 2px",
     background: "none",
     border: "none",
     borderBottom: "1px solid var(--color-border)",
-    cursor: "pointer",
-    textAlign: "left",
-    width: "100%",
     color: "inherit",
+    textAlign: "left",
+    cursor: "pointer",
+    flexShrink: 0,
   },
-  compactActionsGrid: { display: "grid", gap: 16, width: "100%" },
-  compactActionBtn: {
+  patientRowMobile: { display: "flex", gridTemplateColumns: "none", gap: 10 },
+  patientCell: { display: "flex", alignItems: "center", gap: 12, minWidth: 0 },
+  patientProgram: { color: "var(--color-text-muted)", fontSize: 12, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
+  patientIdentity: { display: "flex", flexDirection: "column", gap: 3, flex: 1, minWidth: 0 },
+  patientMeta: { color: "var(--color-text-muted)", fontSize: 11, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
+  patientRowAside: { display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 12, flexShrink: 0 },
+  patientStatus: { justifySelf: "start", padding: "3px 9px", borderRadius: 999, fontSize: 11, fontWeight: 700, textTransform: "capitalize", whiteSpace: "nowrap" },
+  rowChevron: { color: "var(--color-text-muted)", fontSize: 20, lineHeight: 1, flexShrink: 0 },
+  patientListFooter: { color: "var(--color-text-muted)", fontSize: 11, textAlign: "center", flexShrink: 0 },
+  progressNoteRow: {
+    display: "flex",
+    alignItems: "center",
+    gap: 10,
+    width: "100%",
+    minHeight: 58,
+    padding: "9px 0",
+    background: "none",
+    border: "none",
+    borderBottom: "1px solid var(--color-border)",
+    color: "inherit",
+    textAlign: "left",
+    cursor: "pointer",
+    flexShrink: 0,
+  },
+  progressNoteContent: { display: "flex", flexDirection: "column", gap: 3, flex: 1, minWidth: 0 },
+  progressNotePatient: { color: "var(--color-text)", fontSize: 12, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
+  progressNoteMeta: { color: "var(--color-text-muted)", fontSize: 11, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", textTransform: "capitalize" },
+  statusOverview: { display: "flex", flexDirection: "column", gap: 18, width: "100%", minWidth: 0 },
+  statusTotalRow: { display: "flex", alignItems: "baseline", gap: 9 },
+  statusTotalValue: { fontSize: 30, lineHeight: 1, fontWeight: 800, color: "var(--color-text)" },
+  statusTotalLabel: { fontSize: 12, color: "var(--color-text-muted)" },
+  statusBars: { display: "flex", flexDirection: "column", gap: 16, width: "100%" },
+  statusBarRow: { display: "flex", flexDirection: "column", gap: 7 },
+  statusBarHeader: { display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 },
+  statusBarLabel: { display: "flex", alignItems: "center", gap: 8, fontSize: 12, fontWeight: 700, color: "var(--color-text)" },
+  statusDot: { width: 8, height: 8, borderRadius: "50%", flexShrink: 0 },
+  statusCount: { color: "var(--color-text-muted)", fontSize: 11, whiteSpace: "nowrap" },
+  statusTrack: { height: 10, width: "100%", borderRadius: 999, overflow: "hidden" },
+  statusFill: { height: "100%", minWidth: 0, borderRadius: 999, transition: "width 0.25s ease" },
+  activityRow: {
+    display: "flex",
+    alignItems: "center",
+    gap: 10,
+    width: "100%",
+    minHeight: 50,
+    padding: "8px 0",
+    background: "none",
+    border: "none",
+    borderBottom: "1px solid var(--color-border)",
+    color: "inherit",
+    textAlign: "left",
+    cursor: "pointer",
+    flexShrink: 0,
+  },
+  activityMarker: { width: 8, height: 8, borderRadius: "50%", background: "var(--color-primary)", flexShrink: 0 },
+  activityContent: { display: "flex", flexDirection: "column", gap: 3, flex: 1, minWidth: 0 },
+  activityTitle: { color: "var(--color-text)", fontSize: 12, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
+  activityMeta: { color: "var(--color-text-muted)", fontSize: 11, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
+  quickActionsCard: {
+    minHeight: 90,
+    padding: "18px 20px",
+    display: "flex",
+    flexDirection: "column",
+    gap: 12,
+    width: "min(900px, 100%)",
+    margin: "0 auto",
+    boxSizing: "border-box",
+    background: "var(--color-surface)",
+    border: "1px solid var(--color-border)",
+    borderRadius: "var(--radius-lg)",
+  },
+  quickActionsTitle: { color: "var(--color-text)", fontSize: 14, fontWeight: 700 },
+  quickActionsGrid: { display: "grid", gap: 12, width: "100%", minWidth: 0 },
+  quickActionBtn: {
     display: "flex",
     flexDirection: "column",
     alignItems: "center",
     justifyContent: "center",
-    gap: 8,
-    padding: "16px 12px",
-    fontSize: 12,
-    fontWeight: 600,
-    color: "var(--color-text)",
+    gap: 5,
+    minWidth: 0,
+    minHeight: 54,
+    padding: "7px 8px",
     background: "var(--color-primary-tint)",
     border: "none",
     borderRadius: "var(--radius-sm)",
-    cursor: "pointer",
+    color: "var(--color-text)",
+    fontSize: 11,
+    fontWeight: 700,
+    lineHeight: 1.15,
     textAlign: "center",
-    width: "100%",
-    boxSizing: "border-box",
+    cursor: "pointer",
   },
-  compactActionIcon: { width: 20, height: 20, color: "var(--color-primary-dark)", display: "flex", alignItems: "center", justifyContent: "center" },
+  quickActionIcon: { width: 18, height: 18, color: "var(--color-primary-dark)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 },
   kpiCard: {
     display: "flex",
     alignItems: "center",
@@ -1311,6 +1744,8 @@ const cmStyles = {
     border: "1px solid var(--color-border)",
     borderRadius: "var(--radius-lg)",
     padding: "16px 18px",
+    height: 86,
+    minWidth: 0,
     width: "100%",
     boxSizing: "border-box",
   },

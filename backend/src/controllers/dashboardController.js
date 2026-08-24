@@ -26,23 +26,23 @@ export async function getDashboardStats(req, res) {
 
 export async function getCaseManagerStats(req, res) {
   const cmId = req.user.id;
-  const today = new Date().toISOString().slice(0, 10);
 
   try {
     const [[{ assignedPatients }]] = await pool.query(
       `SELECT COUNT(*) AS assignedPatients
        FROM patients
-       WHERE assigned_case_manager_id = ? AND is_archived = FALSE
-         AND enrollment_status IN ('active', 'pending')`,
+       WHERE assigned_case_manager_id = ? AND is_archived = FALSE`,
       [cmId]
     );
 
     const [[{ todaysSessions }]] = await pool.query(
-      `SELECT COUNT(DISTINCT COALESCE(a.session_id, a.id)) AS todaysSessions
-       FROM attendance a
-       JOIN patients p ON p.id = a.patient_id
-       WHERE p.assigned_case_manager_id = ? AND a.session_date = ?`,
-      [cmId, today]
+      `SELECT COUNT(DISTINCT s.id) AS todaysSessions
+       FROM sessions s
+       LEFT JOIN attendance a ON a.session_id = s.id
+       LEFT JOIN patients p ON p.id = a.patient_id AND p.is_archived = FALSE
+       WHERE s.session_date = CURDATE()
+         AND (s.case_manager_id = ? OR p.assigned_case_manager_id = ?)`,
+      [cmId, cmId]
     );
 
     const [[{ missedSessions }]] = await pool.query(
@@ -71,22 +71,26 @@ export async function getCaseManagerStats(req, res) {
          FROM attendance a
          JOIN patients p ON p.id = a.patient_id
          WHERE p.assigned_case_manager_id = ?
+           AND p.is_archived = FALSE
            AND a.status = 'absent'
-           AND a.session_date >= DATE_SUB(?, INTERVAL 7 DAY)
+           AND a.session_date >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)
          UNION
          SELECT p.id, p.full_name,
                 'Follow-up Required' AS issue, f.due_date AS issue_date
          FROM follow_ups f
          JOIN patients p ON p.id = f.patient_id
-         WHERE f.assigned_to = ? AND f.status = 'pending'
+         WHERE f.assigned_to = ?
+           AND f.status = 'pending'
+           AND p.is_archived = FALSE
          UNION
          SELECT p.id, p.full_name,
                 'Progress Overdue' AS issue, pn.next_follow_up_date AS issue_date
          FROM progress_notes pn
          JOIN patients p ON p.id = pn.patient_id
          WHERE p.assigned_case_manager_id = ?
+           AND p.is_archived = FALSE
            AND pn.next_follow_up_date IS NOT NULL
-           AND pn.next_follow_up_date < ?
+           AND pn.next_follow_up_date < CURDATE()
            AND pn.id = (
              SELECT pn2.id FROM progress_notes pn2
              WHERE pn2.patient_id = p.id
@@ -95,7 +99,7 @@ export async function getCaseManagerStats(req, res) {
        ) AS attention
        ORDER BY issue_date DESC
        LIMIT 10`,
-      [cmId, today, cmId, cmId, today]
+      [cmId, cmId, cmId]
     );
 
     const [todaysSchedule] = await pool.query(
@@ -104,30 +108,107 @@ export async function getCaseManagerStats(req, res) {
        LEFT JOIN attendance a ON a.session_id = s.id
        LEFT JOIN patients p ON p.id = a.patient_id
        LEFT JOIN programs pr ON pr.id = s.program_id
-       WHERE s.session_date = ?
+       WHERE s.session_date = CURDATE()
          AND (s.case_manager_id = ? OR p.assigned_case_manager_id = ?)
        ORDER BY s.session_time, s.session_name`,
-      [today, cmId, cmId]
-    );
-
-    const [recentProgressNotes] = await pool.query(
-      `SELECT pn.id, pn.session_type, pn.note_type, pn.created_at,
-              p.id AS patient_id, p.full_name AS patient_name
-       FROM progress_notes pn
-       JOIN patients p ON p.id = pn.patient_id
-       WHERE p.assigned_case_manager_id = ? OR pn.case_manager_id = ?
-       ORDER BY pn.created_at DESC
-       LIMIT 5`,
       [cmId, cmId]
     );
 
-    const [recentNotifications] = await pool.query(
-      `SELECT id, type, category, message, is_read, created_at
-       FROM notifications
-       WHERE recipient_id = ?
-       ORDER BY created_at DESC
-       LIMIT 5`,
+    const [recentPatients] = await pool.query(
+      `SELECT p.id, p.patient_code, p.full_name, p.enrollment_status,
+              p.program_phase, pr.name AS program_name,
+              GREATEST(
+                COALESCE(p.updated_at, p.created_at),
+                COALESCE((SELECT MAX(a.created_at) FROM attendance a WHERE a.patient_id = p.id), p.created_at),
+                COALESCE((SELECT MAX(pn.updated_at) FROM progress_notes pn WHERE pn.patient_id = p.id), p.created_at),
+                COALESCE((SELECT MAX(f.created_at) FROM follow_ups f WHERE f.patient_id = p.id), p.created_at)
+              ) AS last_activity
+       FROM patients p
+       LEFT JOIN programs pr ON pr.id = p.program_id
+       WHERE p.assigned_case_manager_id = ?
+         AND p.is_archived = FALSE
+       ORDER BY last_activity DESC, p.id DESC
+       LIMIT 50`,
       [cmId]
+    );
+
+    const [recentProgressNotes] = await pool.query(
+      `SELECT pn.id, pn.session_type, pn.note_type, pn.created_at, pn.updated_at,
+              p.id AS patient_id, p.full_name AS patient_name
+       FROM progress_notes pn
+       JOIN patients p ON p.id = pn.patient_id
+       WHERE p.assigned_case_manager_id = ?
+         AND p.is_archived = FALSE
+       ORDER BY COALESCE(pn.updated_at, pn.created_at) DESC
+       LIMIT 6`,
+      [cmId]
+    );
+
+    const [[caseStatusOverview]] = await pool.query(
+      `SELECT
+         SUM(CASE
+           WHEN p.enrollment_status IN ('active', 'pending')
+             AND NOT EXISTS (
+               SELECT 1 FROM follow_ups f
+               WHERE f.patient_id = p.id AND f.assigned_to = ? AND f.status = 'pending'
+             )
+           THEN 1 ELSE 0 END) AS active,
+         SUM(CASE
+           WHEN p.enrollment_status IN ('active', 'pending')
+             AND EXISTS (
+               SELECT 1 FROM follow_ups f
+               WHERE f.patient_id = p.id AND f.assigned_to = ? AND f.status = 'pending'
+             )
+           THEN 1 ELSE 0 END) AS followUp,
+         SUM(CASE WHEN p.enrollment_status = 'completed' THEN 1 ELSE 0 END) AS completed,
+         SUM(CASE WHEN p.enrollment_status = 'dropped' THEN 1 ELSE 0 END) AS dropped,
+         SUM(CASE WHEN p.enrollment_status = 'transferred' THEN 1 ELSE 0 END) AS transferred
+       FROM patients p
+       WHERE p.assigned_case_manager_id = ? AND p.is_archived = FALSE`,
+      [cmId, cmId, cmId]
+    );
+
+    const [recentCaseActivity] = await pool.query(
+      `SELECT activity_id, patient_id, patient_name, activity_type,
+              activity_label, activity_detail, activity_at
+       FROM (
+         SELECT CONCAT('note-', pn.id) AS activity_id,
+                p.id AS patient_id, p.full_name AS patient_name,
+                'progress_note' AS activity_type,
+                'Progress note added' AS activity_label,
+                COALESCE(pn.session_type, pn.note_type, 'Case progress') AS activity_detail,
+                pn.created_at AS activity_at
+         FROM progress_notes pn
+         JOIN patients p ON p.id = pn.patient_id
+         WHERE p.assigned_case_manager_id = ? AND p.is_archived = FALSE
+
+         UNION ALL
+
+         SELECT CONCAT('followup-', f.id),
+                p.id, p.full_name,
+                'follow_up',
+                CASE WHEN f.status = 'completed' THEN 'Follow-up completed' ELSE 'Follow-up scheduled' END,
+                COALESCE(f.reason, 'Case follow-up'),
+                COALESCE(f.resolved_at, f.created_at)
+         FROM follow_ups f
+         JOIN patients p ON p.id = f.patient_id
+         WHERE p.assigned_case_manager_id = ? AND p.is_archived = FALSE
+
+         UNION ALL
+
+         SELECT CONCAT('attendance-', a.id),
+                p.id, p.full_name,
+                'attendance',
+                CONCAT('Attendance marked ', a.status),
+                COALESCE(a.session_type, 'Program session'),
+                a.created_at
+         FROM attendance a
+         JOIN patients p ON p.id = a.patient_id
+         WHERE p.assigned_case_manager_id = ? AND p.is_archived = FALSE
+       ) AS case_activity
+       ORDER BY activity_at DESC
+       LIMIT 12`,
+      [cmId, cmId, cmId]
     );
 
     res.json({
@@ -137,8 +218,16 @@ export async function getCaseManagerStats(req, res) {
       followUpsNeeded,
       patientsNeedingAttention,
       todaysSchedule,
+      recentPatients,
       recentProgressNotes,
-      recentNotifications,
+      caseStatusOverview: {
+        active: Number(caseStatusOverview?.active || 0),
+        followUp: Number(caseStatusOverview?.followUp || 0),
+        completed: Number(caseStatusOverview?.completed || 0),
+        dropped: Number(caseStatusOverview?.dropped || 0),
+        transferred: Number(caseStatusOverview?.transferred || 0),
+      },
+      recentCaseActivity,
     });
   } catch (err) {
     console.error(err);

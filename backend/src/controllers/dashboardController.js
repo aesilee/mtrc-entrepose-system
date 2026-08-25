@@ -285,6 +285,86 @@ export async function getAdmittingStats(req, res) {
        LIMIT 6`
     );
 
+    const [pendingRegistrationRecords] = await pool.query(
+      `SELECT id, full_name, patient_code, admission_date, enrollment_status, created_at
+       FROM patients
+       WHERE is_archived = FALSE
+         AND enrollment_status = 'pending'
+       ORDER BY created_at DESC
+       LIMIT 10`
+    );
+
+    const [[registrationProcess]] = await pool.query(
+      `SELECT
+         SUM(CASE WHEN DATE(created_at) = CURDATE() THEN 1 ELSE 0 END) AS newRegistrations,
+         SUM(CASE
+           WHEN DATE(created_at) <> CURDATE() AND enrollment_status <> 'pending'
+           THEN 1 ELSE 0
+         END) AS completed,
+         SUM(CASE
+           WHEN DATE(created_at) <> CURDATE()
+             AND enrollment_status = 'pending'
+             AND emergency_contact_name IS NOT NULL AND emergency_contact_name <> ''
+             AND program_id IS NOT NULL
+             AND initial_assessment IS NOT NULL AND initial_assessment <> ''
+           THEN 1 ELSE 0
+         END) AS pending,
+         SUM(CASE
+           WHEN DATE(created_at) <> CURDATE()
+             AND enrollment_status = 'pending'
+             AND (
+               emergency_contact_name IS NULL OR emergency_contact_name = ''
+               OR program_id IS NULL
+               OR initial_assessment IS NULL OR initial_assessment = ''
+             )
+           THEN 1 ELSE 0
+         END) AS incomplete
+       FROM patients
+       WHERE is_archived = FALSE`
+    );
+
+    const [todayAdmissionActivity] = await pool.query(
+      `SELECT activity_id, patient_id, patient_name, activity_label, activity_detail, activity_at
+       FROM (
+         SELECT CONCAT('registered-', p.id) AS activity_id,
+                p.id AS patient_id,
+                p.full_name AS patient_name,
+                'Patient registered' AS activity_label,
+                p.patient_code AS activity_detail,
+                p.created_at AS activity_at
+         FROM patients p
+         WHERE p.is_archived = FALSE
+           AND DATE(p.created_at) = CURDATE()
+
+         UNION ALL
+
+         SELECT CONCAT('updated-', p.id) AS activity_id,
+                p.id AS patient_id,
+                p.full_name AS patient_name,
+                'Registration updated' AS activity_label,
+                p.enrollment_status AS activity_detail,
+                p.updated_at AS activity_at
+         FROM patients p
+         WHERE p.is_archived = FALSE
+           AND DATE(p.updated_at) = CURDATE()
+           AND p.updated_at > p.created_at
+
+         UNION ALL
+
+         SELECT CONCAT('certificate-', c.id) AS activity_id,
+                c.patient_id,
+                c.patient_name,
+                'Enrollment certificate generated' AS activity_label,
+                c.patient_code AS activity_detail,
+                c.issued_at AS activity_at
+         FROM certificates c
+         WHERE c.certificate_type = 'enrollment'
+           AND DATE(c.issued_at) = CURDATE()
+       ) AS activity
+       ORDER BY activity_at DESC
+       LIMIT 10`
+    );
+
     // Admission-related notifications for this user
     const [recentNotifications] = await pool.query(
       `SELECT id, type, category, message, is_read, created_at
@@ -303,6 +383,14 @@ export async function getAdmittingStats(req, res) {
       certsToday,
       recentAdmissions,
       incompleteRecords,
+      pendingRegistrationRecords,
+      registrationProcess: {
+        newRegistrations: Number(registrationProcess?.newRegistrations || 0),
+        completed: Number(registrationProcess?.completed || 0),
+        pending: Number(registrationProcess?.pending || 0),
+        incomplete: Number(registrationProcess?.incomplete || 0),
+      },
+      todayAdmissionActivity,
       recentNotifications,
     });
   } catch (err) {

@@ -14,6 +14,7 @@ export const NAV_BY_ROLE = {
   admitting: [
     { label: "Dashboard", path: "/dashboard", icon: "dashboard" },
     { label: "Patients", path: "/patients", icon: "patients" },
+    { label: "Register Patient", path: "/patients/register", icon: "caseManagement" },
   ],
   case_manager: [
     { label: "Dashboard", path: "/dashboard", icon: "dashboard" },
@@ -59,6 +60,9 @@ export const ROLE_PERMISSIONS = {
   admitting: [
     "View and register patients",
     "Fill out admission information",
+    "Edit patient information",
+    "Generate and print enrollment certificates",
+    "Search patient records",
     "View the dashboard overview",
   ],
   case_manager: [

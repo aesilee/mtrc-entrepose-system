@@ -955,12 +955,22 @@ function AdmittingDashboard() {
   const navigate = useNavigate();
   const { isMobile, isTablet } = useViewport();
   const isCompact = isMobile || isTablet;
-  const kpiCols = isMobile ? 2 : 4;
+  const kpiCols = isCompact ? 2 : 4;
+  const mainPanelHeight = isMobile ? 320 : 286;
+  const insightPanelHeight = isMobile ? 310 : 258;
+  const activityPanelHeight = isMobile ? 270 : 210;
 
   const [stats, setStats] = useState(null);
+  const [loadError, setLoadError] = useState("");
 
-  function loadStats() {
-    api.get("/dashboard/admitting-stats").then(({ data }) => setStats(data));
+  async function loadStats() {
+    setLoadError("");
+    try {
+      const { data } = await api.get("/dashboard/admitting-stats");
+      setStats(data);
+    } catch (err) {
+      setLoadError(err.response?.data?.message || "Could not load the admitting dashboard.");
+    }
   }
 
   useEffect(() => {
@@ -1037,15 +1047,57 @@ function AdmittingDashboard() {
       ),
       onClick: () => navigate("/patients"),
     },
+    {
+      key: "certificate",
+      label: "Generate Certificate",
+      icon: (
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" width={16} height={16}>
+          <path d="M7 3h10a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z" />
+          <path d="M9 8h6M9 12h6M9 16h3" />
+        </svg>
+      ),
+      onClick: () => navigate("/patients"),
+    },
   ];
+
+  const registrationSegments = [
+    { key: "newRegistrations", label: "New registrations", color: "#2F80ED" },
+    { key: "completed", label: "Completed", color: "#27AE60" },
+    { key: "pending", label: "Pending", color: "#F2C94C" },
+    { key: "incomplete", label: "Incomplete", color: "#EB5757" },
+  ].map((segment) => ({
+    ...segment,
+    value: Number(stats?.registrationProcess?.[segment.key] || 0),
+  }));
+
+  const processTotal = registrationSegments.reduce((sum, segment) => sum + segment.value, 0);
+  let segmentOffset = 0;
+  const processChart = processTotal
+    ? `conic-gradient(${registrationSegments.map((segment) => {
+        const start = segmentOffset;
+        segmentOffset += (segment.value / processTotal) * 360;
+        return `${segment.color} ${start}deg ${segmentOffset}deg`;
+      }).join(", ")})`
+    : "var(--color-border)";
 
   function fmtDate(d) {
     if (!d) return "—";
     return new Date(d).toLocaleDateString("en-PH", { month: "short", day: "numeric", year: "numeric" });
   }
 
+  function fmtShortDate(d) {
+    if (!d) return "—";
+    return new Date(d).toLocaleDateString("en-PH", { month: "short", day: "numeric" });
+  }
+
   return (
     <div style={apStyles.page}>
+      {loadError && (
+        <div role="alert" style={apStyles.errorBanner}>
+          <span>{loadError}</span>
+          <button type="button" style={apStyles.retryBtn} onClick={loadStats}>Retry</button>
+        </div>
+      )}
       {/* KPI row */}
       <div style={{ ...apStyles.kpiRow, gridTemplateColumns: `repeat(${kpiCols}, 1fr)` }}>
         {kpiCards.map((card) => (
@@ -1060,9 +1112,9 @@ function AdmittingDashboard() {
       </div>
 
       {/* Main two-column grid */}
-      <div style={{ ...apStyles.gridRow, gridTemplateColumns: isCompact ? "1fr" : "1.4fr 1fr" }}>
+      <div style={{ ...apStyles.gridRow, gridTemplateColumns: isCompact ? "1fr" : "1.35fr 0.85fr" }}>
         {/* Recent Admissions */}
-        <div style={apStyles.card}>
+        <div style={{ ...apStyles.card, height: mainPanelHeight, overflow: "hidden" }}>
           <div style={apStyles.cardHeader}>
             <span style={apStyles.cardTitle}>Recent Admissions</span>
             <button
@@ -1114,7 +1166,7 @@ function AdmittingDashboard() {
         </div>
 
         {/* Right column: Pending / Incomplete Records */}
-        <div style={apStyles.card}>
+        <div style={{ ...apStyles.card, height: mainPanelHeight, overflow: "hidden" }}>
           <div style={apStyles.cardHeader}>
             <span style={apStyles.cardTitle}>Incomplete Records</span>
             {!!stats?.incompleteRecords?.length && (
@@ -1125,7 +1177,7 @@ function AdmittingDashboard() {
           {!stats?.incompleteRecords?.length ? (
             <div style={apStyles.emptyText}>All registered patients have complete records.</div>
           ) : (
-            <div style={apStyles.list}>
+            <div style={{ ...apStyles.list, ...apStyles.scrollArea }}>
               {stats.incompleteRecords.map((p) => (
                 <button
                   key={p.id}
@@ -1133,11 +1185,11 @@ function AdmittingDashboard() {
                   style={apStyles.incompleteRow}
                   onClick={() => navigate(`/patients/${p.id}`)}
                 >
-                  <div>
+                  <div style={apStyles.incompletePatient}>
                     <div style={apStyles.incompleteRowName}>{p.full_name}</div>
                     <div style={apStyles.incompleteRowCode}>{p.patient_code}</div>
                   </div>
-                  <span style={apStyles.missingTag}>{p.missing_info}</span>
+                  <span style={apStyles.missingTag} title={p.missing_info}>{p.missing_info}</span>
                 </button>
               ))}
             </div>
@@ -1145,50 +1197,111 @@ function AdmittingDashboard() {
         </div>
       </div>
 
-      {/* Bottom row: quick actions + notifications */}
-      <div style={{ ...apStyles.gridRow, gridTemplateColumns: isCompact ? "1fr" : "1fr 1.4fr" }}>
-        {/* Quick Actions */}
-        <div style={apStyles.card}>
-          <div style={apStyles.cardTitle}>Quick Actions</div>
-          <div style={apStyles.actionsGrid}>
-            {quickActions.map((action) => (
-              <button
-                key={action.key}
-                type="button"
-                style={apStyles.actionBtn}
-                onClick={action.onClick}
+      <div style={apStyles.compactInsights}>
+        <div style={{ ...apStyles.gridRow, gridTemplateColumns: isCompact ? "1fr" : "minmax(0, 1fr) minmax(0, 1fr)" }}>
+          <div style={{ ...apStyles.card, height: insightPanelHeight, overflow: "hidden" }}>
+            <div style={apStyles.cardHeader}>
+              <span style={apStyles.cardTitle}>Pending Registrations</span>
+              {!!stats?.pendingRegistrationRecords?.length && (
+                <span style={apStyles.warnBadge}>{stats.pendingRegistrations} pending</span>
+              )}
+            </div>
+
+            {!stats?.pendingRegistrationRecords?.length ? (
+              <div style={apStyles.emptyText}>No registrations are waiting for completion.</div>
+            ) : (
+              <div style={{ ...apStyles.pendingList, ...apStyles.scrollArea }}>
+                {stats.pendingRegistrationRecords.map((patient) => (
+                  <button
+                    key={patient.id}
+                    type="button"
+                    style={apStyles.pendingRow}
+                    onClick={() => navigate(`/patients/${patient.id}`)}
+                  >
+                    <span style={apStyles.pendingAvatar}>{getInitials(patient.full_name)}</span>
+                    <span style={apStyles.pendingIdentity}>
+                      <span style={apStyles.pendingName}>{patient.full_name}</span>
+                      <span style={apStyles.pendingMeta}>
+                        {patient.patient_code} · {fmtShortDate(patient.admission_date || patient.created_at)}
+                      </span>
+                    </span>
+                    <span aria-hidden="true" style={apStyles.pendingChevron}>›</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div style={{ ...apStyles.card, height: insightPanelHeight, overflow: "hidden" }}>
+            <div style={apStyles.cardTitle}>Registration Process</div>
+            <div style={{ ...apStyles.processContent, flexDirection: isMobile ? "column" : "row", gap: isMobile ? 12 : 16 }}>
+              <div
+                style={{ ...apStyles.donut, width: isMobile ? 126 : 136, height: isMobile ? 126 : 136, background: processChart }}
+                aria-label="Registration process chart"
               >
-                <span style={apStyles.actionIcon}>{action.icon}</span>
-                <span>{action.label}</span>
-              </button>
-            ))}
+                <div style={apStyles.donutCenter}>
+                  <strong style={apStyles.donutValue}>{stats?.totalPatients ?? 0}</strong>
+                  <span style={apStyles.donutLabel}>patients</span>
+                </div>
+              </div>
+              <div style={{ ...apStyles.processLegend, width: isMobile ? "100%" : "auto", display: isMobile ? "grid" : "flex", gridTemplateColumns: isMobile ? "1fr 1fr" : undefined }}>
+                {registrationSegments.map((segment) => (
+                  <div key={segment.key} style={apStyles.legendRow}>
+                    <span style={{ ...apStyles.legendDot, background: segment.color }} />
+                    <span style={apStyles.legendLabel}>{segment.label}</span>
+                    <strong style={apStyles.legendValue}>{segment.value}</strong>
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
         </div>
 
-        {/* Admission Notifications */}
-        <div style={apStyles.card}>
-          <div style={apStyles.cardTitle}>Recent Activity</div>
-          {!stats?.recentNotifications?.length ? (
-            <div style={apStyles.emptyText}>No recent admission-related activity.</div>
+        <div style={{ ...apStyles.card, ...apStyles.activityCard, height: activityPanelHeight, overflow: "hidden" }}>
+          <div style={apStyles.cardTitle}>Today's Admission Activity</div>
+          {!stats?.todayAdmissionActivity?.length ? (
+            <div style={apStyles.emptyText}>No admission activity recorded today.</div>
           ) : (
-            <div style={apStyles.list}>
-              {stats.recentNotifications.map((n) => (
-                <div
-                  key={n.id}
-                  style={{
-                    ...apStyles.notifRow,
-                    opacity: n.is_read ? 0.65 : 1,
-                  }}
+            <div style={{ ...apStyles.timeline, ...apStyles.scrollArea }}>
+              {stats.todayAdmissionActivity.map((activity, index) => (
+                <button
+                  key={activity.activity_id}
+                  type="button"
+                  style={apStyles.timelineRow}
+                  onClick={() => activity.patient_id && navigate(`/patients/${activity.patient_id}`)}
                 >
-                  <div style={apStyles.notifDot(n.is_read)} />
-                  <div style={{ flex: 1 }}>
-                    <div style={apStyles.notifMsg}>{n.message}</div>
-                    <div style={apStyles.notifTime}>{timeAgo(n.created_at)}</div>
-                  </div>
-                </div>
+                  <span style={apStyles.timelineTrack}>
+                    <span style={apStyles.timelineDot} />
+                    {index < stats.todayAdmissionActivity.length - 1 && <span style={apStyles.timelineLine} />}
+                  </span>
+                  <span style={apStyles.timelineBody}>
+                    <span style={apStyles.timelineTitle}>{activity.activity_label}</span>
+                    <span style={apStyles.timelinePatient}>
+                      {activity.patient_name}{activity.activity_detail ? ` · ${activity.activity_detail}` : ""}
+                    </span>
+                  </span>
+                  <span style={apStyles.timelineTime}>{timeAgo(activity.activity_at)}</span>
+                </button>
               ))}
             </div>
           )}
+        </div>
+      </div>
+
+      <div style={{ ...apStyles.card, ...apStyles.quickActionsCard }}>
+        <div style={apStyles.cardTitle}>Quick Actions</div>
+        <div style={{ ...apStyles.actionsGrid, gridTemplateColumns: isMobile ? "1fr" : `repeat(${quickActions.length}, minmax(0, 1fr))` }}>
+          {quickActions.map((action) => (
+            <button
+              key={action.key}
+              type="button"
+              style={apStyles.actionBtn}
+              onClick={action.onClick}
+            >
+              <span style={apStyles.actionIcon}>{action.icon}</span>
+              <span>{action.label}</span>
+            </button>
+          ))}
         </div>
       </div>
     </div>
@@ -1765,18 +1878,22 @@ const cmStyles = {
 };
 
 const apStyles = {
-  page: { display: "flex", flexDirection: "column", gap: 16, width: "100%", boxSizing: "border-box" },
-  kpiRow: { display: "grid", gap: 16, width: "100%" },
-  gridRow: { display: "grid", gap: 16, alignItems: "stretch", width: "100%" },
+  page: { display: "flex", flexDirection: "column", gap: 14, width: "100%", maxWidth: 1680, margin: "0 auto", boxSizing: "border-box" },
+  kpiRow: { display: "grid", gap: 14, width: "100%" },
+  gridRow: { display: "grid", gap: 14, alignItems: "stretch", width: "100%" },
+  compactInsights: { display: "flex", flexDirection: "column", gap: 14, width: "100%", maxWidth: 1320, marginRight: "auto" },
+  activityCard: { maxWidth: 920, marginRight: "auto" },
+  quickActionsCard: { width: "min(900px, 100%)", margin: "0 auto", minHeight: 0 },
   card: {
     background: "var(--color-surface)",
     border: "1px solid var(--color-border)",
     borderRadius: "var(--radius-lg)",
-    padding: "18px 20px",
+    padding: "16px 18px",
     display: "flex",
     flexDirection: "column",
-    gap: 12,
+    gap: 10,
     minHeight: 100,
+    minWidth: 0,
     width: "100%",
     boxSizing: "border-box",
   },
@@ -1787,8 +1904,11 @@ const apStyles = {
     marginBottom: 4,
   },
   cardTitle: { fontSize: 14, fontWeight: 700, color: "var(--color-text)" },
-  emptyText: { color: "var(--color-text-muted)", fontSize: 13, textAlign: "center", padding: "24px 0" },
-  list: { display: "flex", flexDirection: "column", gap: 0, width: "100%" },
+  emptyText: { flex: 1, display: "flex", alignItems: "center", justifyContent: "center", color: "var(--color-text-muted)", fontSize: 13, textAlign: "center", padding: "12px 0" },
+  list: { display: "flex", flexDirection: "column", gap: 0, width: "100%", minWidth: 0 },
+  scrollArea: { flex: 1, minHeight: 0, overflowY: "auto", paddingRight: 6 },
+  errorBanner: { display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, padding: "10px 14px", background: "#FDE2E2", color: "#B3261E", borderRadius: "var(--radius-sm)", fontSize: 13 },
+  retryBtn: { background: "none", border: "none", color: "inherit", fontWeight: 700, cursor: "pointer" },
   kpiCard: {
     display: "flex",
     alignItems: "center",
@@ -1796,7 +1916,9 @@ const apStyles = {
     background: "var(--color-surface)",
     border: "1px solid var(--color-border)",
     borderRadius: "var(--radius-lg)",
-    padding: "16px 18px",
+    padding: "14px 16px",
+    height: 80,
+    minWidth: 0,
     width: "100%",
     boxSizing: "border-box",
   },
@@ -1814,8 +1936,8 @@ const apStyles = {
   kpiValue: { fontSize: 22, fontWeight: 800, color: "var(--color-text)" },
   kpiLabel: { fontSize: 12, color: "var(--color-text-muted)", marginTop: 2 },
 
-  tableWrap: { overflowX: "auto", width: "100%" },
-  table: { width: "100%", borderCollapse: "collapse", fontSize: 13 },
+  tableWrap: { flex: 1, minHeight: 0, overflow: "auto", width: "100%" },
+  table: { width: "100%", minWidth: 620, borderCollapse: "collapse", fontSize: 13 },
   th: {
     textAlign: "left",
     padding: "6px 10px",
@@ -1826,11 +1948,12 @@ const apStyles = {
     whiteSpace: "nowrap",
   },
   td: {
-    padding: "10px 10px",
+    padding: "9px 10px",
     fontSize: 13,
     color: "var(--color-text)",
     borderBottom: "1px solid var(--color-border)",
     verticalAlign: "middle",
+    whiteSpace: "nowrap",
   },
   tr: { cursor: "pointer" },
   statusBadge: {
@@ -1851,6 +1974,13 @@ const apStyles = {
     color: "#9A6B00",
     whiteSpace: "nowrap",
   },
+  pendingList: { display: "flex", flexDirection: "column", width: "100%", minWidth: 0 },
+  pendingRow: { display: "flex", alignItems: "center", gap: 10, width: "100%", minHeight: 58, padding: "9px 0", background: "none", border: "none", borderBottom: "1px solid var(--color-border)", color: "inherit", textAlign: "left", cursor: "pointer", flexShrink: 0 },
+  pendingAvatar: { width: 36, height: 36, borderRadius: "50%", background: "var(--color-primary-tint)", color: "var(--color-primary-dark)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 800, flexShrink: 0 },
+  pendingIdentity: { display: "flex", flexDirection: "column", gap: 3, flex: 1, minWidth: 0 },
+  pendingName: { color: "var(--color-text)", fontSize: 13, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
+  pendingMeta: { color: "var(--color-text-muted)", fontSize: 11, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
+  pendingChevron: { color: "var(--color-text-muted)", fontSize: 20, lineHeight: 1, flexShrink: 0 },
   incompleteRow: {
     display: "flex",
     justifyContent: "space-between",
@@ -1863,8 +1993,12 @@ const apStyles = {
     cursor: "pointer",
     textAlign: "left",
     width: "100%",
+    minHeight: 46,
+    flexShrink: 0,
+    color: "inherit",
   },
-  incompleteRowName: { fontSize: 13, fontWeight: 600, color: "var(--color-text)" },
+  incompletePatient: { minWidth: 0, flex: 1 },
+  incompleteRowName: { fontSize: 13, fontWeight: 600, color: "var(--color-text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
   incompleteRowCode: { fontSize: 11, color: "var(--color-text-muted)", marginTop: 2 },
   missingTag: {
     fontSize: 11,
@@ -1873,14 +2007,38 @@ const apStyles = {
     borderRadius: 999,
     background: "#FDE2E2",
     color: "#B3261E",
+    maxWidth: "45%",
+    overflow: "hidden",
+    textOverflow: "ellipsis",
     whiteSpace: "nowrap",
+    textAlign: "center",
     flexShrink: 0,
   },
-  actionsGrid: { display: "flex", flexDirection: "column", gap: 10 },
+  processContent: { display: "flex", alignItems: "center", justifyContent: "space-evenly", gap: 20, flex: 1, minHeight: 0 },
+  donut: { position: "relative", width: 142, height: 142, borderRadius: "50%", flexShrink: 0 },
+  donutCenter: { position: "absolute", inset: 22, borderRadius: "50%", background: "var(--color-surface)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" },
+  donutValue: { fontSize: 22, color: "var(--color-text)", lineHeight: 1 },
+  donutLabel: { fontSize: 11, color: "var(--color-text-muted)", marginTop: 4 },
+  processLegend: { display: "flex", flexDirection: "column", gap: 10, minWidth: 150 },
+  legendRow: { display: "flex", alignItems: "center", gap: 8, fontSize: 12 },
+  legendDot: { width: 9, height: 9, borderRadius: "50%", flexShrink: 0 },
+  legendLabel: { color: "var(--color-text-muted)", flex: 1 },
+  legendValue: { color: "var(--color-text)", fontSize: 13 },
+  timeline: { display: "flex", flexDirection: "column", width: "100%", minWidth: 0 },
+  timelineRow: { display: "flex", alignItems: "stretch", gap: 10, width: "100%", minHeight: 50, padding: 0, background: "none", border: "none", color: "inherit", textAlign: "left", cursor: "pointer", flexShrink: 0 },
+  timelineTrack: { position: "relative", width: 12, flexShrink: 0, display: "flex", justifyContent: "center" },
+  timelineDot: { width: 9, height: 9, borderRadius: "50%", background: "var(--color-primary)", marginTop: 5, zIndex: 1 },
+  timelineLine: { position: "absolute", top: 14, bottom: 0, width: 1, background: "var(--color-border)" },
+  timelineBody: { display: "flex", flexDirection: "column", minWidth: 0, flex: 1, paddingBottom: 12 },
+  timelineTitle: { fontSize: 13, fontWeight: 650, color: "var(--color-text)" },
+  timelinePatient: { fontSize: 11, color: "var(--color-text-muted)", marginTop: 3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
+  timelineTime: { fontSize: 11, color: "var(--color-text-muted)", whiteSpace: "nowrap", paddingRight: 2 },
+  actionsGrid: { display: "grid", gap: 10, width: "100%" },
   actionBtn: {
     display: "flex",
     alignItems: "center",
-    gap: 10,
+    justifyContent: "center",
+    gap: 8,
     padding: "12px 14px",
     fontSize: 13,
     fontWeight: 600,
@@ -1889,7 +2047,7 @@ const apStyles = {
     border: "none",
     borderRadius: "var(--radius-sm)",
     cursor: "pointer",
-    textAlign: "left",
+    textAlign: "center",
   },
   actionIcon: {
     width: 18,
@@ -1909,21 +2067,4 @@ const apStyles = {
     color: "var(--color-primary-dark)",
     cursor: "pointer",
   },
-  notifRow: {
-    display: "flex",
-    alignItems: "flex-start",
-    gap: 10,
-    padding: "10px 0",
-    borderBottom: "1px solid var(--color-border)",
-  },
-  notifDot: (read) => ({
-    width: 7,
-    height: 7,
-    borderRadius: "50%",
-    background: read ? "var(--color-border)" : "var(--color-primary)",
-    marginTop: 5,
-    flexShrink: 0,
-  }),
-  notifMsg: { fontSize: 13, color: "var(--color-text)", lineHeight: 1.45 },
-  notifTime: { fontSize: 11, color: "var(--color-text-muted)", marginTop: 3 },
 };

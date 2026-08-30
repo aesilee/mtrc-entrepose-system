@@ -959,6 +959,7 @@ function AdmittingDashboard() {
   const mainPanelHeight = isMobile ? 320 : 286;
   const insightPanelHeight = isMobile ? 310 : 258;
   const activityPanelHeight = isMobile ? 270 : 210;
+  const quickActionsPanelHeight = isMobile ? 300 : 220;
 
   const [stats, setStats] = useState(null);
   const [loadError, setLoadError] = useState("");
@@ -1111,10 +1112,27 @@ function AdmittingDashboard() {
         ))}
       </div>
 
-      {/* Main two-column grid */}
-      <div style={{ ...apStyles.gridRow, gridTemplateColumns: isCompact ? "1fr" : "1.35fr 0.85fr" }}>
+      {/* Row 2: Quick Actions (left) + Recent Admissions (right) */}
+      <div style={{ ...apStyles.gridRow, gridTemplateColumns: isCompact ? "1fr" : "0.85fr 1.35fr", alignItems: "start" }}>
+        <div style={{ ...apStyles.card, height: quickActionsPanelHeight, overflow: "hidden" }}>
+          <div style={apStyles.cardTitle}>Quick Actions</div>
+          <div style={{ ...apStyles.actionsGrid, gridTemplateColumns: "1fr" }}>
+            {quickActions.map((action) => (
+              <button
+                key={action.key}
+                type="button"
+                style={apStyles.actionBtn}
+                onClick={action.onClick}
+              >
+                <span style={apStyles.actionIcon}>{action.icon}</span>
+                <span>{action.label}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+
         {/* Recent Admissions */}
-        <div style={{ ...apStyles.card, height: mainPanelHeight, overflow: "hidden" }}>
+        <div style={{ ...apStyles.card, height: quickActionsPanelHeight, overflow: "hidden" }}>
           <div style={apStyles.cardHeader}>
             <span style={apStyles.cardTitle}>Recent Admissions</span>
             <button
@@ -1164,41 +1182,41 @@ function AdmittingDashboard() {
             </div>
           )}
         </div>
-
-        {/* Right column: Pending / Incomplete Records */}
-        <div style={{ ...apStyles.card, height: mainPanelHeight, overflow: "hidden" }}>
-          <div style={apStyles.cardHeader}>
-            <span style={apStyles.cardTitle}>Incomplete Records</span>
-            {!!stats?.incompleteRecords?.length && (
-              <span style={apStyles.warnBadge}>{stats.incompleteRecords.length} pending</span>
-            )}
-          </div>
-
-          {!stats?.incompleteRecords?.length ? (
-            <div style={apStyles.emptyText}>All registered patients have complete records.</div>
-          ) : (
-            <div style={{ ...apStyles.list, ...apStyles.scrollArea }}>
-              {stats.incompleteRecords.map((p) => (
-                <button
-                  key={p.id}
-                  type="button"
-                  style={apStyles.incompleteRow}
-                  onClick={() => navigate(`/patients/${p.id}`)}
-                >
-                  <div style={apStyles.incompletePatient}>
-                    <div style={apStyles.incompleteRowName}>{p.full_name}</div>
-                    <div style={apStyles.incompleteRowCode}>{p.patient_code}</div>
-                  </div>
-                  <span style={apStyles.missingTag} title={p.missing_info}>{p.missing_info}</span>
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
       </div>
 
       <div style={apStyles.compactInsights}>
+        {/* Row 3: Incomplete Records (left) + Pending Registrations (right) */}
         <div style={{ ...apStyles.gridRow, gridTemplateColumns: isCompact ? "1fr" : "minmax(0, 1fr) minmax(0, 1fr)" }}>
+          <div style={{ ...apStyles.card, height: insightPanelHeight, overflow: "hidden" }}>
+            <div style={apStyles.cardHeader}>
+              <span style={apStyles.cardTitle}>Incomplete Records</span>
+              {!!stats?.incompleteRecords?.length && (
+                <span style={apStyles.warnBadge}>{stats.incompleteRecords.length} pending</span>
+              )}
+            </div>
+
+            {!stats?.incompleteRecords?.length ? (
+              <div style={apStyles.emptyText}>All registered patients have complete records.</div>
+            ) : (
+              <div style={{ ...apStyles.list, ...apStyles.scrollArea }}>
+                {stats.incompleteRecords.map((p) => (
+                  <button
+                    key={p.id}
+                    type="button"
+                    style={apStyles.incompleteRow}
+                    onClick={() => navigate(`/patients/${p.id}`)}
+                  >
+                    <div style={apStyles.incompletePatient}>
+                      <div style={apStyles.incompleteRowName}>{p.full_name}</div>
+                      <div style={apStyles.incompleteRowCode}>{p.patient_code}</div>
+                    </div>
+                    <span style={apStyles.missingTag} title={p.missing_info}>{p.missing_info}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
           <div style={{ ...apStyles.card, height: insightPanelHeight, overflow: "hidden" }}>
             <div style={apStyles.cardHeader}>
               <span style={apStyles.cardTitle}>Pending Registrations</span>
@@ -1231,12 +1249,15 @@ function AdmittingDashboard() {
               </div>
             )}
           </div>
+        </div>
 
-          <div style={{ ...apStyles.card, height: insightPanelHeight, overflow: "hidden" }}>
+        {/* Row 4: Registration Process (left) + Today's Admission Activity (right) */}
+        <div style={{ ...apStyles.gridRow, gridTemplateColumns: isCompact ? "1fr" : "minmax(0, 1fr) minmax(0, 1fr)" }}>
+          <div style={{ ...apStyles.card, height: activityPanelHeight, overflow: "hidden" }}>
             <div style={apStyles.cardTitle}>Registration Process</div>
-            <div style={{ ...apStyles.processContent, flexDirection: isMobile ? "column" : "row", gap: isMobile ? 12 : 16 }}>
+            <div style={{ ...apStyles.processContent, flexDirection: "row", alignItems: "center", justifyContent: "center", height: "100%", gap: 24 }}>
               <div
-                style={{ ...apStyles.donut, width: isMobile ? 126 : 136, height: isMobile ? 126 : 136, background: processChart }}
+                style={{ ...apStyles.donut, width: 136, height: 136, background: processChart, flexShrink: 0 }}
                 aria-label="Registration process chart"
               >
                 <div style={apStyles.donutCenter}>
@@ -1244,7 +1265,7 @@ function AdmittingDashboard() {
                   <span style={apStyles.donutLabel}>patients</span>
                 </div>
               </div>
-              <div style={{ ...apStyles.processLegend, width: isMobile ? "100%" : "auto", display: isMobile ? "grid" : "flex", gridTemplateColumns: isMobile ? "1fr 1fr" : undefined }}>
+              <div style={{ ...apStyles.processLegend, display: "flex", flexDirection: "column", gap: 8 }}>
                 {registrationSegments.map((segment) => (
                   <div key={segment.key} style={apStyles.legendRow}>
                     <span style={{ ...apStyles.legendDot, background: segment.color }} />
@@ -1255,10 +1276,10 @@ function AdmittingDashboard() {
               </div>
             </div>
           </div>
-        </div>
 
-        <div style={{ ...apStyles.card, ...apStyles.activityCard, height: activityPanelHeight, overflow: "hidden" }}>
-          <div style={apStyles.cardTitle}>Today's Admission Activity</div>
+          <div style={{ ...apStyles.card, ...apStyles.activityCard, height: activityPanelHeight, overflow: "hidden" }}>
+            <div style={apStyles.cardTitle}>Today's Admission Activity</div>
+
           {!stats?.todayAdmissionActivity?.length ? (
             <div style={apStyles.emptyText}>No admission activity recorded today.</div>
           ) : (
@@ -1285,23 +1306,7 @@ function AdmittingDashboard() {
               ))}
             </div>
           )}
-        </div>
-      </div>
-
-      <div style={{ ...apStyles.card, ...apStyles.quickActionsCard }}>
-        <div style={apStyles.cardTitle}>Quick Actions</div>
-        <div style={{ ...apStyles.actionsGrid, gridTemplateColumns: isMobile ? "1fr" : `repeat(${quickActions.length}, minmax(0, 1fr))` }}>
-          {quickActions.map((action) => (
-            <button
-              key={action.key}
-              type="button"
-              style={apStyles.actionBtn}
-              onClick={action.onClick}
-            >
-              <span style={apStyles.actionIcon}>{action.icon}</span>
-              <span>{action.label}</span>
-            </button>
-          ))}
+          </div>
         </div>
       </div>
     </div>

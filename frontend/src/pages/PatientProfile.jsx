@@ -779,7 +779,6 @@ const styles = {
   editBtn: { background: "var(--color-primary)", color: "#fff", border: "none", padding: "10px 18px", borderRadius: "var(--radius-sm)", fontWeight: 700, fontSize: 13, cursor: "pointer" },
   cancelBtn: { background: "none", border: "1px solid var(--color-border)", padding: "10px 16px", borderRadius: "var(--radius-sm)", fontWeight: 600, fontSize: 13, cursor: "pointer" },
   saveBtn: { background: "var(--color-primary)", color: "#fff", border: "none", padding: "10px 18px", borderRadius: "var(--radius-sm)", fontWeight: 700, fontSize: 13, cursor: "pointer" },
-  archivedBadge: { fontSize: 12, fontWeight: 700, padding: "6px 12px", borderRadius: 999, background: "#F1F1EE", color: "var(--color-text-muted)" },
   layout: { display: "flex", gap: 20, alignItems: "flex-start" },
   sideNav: {
     width: 220, flexShrink: 0, background: "var(--color-surface)", border: "1px solid var(--color-border)",

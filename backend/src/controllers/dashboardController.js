@@ -412,14 +412,17 @@ export async function getHimStaffStats(req, res) {
     );
 
     const [recentPatientUpdates] = await pool.query(
-      `SELECT id, full_name, enrollment_status, updated_at
+      `SELECT id, full_name, photo_url, enrollment_status, updated_at
        FROM patients WHERE is_archived = FALSE
        ORDER BY updated_at DESC LIMIT 5`
     );
 
     const [recentCertificates] = await pool.query(
-      `SELECT id, patient_name, certificate_type, issued_at
-       FROM certificates ORDER BY issued_at DESC LIMIT 5`
+      `SELECT c.id, c.patient_id, c.patient_name, c.certificate_type, c.issued_at,
+              p.photo_url AS patient_photo_url
+       FROM certificates c
+       LEFT JOIN patients p ON p.id = c.patient_id
+       ORDER BY c.issued_at DESC LIMIT 5`
     );
 
     const [recentActivity] = await pool.query(

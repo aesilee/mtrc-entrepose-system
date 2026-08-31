@@ -265,7 +265,7 @@ export default function PatientProfile() {
   const isMergedSection = PROFILE_SECTIONS.some((s) => s.key === activeSection);
 
   return (
-    <AppShell title={patient.full_name} description={`Patient ID: ${patient.patient_code}`}>
+    <AppShell title="Patient Profile" description="View and manage this patient's personal, admission, and rehabilitation records.">
       <div style={styles.headerCard}>
         <div style={styles.headerLeft}>
           <div style={styles.avatarWrap}>
@@ -287,7 +287,7 @@ export default function PatientProfile() {
           </div>
         </div>
                 <div style={styles.headerRight}>
-          {patient.is_archived && <span style={styles.archivedBadge}>Archived</span>}
+          {!!patient.is_archived && <span style={styles.archivedBadge}>Archived</span>}
           <span style={{ ...styles.statusBadge, background: statusStyle.bg, color: statusStyle.color }}>
             {patient.enrollment_status}
           </span>

@@ -65,8 +65,8 @@ export async function getCaseManagerStats(req, res) {
     );
 
     const [patientsNeedingAttention] = await pool.query(
-      `SELECT patient_id, full_name, issue, issue_date FROM (
-         SELECT p.id AS patient_id, p.full_name,
+      `SELECT patient_id, full_name, photo_url, issue, issue_date FROM (
+         SELECT p.id AS patient_id, p.full_name, p.photo_url,
                 'Missed Session' AS issue, a.session_date AS issue_date
          FROM attendance a
          JOIN patients p ON p.id = a.patient_id
@@ -75,7 +75,7 @@ export async function getCaseManagerStats(req, res) {
            AND a.status = 'absent'
            AND a.session_date >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)
          UNION
-         SELECT p.id, p.full_name,
+         SELECT p.id, p.full_name, p.photo_url,
                 'Follow-up Required' AS issue, f.due_date AS issue_date
          FROM follow_ups f
          JOIN patients p ON p.id = f.patient_id
@@ -83,7 +83,7 @@ export async function getCaseManagerStats(req, res) {
            AND f.status = 'pending'
            AND p.is_archived = FALSE
          UNION
-         SELECT p.id, p.full_name,
+         SELECT p.id, p.full_name, p.photo_url,
                 'Progress Overdue' AS issue, pn.next_follow_up_date AS issue_date
          FROM progress_notes pn
          JOIN patients p ON p.id = pn.patient_id
@@ -115,7 +115,7 @@ export async function getCaseManagerStats(req, res) {
     );
 
     const [recentPatients] = await pool.query(
-      `SELECT p.id, p.patient_code, p.full_name, p.enrollment_status,
+      `SELECT p.id, p.patient_code, p.full_name, p.photo_url, p.enrollment_status,
               p.program_phase, pr.name AS program_name,
               GREATEST(
                 COALESCE(p.updated_at, p.created_at),
@@ -134,7 +134,7 @@ export async function getCaseManagerStats(req, res) {
 
     const [recentProgressNotes] = await pool.query(
       `SELECT pn.id, pn.session_type, pn.note_type, pn.created_at, pn.updated_at,
-              p.id AS patient_id, p.full_name AS patient_name
+              p.id AS patient_id, p.full_name AS patient_name, p.photo_url AS patient_photo_url
        FROM progress_notes pn
        JOIN patients p ON p.id = pn.patient_id
        WHERE p.assigned_case_manager_id = ?

@@ -19,6 +19,23 @@ const STATUS_COLORS = {
   transferred: { bg: "#EDEAFB", color: "#5B3EC9" },
 };
 
+function getInitials(name) {
+  return String(name || "")
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0])
+    .join("")
+    .toUpperCase() || "—";
+}
+
+function RowAvatar({ name, photoUrl }) {
+  if (photoUrl) {
+    return <img src={photoUrl} alt={name} style={{ ...styles.rowAvatar, objectFit: "cover" }} />;
+  }
+  return <span style={styles.rowAvatar}>{getInitials(name)}</span>;
+}
+
 export default function Patients() {
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -217,6 +234,17 @@ export default function Patients() {
 
         <div style={{ ...styles.tableCard, flex: 1, minHeight: 0 }}>
           <table style={styles.table}>
+            <colgroup>
+              <col style={{ width: 150 }} />
+              <col style={{ width: 220 }} />
+              <col style={{ width: 90 }} />
+              <col style={{ width: 140 }} />
+              <col style={{ width: 140 }} />
+              <col style={{ width: 150 }} />
+              <col style={{ width: 100 }} />
+              <col style={{ width: 130 }} />
+              <col style={{ width: 90 }} />
+            </colgroup>
             <thead>
               <tr>
                 <th style={styles.th}>Patient ID</th>
@@ -227,7 +255,7 @@ export default function Patients() {
                 <th style={styles.th}>Case Manager</th>
                 <th style={styles.th}>Status</th>
                 <th style={styles.th}>Attendance</th>
-                <th style={styles.th}></th>
+                <th style={{ ...styles.th, ...styles.actionsTh }}>Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -254,8 +282,13 @@ export default function Patients() {
                   const statusStyle = STATUS_COLORS[p.enrollment_status] || STATUS_COLORS.pending;
                   return (
                     <tr key={p.id} style={styles.row} onClick={() => navigate(`/patients/${p.id}`)}>
-                      <td style={styles.td}>{p.patient_code}</td>
-                      <td style={{ ...styles.td, fontWeight: 600 }}>{p.full_name}</td>
+                      <td style={{ ...styles.td, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{p.patient_code}</td>
+                      <td style={{ ...styles.td, fontWeight: 600 }}>
+                        <span style={styles.nameCell}>
+                          <RowAvatar name={p.full_name} photoUrl={p.photo_url} />
+                          <span>{p.full_name}</span>
+                        </span>
+                      </td>
                       <td style={{ ...styles.td, textTransform: "capitalize" }}>{p.gender}</td>
                       <td style={styles.td}>{p.municipality || "—"}</td>
                       <td style={styles.td}>{p.admission_date ? p.admission_date.slice(0, 10) : "—"}</td>
@@ -266,7 +299,7 @@ export default function Patients() {
                         </span>
                       </td>
                       <td style={styles.td}>{p.attendance_rate !== null ? `${p.attendance_rate}%` : "—"}</td>
-                      <td style={styles.td} onClick={(e) => e.stopPropagation()}>
+                      <td style={{ ...styles.td, ...styles.actionsTd }} onClick={(e) => e.stopPropagation()}>
                         <RowMenu
                           patientId={p.id}
                           isOpen={openMenuId === p.id}
@@ -496,6 +529,22 @@ const styles = {
     color: "var(--color-text)",
     wordBreak: "break-word",
     verticalAlign: "top",
+  },
+  actionsTh: { padding: "12px 8px", textAlign: "center" },
+  actionsTd: { padding: "8px", textAlign: "center" },
+  nameCell: { display: "flex", alignItems: "center", gap: 8 },
+  rowAvatar: {
+    width: 26,
+    height: 26,
+    borderRadius: "50%",
+    background: "var(--color-primary-tint)",
+    color: "var(--color-primary-dark)",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    fontSize: 10,
+    fontWeight: 800,
+    flexShrink: 0,
   },
   emptyCell: { padding: 32, textAlign: "center", color: "var(--color-text-muted)" },
   statusBadge: {

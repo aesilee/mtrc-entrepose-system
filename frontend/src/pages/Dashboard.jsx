@@ -523,6 +523,13 @@ function getInitials(name) {
     .toUpperCase() || "—";
 }
 
+function PatientAvatar({ name, photoUrl, style }) {
+  if (photoUrl) {
+    return <img src={photoUrl} alt={name} style={{ ...style, objectFit: "cover" }} />;
+  }
+  return <span style={style}>{getInitials(name)}</span>;
+}
+
 function CaseManagerDashboard() {
   const navigate = useNavigate();
   const { isMobile, isTablet } = useViewport();
@@ -630,8 +637,24 @@ function CaseManagerDashboard() {
 
       <div style={{
         ...cmStyles.gridRow,
-        gridTemplateColumns: isCompact ? "1fr" : "1.2fr 1fr",
+        gridTemplateColumns: isCompact ? "1fr" : "0.85fr 1.15fr 1fr",
       }}>
+        <CmCard title="Quick Actions" height={primaryPanelHeight}>
+          <div style={{
+            ...cmStyles.quickActionsGrid,
+            gridTemplateColumns: "1fr",
+            gridTemplateRows: "repeat(4, 1fr)",
+            height: "100%",
+          }}>
+            {quickActions.map((action) => (
+              <button key={action.key} type="button" style={cmStyles.quickActionBtn} onClick={action.onClick}>
+                <span style={cmStyles.quickActionIcon}>{action.icon}</span>
+                <span>{action.label}</span>
+              </button>
+            ))}
+          </div>
+        </CmCard>
+
         <CmCard
           title="Patients Needing Attention"
           height={primaryPanelHeight}
@@ -649,7 +672,7 @@ function CaseManagerDashboard() {
                   style={cmStyles.attentionRow}
                   onClick={() => navigate(`/patients/${p.patient_id}`)}
                 >
-                  <span style={cmStyles.patientAvatar}>{getInitials(p.full_name)}</span>
+                  <PatientAvatar name={p.full_name} photoUrl={p.photo_url} style={cmStyles.patientAvatar} />
                   <span style={cmStyles.rowMain}>{p.full_name}</span>
                   <span style={cmStyles.issueBadge}>{p.issue}</span>
                   <span aria-hidden="true" style={cmStyles.rowChevron}>›</span>
@@ -755,7 +778,7 @@ function CaseManagerDashboard() {
                       >
                         {isMobile ? (
                           <>
-                            <span style={cmStyles.patientAvatar}>{getInitials(patient.full_name)}</span>
+                            <PatientAvatar name={patient.full_name} photoUrl={patient.photo_url} style={cmStyles.patientAvatar} />
                             <span style={cmStyles.patientIdentity}>
                               <span style={cmStyles.rowMain}>{patient.full_name}</span>
                               <span style={cmStyles.patientMeta}>
@@ -772,7 +795,7 @@ function CaseManagerDashboard() {
                         ) : (
                           <>
                             <span style={cmStyles.patientCell}>
-                              <span style={cmStyles.patientAvatar}>{getInitials(patient.full_name)}</span>
+                              <PatientAvatar name={patient.full_name} photoUrl={patient.photo_url} style={cmStyles.patientAvatar} />
                               <span style={cmStyles.patientIdentity}>
                                 <span style={cmStyles.rowMain}>{patient.full_name}</span>
                                 <span style={cmStyles.patientMeta}>{patient.patient_code}</span>
@@ -810,7 +833,7 @@ function CaseManagerDashboard() {
                   style={cmStyles.progressNoteRow}
                   onClick={() => navigate(`/patients/${note.patient_id}`)}
                 >
-                  <span style={cmStyles.patientAvatar}>{getInitials(note.patient_name)}</span>
+                  <PatientAvatar name={note.patient_name} photoUrl={note.patient_photo_url} style={cmStyles.patientAvatar} />
                   <span style={cmStyles.progressNoteContent}>
                     <span style={cmStyles.progressNotePatient}>{note.patient_name}</span>
                     <span style={cmStyles.progressNoteMeta}>{note.session_type || note.note_type || "Progress note"}</span>
@@ -878,18 +901,6 @@ function CaseManagerDashboard() {
         </CmCard>
       </div>
 
-      <section aria-label="Case manager quick actions" style={cmStyles.quickActionsCard}>
-        <div style={cmStyles.quickActionsTitle}>Quick Actions</div>
-        <div style={{ ...cmStyles.quickActionsGrid, gridTemplateColumns: `repeat(${isCompact ? 2 : 4}, minmax(0, 1fr))` }}>
-          {quickActions.map((action) => (
-            <button key={action.key} type="button" style={cmStyles.quickActionBtn} onClick={action.onClick}>
-              <span style={cmStyles.quickActionIcon}>{action.icon}</span>
-              <span>{action.label}</span>
-            </button>
-          ))}
-        </div>
-      </section>
-
       {noteModalOpen && (
         <ProgressNoteModal
           onClose={() => setNoteModalOpen(false)}
@@ -918,7 +929,7 @@ function CmCard({ title, span = 1, maxSpan, center, height, highlight, headerAct
       gridColumn: `span ${effectiveSpan}`,
       height,
       overflow: "hidden",
-      borderColor: highlight ? "var(--color-primary)" : "var(--color-border)",
+      borderColor: highlight ? "var(--color-primary)" : "var(--color-border)"
     }}>
       <div style={cmStyles.cardHeader}>
         <div style={cmStyles.cardTitle}>{title}</div>
@@ -1236,7 +1247,7 @@ function AdmittingDashboard() {
                     style={apStyles.pendingRow}
                     onClick={() => navigate(`/patients/${patient.id}`)}
                   >
-                    <span style={apStyles.pendingAvatar}>{getInitials(patient.full_name)}</span>
+                    <PatientAvatar name={patient.full_name} photoUrl={patient.photo_url} style={apStyles.pendingAvatar} />
                     <span style={apStyles.pendingIdentity}>
                       <span style={apStyles.pendingName}>{patient.full_name}</span>
                       <span style={apStyles.pendingMeta}>
@@ -1841,7 +1852,7 @@ const cmStyles = {
     justifyContent: "center",
     gap: 5,
     minWidth: 0,
-    minHeight: 54,
+    minHeight: 0,
     padding: "7px 8px",
     background: "var(--color-primary-tint)",
     border: "none",

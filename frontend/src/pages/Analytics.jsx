@@ -104,7 +104,7 @@ export default function Analytics() {
                   <BarChartV data={overview.attendanceByCaseManager} />
                 )}
               </Card>
-              <Card title="Recent Statistics" span={2} maxSpan={gridCols} isMobile={isCompact}>
+              <Card title="Recent Statistics" span={2} maxSpan={gridCols} isMobile={isCompact} noScroll>
                 <div style={{ ...styles.statsRow, padding: "4px 0" }}>
                   <StatBlock label="Highest Attendance" value={overview.recentStats.highestAttendance} />
                   <StatBlock label="Most Common Age Group" value={overview.recentStats.mostCommonAge} />
@@ -182,19 +182,20 @@ function TimeSeriesCard({ title, endpoint, color, suffix = "", span, maxSpan }) 
   );
 }
 
-function Card({ title, span, center, children, maxSpan, isMobile }) {
+function Card({ title, span, center, children, maxSpan, isMobile, noScroll, centerBlock }) {
   const effectiveSpan = maxSpan ? Math.min(span, maxSpan) : span;
   return (
     <div
       style={{
         ...styles.card,
         gridColumn: `span ${effectiveSpan}`,
-        overflow: isMobile ? "visible" : styles.card.overflow,
+        overflow: noScroll ? "hidden" : (isMobile ? "visible" : styles.card.overflow),
         minHeight: isMobile ? "auto" : styles.card.minHeight,
+        justifyContent: centerBlock ? "center" : "flex-start",
       }}
     >
       <div style={styles.cardTitle}>{title}</div>
-      <div style={{ display: "flex", justifyContent: center ? "center" : "flex-start", alignItems: "center", flex: 1 }}>
+      <div style={{ display: "flex", justifyContent: center ? "center" : "flex-start", alignItems: "center", flex: centerBlock ? "none" : 1 }}>
         {children}
       </div>
     </div>
@@ -233,7 +234,7 @@ const styles = {
 
   statsRow: { display: "flex", gap: 14, width: "100%", alignItems: "stretch" },
   statBlock: {
-    background: "#F8F7FF", borderRadius: 14, padding: "16px 18px", flex: 1,
+    background: "#F8F7FF", borderRadius: 14, padding: "10px 18px", flex: 1,
     boxSizing: "border-box", display: "flex", flexDirection: "column", justifyContent: "center", gap: 6,
   },
   statBlockValue: { fontSize: 14, fontWeight: 800, color: "#7C5CFC", lineHeight: 1.35 },

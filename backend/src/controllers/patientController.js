@@ -21,7 +21,7 @@ export async function listPatients(req, res) {
   }
 
   const [rows] = await pool.query(
-    `SELECT p.id, p.patient_code, p.full_name, p.gender, p.municipality,
+    `SELECT p.id, p.patient_code, p.full_name, p.photo_url, p.gender, p.municipality,
             p.admission_date, p.enrollment_status, p.is_archived,
             p.assigned_case_manager_id AS case_manager_id,
             u.full_name AS case_manager_name,

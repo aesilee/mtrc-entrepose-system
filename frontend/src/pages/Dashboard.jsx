@@ -138,19 +138,19 @@ function QuickActionsCard({ title = "Quick Actions", actions, seeAllPath, naviga
 }
 
 const quickActionStyles = {
-  card: { background: "#fff", borderRadius: 16, padding: 16, boxShadow: "0 2px 10px rgba(20,20,40,0.05)", boxSizing: "border-box", width: "100%" },
-  header: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 },
+  card: { background: "#fff", borderRadius: 16, padding: 14, boxShadow: "0 2px 10px rgba(20,20,40,0.05)", boxSizing: "border-box", width: "100%" },
+  header: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 },
   title: { fontSize: 14, fontWeight: 700, color: "var(--color-text)" },
   seeAll: { fontSize: 12.5, fontWeight: 700, color: "var(--color-primary-dark)", background: "none", border: "none", cursor: "pointer", padding: 0 },
-  grid: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 12 },
+  grid: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 8 },
   item: {
-    display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 8, padding: 14,
+    display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 4, padding: "10px 12px",
     background: "#fff", border: "1px solid var(--color-border)", borderRadius: 12,
     cursor: "pointer", textAlign: "left", minWidth: 0,
   },
-  icon: { width: 22, height: 22, flexShrink: 0 },
+  icon: { width: 18, height: 18, flexShrink: 0 },
   itemTitle: { fontSize: 13, fontWeight: 700, color: "var(--color-text)" },
-  itemDesc: { fontSize: 11.5, color: "var(--color-text-muted)", lineHeight: 1.4 },
+  itemDesc: { fontSize: 11.5, color: "var(--color-text-muted)", lineHeight: 1.3 },
 };
 
 function IctAdminDashboard() {
@@ -1199,66 +1199,104 @@ function AdmittingDashboard() {
         ))}
       </div>
 
-      {/* Row 2: Quick Actions (left) + Recent Admissions (right) */}
-      <div style={{ ...apStyles.gridRow, gridTemplateColumns: isCompact ? "1fr" : "0.85fr 1.35fr", alignItems: "start" }}>
+      {/* Row 2: Quick Actions (left) + Pending Registrations (right) */}
+      <div style={{ ...apStyles.gridRow, gridTemplateColumns: isCompact ? "1fr" : "0.85fr 1.35fr" }}>
         <QuickActionsCard actions={quickActions} navigate={navigate} cols={1} />
 
-        {/* Recent Admissions */}
-        <div style={{ ...apStyles.card, height: quickActionsPanelHeight, overflow: "hidden" }}>
+        {/* Pending Registrations */}
+        <div style={{ ...apStyles.card, height: "100%", overflow: "hidden" }}>
           <div style={apStyles.cardHeader}>
-            <span style={apStyles.cardTitle}>Recent Admissions</span>
-            <button
-              type="button"
-              style={apStyles.linkBtn}
-              onClick={() => navigate("/patients")}
-            >
-              View all
-            </button>
+            <span style={apStyles.cardTitle}>Pending Registrations</span>
+            {!!stats?.pendingRegistrationRecords?.length && (
+              <span style={apStyles.warnBadge}>{stats.pendingRegistrations} pending</span>
+            )}
           </div>
 
-          {!stats?.recentAdmissions?.length ? (
-            <div style={apStyles.emptyText}>No patients registered yet.</div>
+          {!stats?.pendingRegistrationRecords?.length ? (
+            <div style={apStyles.emptyText}>No registrations are waiting for completion.</div>
           ) : (
-            <div style={apStyles.tableWrap}>
-              <table style={apStyles.table}>
-                <thead>
-                  <tr>
-                    <th style={apStyles.th}>Name</th>
-                    <th style={apStyles.th}>ID</th>
-                    <th style={apStyles.th}>Admission Date</th>
-                    <th style={apStyles.th}>Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {stats.recentAdmissions.map((p) => {
-                    const sc = STATUS_BADGE_COLORS[p.enrollment_status] || STATUS_BADGE_COLORS.pending;
-                    return (
-                      <tr
-                        key={p.id}
-                        style={apStyles.tr}
-                        onClick={() => navigate(`/patients/${p.id}`)}
-                      >
-                        <td style={apStyles.td}>{p.full_name}</td>
-                        <td style={{ ...apStyles.td, color: "var(--color-text-muted)", fontSize: 12 }}>{p.patient_code}</td>
-                        <td style={apStyles.td}>{fmtDate(p.admission_date || p.created_at)}</td>
-                        <td style={apStyles.td}>
-                          <span style={{ ...apStyles.statusBadge, background: sc.bg, color: sc.color }}>
-                            {p.enrollment_status}
-                          </span>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+            <div style={{ ...apStyles.pendingList, ...apStyles.scrollArea, ...apStyles.boxList }}>
+              {stats.pendingRegistrationRecords.map((patient) => (
+                <button
+                  key={patient.id}
+                  type="button"
+                  style={apStyles.pendingRow}
+                  onClick={() => navigate(`/patients/${patient.id}`)}
+                >
+                  <PatientAvatar name={patient.full_name} photoUrl={patient.photo_url} style={apStyles.pendingAvatar} />
+                  <span style={apStyles.pendingIdentity}>
+                    <span style={apStyles.pendingName}>{patient.full_name}</span>
+                    <span style={apStyles.pendingMeta}>
+                      {patient.patient_code} · {fmtShortDate(patient.admission_date || patient.created_at)}
+                    </span>
+                  </span>
+                  <span aria-hidden="true" style={apStyles.pendingChevron}>›</span>
+                </button>
+              ))}
             </div>
           )}
         </div>
       </div>
 
-      <div style={apStyles.compactInsights}>
-        {/* Row 3: Incomplete Records (left) + Pending Registrations (right) */}
-        <div style={{ ...apStyles.gridRow, gridTemplateColumns: isCompact ? "1fr" : "minmax(0, 1fr) minmax(0, 1fr)" }}>
+            <div style={apStyles.compactInsights}>
+        {/* Row 3: Recent Admissions (left) + Incomplete Records (right) */}
+        <div style={{ ...apStyles.gridRow, gridTemplateColumns: isCompact ? "1fr" : "1.6fr 1fr" }}>
+          <div style={{ ...apStyles.card, height: insightPanelHeight, overflow: "hidden" }}>
+            <div style={apStyles.cardHeader}>
+              <span style={apStyles.cardTitle}>Recent Admissions</span>
+              <button
+                type="button"
+                style={apStyles.linkBtn}
+                onClick={() => navigate("/patients")}
+              >
+                View all
+              </button>
+            </div>
+
+            {!stats?.recentAdmissions?.length ? (
+              <div style={apStyles.emptyText}>No patients registered yet.</div>
+            ) : (
+              <div style={{ ...apStyles.tableWrap, ...apStyles.boxList }}>
+                <table style={apStyles.table}>
+                  <thead>
+                    <tr>
+                      <th style={apStyles.th}>Name</th>
+                      <th style={apStyles.th}>ID</th>
+                      <th style={apStyles.th}>Admission Date</th>
+                      <th style={apStyles.th}>Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {stats.recentAdmissions.map((p) => {
+                      const sc = STATUS_BADGE_COLORS[p.enrollment_status] || STATUS_BADGE_COLORS.pending;
+                      return (
+                        <tr
+                          key={p.id}
+                          style={apStyles.tr}
+                          onClick={() => navigate(`/patients/${p.id}`)}
+                        >
+                          <td style={apStyles.td}>
+                            <div style={apStyles.tableNameCell}>
+                              <PatientAvatar name={p.full_name} photoUrl={p.photo_url} style={apStyles.tableAvatar} />
+                              <span>{p.full_name}</span>
+                            </div>
+                          </td>
+                          <td style={{ ...apStyles.td, color: "var(--color-text-muted)", fontSize: 12 }}>{p.patient_code}</td>
+                          <td style={apStyles.td}>{fmtDate(p.admission_date || p.created_at)}</td>
+                          <td style={apStyles.td}>
+                            <span style={{ ...apStyles.statusBadge, background: sc.bg, color: sc.color }}>
+                              {p.enrollment_status}
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+
           <div style={{ ...apStyles.card, height: insightPanelHeight, overflow: "hidden" }}>
             <div style={apStyles.cardHeader}>
               <span style={apStyles.cardTitle}>Incomplete Records</span>
@@ -1270,7 +1308,7 @@ function AdmittingDashboard() {
             {!stats?.incompleteRecords?.length ? (
               <div style={apStyles.emptyText}>All registered patients have complete records.</div>
             ) : (
-              <div style={{ ...apStyles.list, ...apStyles.scrollArea }}>
+              <div style={{ ...apStyles.list, ...apStyles.scrollArea, ...apStyles.boxList }}>
                 {stats.incompleteRecords.map((p) => (
                   <button
                     key={p.id}
@@ -1278,44 +1316,12 @@ function AdmittingDashboard() {
                     style={apStyles.incompleteRow}
                     onClick={() => navigate(`/patients/${p.id}`)}
                   >
+                    <PatientAvatar name={p.full_name} photoUrl={p.photo_url} style={apStyles.incompleteAvatar} />
                     <div style={apStyles.incompletePatient}>
                       <div style={apStyles.incompleteRowName}>{p.full_name}</div>
                       <div style={apStyles.incompleteRowCode}>{p.patient_code}</div>
                     </div>
                     <span style={apStyles.missingTag} title={p.missing_info}>{p.missing_info}</span>
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-
-          <div style={{ ...apStyles.card, height: insightPanelHeight, overflow: "hidden" }}>
-            <div style={apStyles.cardHeader}>
-              <span style={apStyles.cardTitle}>Pending Registrations</span>
-              {!!stats?.pendingRegistrationRecords?.length && (
-                <span style={apStyles.warnBadge}>{stats.pendingRegistrations} pending</span>
-              )}
-            </div>
-
-            {!stats?.pendingRegistrationRecords?.length ? (
-              <div style={apStyles.emptyText}>No registrations are waiting for completion.</div>
-            ) : (
-              <div style={{ ...apStyles.pendingList, ...apStyles.scrollArea }}>
-                {stats.pendingRegistrationRecords.map((patient) => (
-                  <button
-                    key={patient.id}
-                    type="button"
-                    style={apStyles.pendingRow}
-                    onClick={() => navigate(`/patients/${patient.id}`)}
-                  >
-                    <PatientAvatar name={patient.full_name} photoUrl={patient.photo_url} style={apStyles.pendingAvatar} />
-                    <span style={apStyles.pendingIdentity}>
-                      <span style={apStyles.pendingName}>{patient.full_name}</span>
-                      <span style={apStyles.pendingMeta}>
-                        {patient.patient_code} · {fmtShortDate(patient.admission_date || patient.created_at)}
-                      </span>
-                    </span>
-                    <span aria-hidden="true" style={apStyles.pendingChevron}>›</span>
                   </button>
                 ))}
               </div>
@@ -1327,7 +1333,7 @@ function AdmittingDashboard() {
         <div style={{ ...apStyles.gridRow, gridTemplateColumns: isCompact ? "1fr" : "minmax(0, 1fr) minmax(0, 1fr)" }}>
           <div style={{ ...apStyles.card, height: activityPanelHeight, overflow: "hidden" }}>
             <div style={apStyles.cardTitle}>Registration Process</div>
-            <div style={{ ...apStyles.processContent, flexDirection: "row", alignItems: "center", justifyContent: "center", height: "100%", gap: 24 }}>
+            <div style={{ ...apStyles.processContent, ...apStyles.boxList, flexDirection: "row", alignItems: "center", justifyContent: "center", height: "100%", gap: 24, boxSizing: "border-box" }}>
               <div
                 style={{ ...apStyles.donut, width: 136, height: 136, background: processChart, flexShrink: 0 }}
                 aria-label="Registration process chart"
@@ -1355,7 +1361,7 @@ function AdmittingDashboard() {
           {!stats?.todayAdmissionActivity?.length ? (
             <div style={apStyles.emptyText}>No admission activity recorded today.</div>
           ) : (
-            <div style={{ ...apStyles.timeline, ...apStyles.scrollArea }}>
+            <div style={{ ...apStyles.timeline, ...apStyles.scrollArea, ...apStyles.boxList }}>
               {stats.todayAdmissionActivity.map((activity, index) => (
                 <button
                   key={activity.activity_id}
@@ -1381,7 +1387,7 @@ function AdmittingDashboard() {
           </div>
         </div>
       </div>
-    </div>
+  </div>
   );
 }
 
@@ -2006,6 +2012,7 @@ const apStyles = {
   emptyText: { flex: 1, display: "flex", alignItems: "center", justifyContent: "center", color: "var(--color-text-muted)", fontSize: 13, textAlign: "center", padding: "12px 0" },
   list: { display: "flex", flexDirection: "column", gap: 0, width: "100%", minWidth: 0 },
   scrollArea: { flex: 1, minHeight: 0, overflowY: "auto", paddingRight: 6 },
+  boxList: { border: "1px solid var(--color-border)", borderRadius: 10, padding: 12 },
   errorBanner: { display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, padding: "10px 14px", background: "#FDE2E2", color: "#B3261E", borderRadius: "var(--radius-sm)", fontSize: 13 },
   retryBtn: { background: "none", border: "none", color: "inherit", fontWeight: 700, cursor: "pointer" },
   kpiCard: {
@@ -2037,6 +2044,8 @@ const apStyles = {
 
   tableWrap: { flex: 1, minHeight: 0, overflow: "auto", width: "100%" },
   table: { width: "100%", minWidth: 620, borderCollapse: "collapse", fontSize: 13 },
+  tableNameCell: { display: "flex", alignItems: "center", gap: 8, minWidth: 0 },
+  tableAvatar: { width: 26, height: 26, borderRadius: "50%", background: "var(--color-primary-tint)", color: "var(--color-primary-dark)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 700, flexShrink: 0 },
   th: {
     textAlign: "left",
     padding: "6px 10px",
@@ -2096,6 +2105,7 @@ const apStyles = {
     flexShrink: 0,
     color: "inherit",
   },
+  incompleteAvatar: { width: 32, height: 32, borderRadius: "50%", background: "var(--color-primary-tint)", color: "var(--color-primary-dark)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 700, flexShrink: 0 },
   incompletePatient: { minWidth: 0, flex: 1 },
   incompleteRowName: { fontSize: 13, fontWeight: 600, color: "var(--color-text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
   incompleteRowCode: { fontSize: 11, color: "var(--color-text-muted)", marginTop: 2 },

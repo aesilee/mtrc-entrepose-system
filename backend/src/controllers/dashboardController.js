@@ -256,7 +256,7 @@ export async function getAdmittingStats(req, res) {
 
     // Recent admissions, newest first, capped at 8
     const [recentAdmissions] = await pool.query(
-      `SELECT p.id, p.patient_code, p.full_name, p.admission_date, p.enrollment_status, p.municipality,
+      `SELECT p.id, p.patient_code, p.full_name, p.photo_url, p.admission_date, p.enrollment_status, p.municipality,
               p.created_at
        FROM patients p
        WHERE p.is_archived = FALSE
@@ -266,7 +266,7 @@ export async function getAdmittingStats(req, res) {
 
     // Patients that may still have missing info (no emergency contact or no program assigned)
     const [incompleteRecords] = await pool.query(
-      `SELECT id, full_name, patient_code,
+      `SELECT id, full_name, patient_code, photo_url,
               CASE
                 WHEN emergency_contact_name IS NULL OR emergency_contact_name = '' THEN 'Missing Emergency Contact'
                 WHEN program_id IS NULL THEN 'No Program Assigned'
@@ -286,7 +286,7 @@ export async function getAdmittingStats(req, res) {
     );
 
     const [pendingRegistrationRecords] = await pool.query(
-      `SELECT id, full_name, patient_code, admission_date, enrollment_status, created_at
+      `SELECT id, full_name, patient_code, photo_url, admission_date, enrollment_status, created_at
        FROM patients
        WHERE is_archived = FALSE
          AND enrollment_status = 'pending'

@@ -68,6 +68,41 @@ a {
   color: var(--color-primary-dark);
 }
 
+.registration-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.registration-field--wide {
+  grid-column: span 2;
+}
+
+.registration-field--full {
+  grid-column: 1 / -1;
+}
+
+@media (max-width: 1300px) {
+  .registration-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 960px) {
+  .registration-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .registration-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .registration-field--wide,
+  .registration-field--full {
+    grid-column: span 1;
+  }
+}
+
 @media print {
   .no-print {
     display: none !important;

@@ -1,6 +1,34 @@
 import pool from "../config/db.js";
 import { notifyIctAdmins, notifyRoles, notifyUser } from "../utils/notify.js";
 
+function cleanText(value) {
+  return typeof value === "string" ? value.trim() : value;
+}
+
+function validPhone(value) {
+  const digits = String(value || "").replace(/\D/g, "");
+  return digits.length >= 7 && digits.length <= 15;
+}
+
+function ageFromBirthdate(birthdate) {
+  const [year, month, day] = String(birthdate || "").split("-").map(Number);
+  if (!year || !month || !day) return null;
+
+  const parsed = new Date(Date.UTC(year, month - 1, day));
+  if (
+    parsed.getUTCFullYear() !== year
+    || parsed.getUTCMonth() + 1 !== month
+    || parsed.getUTCDate() !== day
+  ) return null;
+
+  const today = new Date();
+  let age = today.getFullYear() - year;
+  const birthdayHasPassed = today.getMonth() + 1 > month
+    || (today.getMonth() + 1 === month && today.getDate() >= day);
+  if (!birthdayHasPassed) age -= 1;
+  return age;
+}
+
 async function generatePatientCode() {
   const year = new Date().getFullYear();
   const [[{ count }]] = await pool.query(
@@ -46,14 +74,37 @@ export async function updatePatient(req, res) {
   const { id } = req.params;
   const fields = req.body;
 
+  if (fields.emergencyContactMethod !== undefined && (cleanText(fields.emergencyContactMethod) || "").length > 30) {
+    return res.status(400).json({ message: "Preferred contact method must be 30 characters or fewer." });
+  }
+
+  const emergencyContactEmail = cleanText(fields.emergencyContactEmail) || "";
+  if (emergencyContactEmail.length > 255) {
+    return res.status(400).json({ message: "Emergency contact email must be 255 characters or fewer." });
+  }
+  if (emergencyContactEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emergencyContactEmail)) {
+    return res.status(400).json({ message: "Enter a valid emergency contact email address." });
+  }
+  if (fields.emergencyContactMethod === "email" && !emergencyContactEmail) {
+    return res.status(400).json({ message: "Emergency contact email is required when Email is the preferred contact method." });
+  }
+
   const columnMap = {
-    firstName: "first_name", middleName: "middle_name", lastName: "last_name",
+    firstName: "first_name", middleName: "middle_name", lastName: "last_name", suffix: "suffix",
+    preferredName: "preferred_name",
     gender: "gender", birthdate: "birthdate", civilStatus: "civil_status",
+    nationality: "nationality", occupation: "occupation", educationalAttainment: "educational_attainment",
     contactNumber: "contact_number", email: "email", address: "address", municipality: "municipality",
+    province: "province", postalCode: "postal_code",
     photoDataUrl: "photo_url",
     emergencyContactName: "emergency_contact_name",
     emergencyContactRelationship: "emergency_contact_relationship",
     emergencyContactNumber: "emergency_contact_number",
+    emergencyContactEmail: "emergency_contact_email",
+    emergencyContactAddress: "emergency_contact_address",
+    emergencyContactMethod: "emergency_contact_method",
+    guardianName: "guardian_name", guardianRelationship: "guardian_relationship",
+    guardianContactNumber: "guardian_contact_number", guardianAddress: "guardian_address",
     admissionDate: "admission_date", referralSource: "referral_source",
     admissionType: "admission_type", programId: "program_id",
     assignedCaseManagerId: "assigned_case_manager_id", admissionNotes: "admission_notes",
@@ -78,16 +129,17 @@ export async function updatePatient(req, res) {
 
   // Single consolidated pre-fetch query to check current patient state
   const [[current]] = await pool.query(
-    "SELECT first_name, middle_name, last_name, full_name, enrollment_status, assigned_case_manager_id FROM patients WHERE id = ?",
+    "SELECT first_name, middle_name, last_name, suffix, full_name, enrollment_status, assigned_case_manager_id FROM patients WHERE id = ?",
     [id]
   );
 
-  if (fields.firstName || fields.middleName || fields.lastName) {
+  if (["firstName", "middleName", "lastName", "suffix"].some((key) => fields[key] !== undefined)) {
     const fullName = [
       fields.firstName ?? current?.first_name,
       fields.middleName ?? current?.middle_name,
       fields.lastName ?? current?.last_name,
-    ].filter(Boolean).join(" ");
+      fields.suffix ?? current?.suffix,
+    ].map(cleanText).filter(Boolean).join(" ");
     setClauses.push("full_name = ?");
     values.push(fullName);
   }
@@ -226,43 +278,179 @@ export async function getPatientHistory(req, res) {
 
 export async function createPatient(req, res) {
   const {
-    firstName, middleName, lastName, gender, birthdate, civilStatus,
-    contactNumber, email, address, municipality,
+    firstName, middleName, lastName, suffix, preferredName, gender, birthdate, civilStatus,
+    nationality, occupation, educationalAttainment,
+    contactNumber, email, address, municipality, province, postalCode,
     emergencyContactName, emergencyContactRelationship, emergencyContactNumber,
+    emergencyContactEmail, emergencyContactAddress, emergencyContactMethod,
+    guardianName, guardianRelationship, guardianContactNumber, guardianAddress,
     admissionDate, referralSource, admissionType, programId,
     assignedCaseManagerId, admissionNotes,
     caseClassification, initialStatus, programPhase,
     expectedCompletionDate, sessionsRequired,
   } = req.body;
 
-  if (!firstName || !lastName || !gender || !birthdate) {
-    return res.status(400).json({ message: "First name, last name, gender, and birthdate are required." });
+  const normalized = {
+    firstName: cleanText(firstName),
+    middleName: cleanText(middleName),
+    lastName: cleanText(lastName),
+    suffix: cleanText(suffix),
+    preferredName: cleanText(preferredName),
+    gender: cleanText(gender),
+    birthdate: cleanText(birthdate),
+    civilStatus: cleanText(civilStatus) || "single",
+    nationality: cleanText(nationality),
+    occupation: cleanText(occupation),
+    educationalAttainment: cleanText(educationalAttainment),
+    contactNumber: cleanText(contactNumber),
+    email: cleanText(email),
+    address: cleanText(address),
+    municipality: cleanText(municipality),
+    province: cleanText(province),
+    postalCode: cleanText(postalCode),
+    emergencyContactName: cleanText(emergencyContactName),
+    emergencyContactRelationship: cleanText(emergencyContactRelationship),
+    emergencyContactNumber: cleanText(emergencyContactNumber),
+    emergencyContactEmail: cleanText(emergencyContactEmail) || "",
+    emergencyContactAddress: cleanText(emergencyContactAddress),
+    emergencyContactMethod: cleanText(emergencyContactMethod) || "",
+    guardianName: cleanText(guardianName),
+    guardianRelationship: cleanText(guardianRelationship),
+    guardianContactNumber: cleanText(guardianContactNumber),
+    guardianAddress: cleanText(guardianAddress),
+  };
+
+  if (!normalized.firstName || !normalized.lastName || !normalized.gender || !normalized.birthdate) {
+    return res.status(400).json({ message: "First name, last name, sex, and birthdate are required." });
   }
 
-  const fullName = [firstName, middleName, lastName].filter(Boolean).join(" ");
+  if (!normalized.address || !normalized.municipality || !normalized.province) {
+    return res.status(400).json({ message: "Home address, city or municipality, and province are required." });
+  }
+
+  if (!normalized.emergencyContactName || !normalized.emergencyContactRelationship || !normalized.emergencyContactNumber) {
+    return res.status(400).json({ message: "Emergency-contact name, relationship, and contact number are required." });
+  }
+
+  const age = ageFromBirthdate(normalized.birthdate);
+  if (age === null || age < 0 || age > 130) {
+    return res.status(400).json({ message: "Enter a valid birthdate that is not in the future." });
+  }
+
+  if (normalized.contactNumber && !validPhone(normalized.contactNumber)) {
+    return res.status(400).json({ message: "Enter a valid patient mobile number." });
+  }
+
+  if (!validPhone(normalized.emergencyContactNumber)) {
+    return res.status(400).json({ message: "Enter a valid emergency-contact number." });
+  }
+
+  if (normalized.emergencyContactMethod.length > 30) {
+    return res.status(400).json({ message: "Preferred contact method must be 30 characters or fewer." });
+  }
+
+  if (normalized.emergencyContactEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalized.emergencyContactEmail)) {
+    return res.status(400).json({ message: "Enter a valid emergency contact email address." });
+  }
+
+  if (normalized.emergencyContactEmail.length > 255) {
+    return res.status(400).json({ message: "Emergency contact email must be 255 characters or fewer." });
+  }
+
+  if (normalized.emergencyContactMethod === "email" && !normalized.emergencyContactEmail) {
+    return res.status(400).json({ message: "Emergency contact email is required when Email is the preferred contact method." });
+  }
+
+  if (normalized.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalized.email)) {
+    return res.status(400).json({ message: "Enter a valid email address." });
+  }
+
+  if (age < 18) {
+    if (!normalized.guardianName || !normalized.guardianRelationship || !normalized.guardianContactNumber || !normalized.guardianAddress) {
+      return res.status(400).json({ message: "Guardian name, relationship, contact number, and address are required for patients under 18." });
+    }
+  }
+
+  if (normalized.guardianContactNumber && !validPhone(normalized.guardianContactNumber)) {
+    return res.status(400).json({ message: "Enter a valid guardian contact number." });
+  }
+
+  const fullName = [normalized.firstName, normalized.middleName, normalized.lastName, normalized.suffix]
+    .filter(Boolean)
+    .join(" ");
 
   try {
+    const [[existingPatient]] = await pool.query(
+      `SELECT id, patient_code
+       FROM patients
+       WHERE LOWER(TRIM(first_name)) = LOWER(?)
+         AND LOWER(TRIM(COALESCE(middle_name, ''))) = LOWER(?)
+         AND LOWER(TRIM(last_name)) = LOWER(?)
+         AND LOWER(TRIM(COALESCE(suffix, ''))) = LOWER(?)
+         AND birthdate = ?
+       LIMIT 1`,
+      [normalized.firstName, normalized.middleName || "", normalized.lastName, normalized.suffix || "", normalized.birthdate]
+    );
+
+    if (existingPatient) {
+      return res.status(409).json({
+        message: `A patient with the same name and birthdate already exists (${existingPatient.patient_code}).`,
+        existingPatientId: existingPatient.id,
+      });
+    }
+
     const patientCode = await generatePatientCode();
 
+    const record = {
+      patient_code: patientCode,
+      first_name: normalized.firstName,
+      middle_name: normalized.middleName || null,
+      last_name: normalized.lastName,
+      suffix: normalized.suffix || null,
+      full_name: fullName,
+      preferred_name: normalized.preferredName || null,
+      gender: normalized.gender,
+      birthdate: normalized.birthdate,
+      civil_status: normalized.civilStatus,
+      nationality: normalized.nationality || null,
+      occupation: normalized.occupation || null,
+      educational_attainment: normalized.educationalAttainment || null,
+      contact_number: normalized.contactNumber || null,
+      email: normalized.email || null,
+      address: normalized.address,
+      municipality: normalized.municipality,
+      province: normalized.province,
+      postal_code: normalized.postalCode || null,
+      emergency_contact_name: normalized.emergencyContactName,
+      emergency_contact_relationship: normalized.emergencyContactRelationship,
+      emergency_contact_number: normalized.emergencyContactNumber,
+      emergency_contact_email: normalized.emergencyContactEmail || null,
+      emergency_contact_address: normalized.emergencyContactAddress || null,
+      emergency_contact_method: normalized.emergencyContactMethod || null,
+      guardian_name: normalized.guardianName || null,
+      guardian_relationship: normalized.guardianRelationship || null,
+      guardian_contact_number: normalized.guardianContactNumber || null,
+      guardian_address: normalized.guardianAddress || null,
+      admission_date: admissionDate || null,
+      referral_source: referralSource || null,
+      admission_type: admissionType || null,
+      program_id: programId || null,
+      assigned_case_manager_id: assignedCaseManagerId || null,
+      admission_notes: admissionNotes || null,
+      case_classification: caseClassification || null,
+      initial_status: initialStatus || null,
+      current_status: initialStatus || null,
+      program_phase: programPhase || null,
+      expected_completion_date: expectedCompletionDate || null,
+      sessions_required: sessionsRequired || null,
+      registered_by: req.user.id,
+    };
+
+    const columns = Object.keys(record);
+    const placeholders = columns.map(() => "?").join(", ");
     const [result] = await pool.query(
-      `INSERT INTO patients (
-        patient_code, first_name, middle_name, last_name, full_name,
-        gender, birthdate, civil_status, contact_number, email, address, municipality,
-        emergency_contact_name, emergency_contact_relationship, emergency_contact_number,
-        admission_date, referral_source, admission_type, program_id,
-        assigned_case_manager_id, admission_notes,
-        case_classification, initial_status, current_status, program_phase,
-        expected_completion_date, sessions_required, registered_by
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [
-        patientCode, firstName, middleName || null, lastName, fullName,
-        gender, birthdate, civilStatus || "single", contactNumber || null, email || null, address || null, municipality || null,
-        emergencyContactName || null, emergencyContactRelationship || null, emergencyContactNumber || null,
-        admissionDate || null, referralSource || null, admissionType || null, programId || null,
-        assignedCaseManagerId || null, admissionNotes || null,
-        caseClassification || null, initialStatus || null, initialStatus || null, programPhase || null,
-        expectedCompletionDate || null, sessionsRequired || null, req.user.id,
-      ]
+      `INSERT INTO patients (${columns.join(", ")}) VALUES (${placeholders})`,
+      Object.values(record)
     );
 
     await pool.query(
@@ -284,6 +472,9 @@ export async function createPatient(req, res) {
     res.status(201).json({ id: result.insertId, patientCode, message: "Patient registered." });
   } catch (err) {
     console.error(err);
+    if (err.code === "ER_BAD_FIELD_ERROR") {
+      return res.status(500).json({ message: "The patient-registration database migration has not been applied." });
+    }
     res.status(500).json({ message: "Could not register the patient." });
   }
 }

@@ -49,6 +49,26 @@ const STATUS_COLORS = {
   transferred: { bg: "#EDEAFB", color: "#5B3EC9" },
 };
 
+const EDUCATION_OPTIONS = [
+  "Elementary level",
+  "Elementary graduate",
+  "High school level",
+  "High school graduate",
+  "Vocational or technical",
+  "College level",
+  "College graduate",
+  "Postgraduate",
+];
+
+const CONTACT_METHOD_OPTIONS = [
+  { value: "call", label: "Phone call" },
+  { value: "sms", label: "SMS or text message" },
+  { value: "email", label: "Email" },
+  { value: "other", label: "Other" },
+];
+
+const STANDARD_CONTACT_METHODS = new Set(["call", "sms", "email", "other"]);
+
 function calcAge(birthdate) {
   if (!birthdate) return "—";
   const dob = new Date(birthdate);
@@ -195,12 +215,25 @@ export default function PatientProfile() {
   useEffect(loadAll, [id]);
 
   function toFormState(p) {
+    const savedContactMethod = p.emergency_contact_method || "";
+    const customContactMethod = savedContactMethod && !STANDARD_CONTACT_METHODS.has(savedContactMethod)
+      ? savedContactMethod
+      : "";
+
     return {
-      firstName: p.first_name || "", middleName: p.middle_name || "", lastName: p.last_name || "",
+      firstName: p.first_name || "", middleName: p.middle_name || "", lastName: p.last_name || "", suffix: p.suffix || "",
+      preferredName: p.preferred_name || "",
       gender: p.gender || "", birthdate: toInputDate(p.birthdate), civilStatus: p.civil_status || "single",
+      nationality: p.nationality || "", occupation: p.occupation || "", educationalAttainment: p.educational_attainment || "",
       contactNumber: p.contact_number || "", email: p.email || "", address: p.address || "", municipality: p.municipality || "",
+      province: p.province || "", postalCode: p.postal_code || "",
       emergencyContactName: p.emergency_contact_name || "", emergencyContactRelationship: p.emergency_contact_relationship || "",
-      emergencyContactNumber: p.emergency_contact_number || "",
+      emergencyContactNumber: p.emergency_contact_number || "", emergencyContactEmail: p.emergency_contact_email || "",
+      emergencyContactAddress: p.emergency_contact_address || "",
+      emergencyContactMethod: customContactMethod ? "other" : savedContactMethod,
+      emergencyContactMethodOther: customContactMethod,
+      guardianName: p.guardian_name || "", guardianRelationship: p.guardian_relationship || "",
+      guardianContactNumber: p.guardian_contact_number || "", guardianAddress: p.guardian_address || "",
       admissionDate: toInputDate(p.admission_date), referralSource: p.referral_source || "", admissionType: p.admission_type || "",
       programId: p.program_id || "", assignedCaseManagerId: p.assigned_case_manager_id || "",
       admissionNotes: p.admission_notes || "", initialAssessment: p.initial_assessment || "",
@@ -224,9 +257,26 @@ export default function PatientProfile() {
   }
 
   async function handleSave() {
+    if (form.emergencyContactMethod === "other" && !form.emergencyContactMethodOther.trim()) {
+      setToast("Specify the preferred contact method when Other is selected.");
+      return;
+    }
+
+    if (form.emergencyContactMethod === "email" && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.emergencyContactEmail.trim())) {
+      setToast("Enter a valid emergency contact email address.");
+      return;
+    }
+
     setSaving(true);
     try {
-      await api.put(`/patients/${id}`, form);
+      const payload = {
+        ...form,
+        emergencyContactMethod: form.emergencyContactMethod === "other"
+          ? form.emergencyContactMethodOther.trim()
+          : form.emergencyContactMethod,
+      };
+      delete payload.emergencyContactMethodOther;
+      await api.put(`/patients/${id}`, payload);
       loadAll();
       setEditing(false);
     } finally {
@@ -357,17 +407,48 @@ export default function PatientProfile() {
                   <EditField label="First name" editing={editing} value={form.firstName} onChange={(v) => update("firstName", v)} />
                   <EditField label="Middle name" editing={editing} value={form.middleName} onChange={(v) => update("middleName", v)} />
                   <EditField label="Last name" editing={editing} value={form.lastName} onChange={(v) => update("lastName", v)} />
-                  <EditField label="Gender" editing={editing} type="select" options={["male", "female", "other"]} value={form.gender} onChange={(v) => update("gender", v)} />
+                  <EditField label="Suffix" editing={editing} value={form.suffix} onChange={(v) => update("suffix", v)} />
+                  <EditField label="Preferred name" editing={editing} value={form.preferredName} onChange={(v) => update("preferredName", v)} />
+                  <EditField label="Sex" editing={editing} type="select" options={["male", "female", "other"]} value={form.gender} onChange={(v) => update("gender", v)} />
                   <EditField label="Birthdate" editing={editing} type="date" value={form.birthdate} onChange={(v) => update("birthdate", v)} display={fmtDate(patient.birthdate)} />
                   <Field label="Age">{calcAge(form.birthdate)}</Field>
                   <EditField label="Civil status" editing={editing} type="select" options={["single", "married", "widowed", "separated"]} value={form.civilStatus} onChange={(v) => update("civilStatus", v)} />
-                  <EditField label="Address" span={2} editing={editing} value={form.address} onChange={(v) => update("address", v)} />
+                  <EditField label="Nationality" editing={editing} value={form.nationality} onChange={(v) => update("nationality", v)} />
+                  <EditField label="Occupation" editing={editing} value={form.occupation} onChange={(v) => update("occupation", v)} />
+                  <EditField label="Educational attainment" editing={editing} type="select" options={EDUCATION_OPTIONS} value={form.educationalAttainment} onChange={(v) => update("educationalAttainment", v)} />
+
+                  <div style={styles.subsectionTitle}>Contact Information</div>
+                  <EditField label="Home address" span={2} editing={editing} value={form.address} onChange={(v) => update("address", v)} />
                   <EditField label="Municipality" editing={editing} value={form.municipality} onChange={(v) => update("municipality", v)} />
-                  <EditField label="Contact number" editing={editing} value={form.contactNumber} onChange={(v) => update("contactNumber", v)} />
+                  <EditField label="Province" editing={editing} value={form.province} onChange={(v) => update("province", v)} />
+                  <EditField label="Postal code" editing={editing} value={form.postalCode} onChange={(v) => update("postalCode", v)} />
+                  <EditField label="Mobile number" editing={editing} value={form.contactNumber} onChange={(v) => update("contactNumber", v)} />
                   <EditField label="Email" editing={editing} value={form.email} onChange={(v) => update("email", v)} />
+
+                  <div style={styles.subsectionTitle}>Emergency Contact</div>
                   <EditField label="Emergency contact name" editing={editing} value={form.emergencyContactName} onChange={(v) => update("emergencyContactName", v)} />
                   <EditField label="Relationship" editing={editing} value={form.emergencyContactRelationship} onChange={(v) => update("emergencyContactRelationship", v)} />
                   <EditField label="Emergency contact number" editing={editing} value={form.emergencyContactNumber} onChange={(v) => update("emergencyContactNumber", v)} />
+                  <EditField
+                    label="Preferred contact method" editing={editing} type="select" options={CONTACT_METHOD_OPTIONS}
+                    value={form.emergencyContactMethod} onChange={(v) => update("emergencyContactMethod", v)}
+                    display={form.emergencyContactMethod === "other" && form.emergencyContactMethodOther
+                      ? form.emergencyContactMethodOther
+                      : undefined}
+                  />
+                  {editing && form.emergencyContactMethod === "other" && (
+                    <EditField label="Specify contact method" editing value={form.emergencyContactMethodOther} onChange={(v) => update("emergencyContactMethodOther", v.slice(0, 30))} />
+                  )}
+                  {(form.emergencyContactMethod === "email" || form.emergencyContactEmail) && (
+                    <EditField label="Emergency contact email" editing={editing} type="email" value={form.emergencyContactEmail} onChange={(v) => update("emergencyContactEmail", v.slice(0, 255))} />
+                  )}
+                  <EditField label="Emergency contact address" span={2} editing={editing} value={form.emergencyContactAddress} onChange={(v) => update("emergencyContactAddress", v)} />
+
+                  <div style={styles.subsectionTitle}>Guardian or Representative</div>
+                  <EditField label="Guardian name" editing={editing} value={form.guardianName} onChange={(v) => update("guardianName", v)} />
+                  <EditField label="Relationship" editing={editing} value={form.guardianRelationship} onChange={(v) => update("guardianRelationship", v)} />
+                  <EditField label="Guardian contact number" editing={editing} value={form.guardianContactNumber} onChange={(v) => update("guardianContactNumber", v)} />
+                  <EditField label="Guardian address" span={2} editing={editing} value={form.guardianAddress} onChange={(v) => update("guardianAddress", v)} />
                 </div>
               </section>
 
@@ -806,6 +887,15 @@ const styles = {
   sectionHeaderTitle: { fontSize: 15, fontWeight: 700, color: "var(--color-text)" },
 
   grid: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 18 },
+  subsectionTitle: {
+    gridColumn: "1 / -1",
+    marginTop: 6,
+    paddingTop: 14,
+    borderTop: "1px solid var(--color-border)",
+    color: "var(--color-primary-dark)",
+    fontSize: 13,
+    fontWeight: 700,
+  },
   fieldLabel: { fontSize: 11, fontWeight: 700, color: "var(--color-text-muted)", textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 5 },
   fieldValue: { fontSize: 14, color: "var(--color-text)" },
   input: { width: "100%", boxSizing: "border-box", padding: "8px 10px", borderRadius: "var(--radius-sm)", border: "1px solid var(--color-border)", fontSize: 13, fontFamily: "inherit" },

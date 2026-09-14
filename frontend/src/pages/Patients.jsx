@@ -242,15 +242,15 @@ export default function Patients() {
         <div style={{ ...styles.tableCard, flex: 1, minHeight: 0 }}>
           <table style={styles.table}>
             <colgroup>
-              <col style={{ width: 150 }} />
-              <col style={{ width: 220 }} />
-              <col style={{ width: 90 }} />
-              <col style={{ width: 140 }} />
-              <col style={{ width: 140 }} />
-              <col style={{ width: 150 }} />
+              <col style={{ width: 110 }} />
+              <col style={{ width: 180 }} />
+              <col style={{ width: 70 }} />
+              <col style={{ width: 110 }} />
+              <col style={{ width: 110 }} />
+              <col style={{ width: 120 }} />
+              <col style={{ width: 80 }} />
               <col style={{ width: 100 }} />
-              <col style={{ width: 130 }} />
-              <col style={{ width: 90 }} />
+              <col style={{ width: 60 }} />
             </colgroup>
             <thead>
               <tr>
@@ -526,7 +526,7 @@ const styles = {
     borderRadius: "var(--radius-md, 10px)",
     overflow: "auto",
   },
-  table: { width: "100%", minWidth: 760, tableLayout: "fixed", borderCollapse: "collapse", fontSize: 13 },
+  table: { width: "100%", minWidth: 700, tableLayout: "fixed", borderCollapse: "collapse", fontSize: 13 },
   th: {
     textAlign: "left",
     padding: "12px 16px",

@@ -40,7 +40,7 @@ async function generatePatientCode() {
 }
 
 export async function listPatients(req, res) {
-  const clauses = ["p.is_archived = FALSE"];
+  const clauses = ["p.is_archived = FALSE", "NOT EXISTS (SELECT 1 FROM discharges d WHERE d.patient_id = p.id)"];
   const params = [];
 
   if (req.user.role === "case_manager") {

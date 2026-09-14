@@ -11,6 +11,7 @@ import CertificateGeneratorModal from "../components/CertificateGeneratorModal.j
 import CertificateViewModal from "../components/CertificateViewModal.jsx";
 import CardActionMenu from "../components/CardActionMenu.jsx";
 import ArchiveConfirmModal from "../components/ArchiveConfirmModal.jsx";
+import DischargeModal from "../components/DischargeModal.jsx";
 import ConfirmModal from "../components/ConfirmModal.jsx";
 import Toast from "../components/Toast.jsx";
 
@@ -111,6 +112,7 @@ export default function PatientProfile() {
 
   const [archivingCertificate, setArchivingCertificate] = useState(null);
   const [archivingPatient, setArchivingPatient] = useState(false);
+  const [dischargingPatient, setDischargingPatient] = useState(false);
   const [restoringPatient, setRestoringPatient] = useState(false);
   const [toast, setToast] = useState("");
 
@@ -134,6 +136,19 @@ export default function PatientProfile() {
     setToast("Patient archived.");
     loadAll();
   }
+
+  async function handleDischargePatient({ programType, dischargeType, dischargeDate, remarks }) {
+  await api.post("/discharges", {
+    patientId: id,
+    programType,
+    dischargeType,
+    dischargeDate,
+    remarks,
+  });
+  setDischargingPatient(false);
+  setToast("Patient discharged.");
+  loadAll();
+}
 
   async function handleRestorePatient() {
     await api.post(`/archives/patients/${id}/restore`);
@@ -357,7 +372,10 @@ export default function PatientProfile() {
                 patient.is_archived ? (
                   <button type="button" style={styles.editBtn} onClick={() => setRestoringPatient(true)}>Restore</button>
                 ) : (
-                  <button type="button" style={styles.cancelBtn} onClick={() => setArchivingPatient(true)}>Archive</button>
+                  <>
+                    <button type="button" style={styles.cancelBtn} onClick={() => setArchivingPatient(true)}>Archive</button>
+                    <button type="button" style={styles.editBtn} onClick={() => setDischargingPatient(true)}>Discharge</button>
+                 </>
                 )
               )}
             </>
@@ -740,7 +758,14 @@ export default function PatientProfile() {
           onConfirm={handleArchivePatient}
           onClose={() => setArchivingPatient(false)}
         />
-      )}
+      )} 
+      {dischargingPatient && (
+  <DischargeModal
+    patientName={patient?.full_name}
+    onConfirm={handleDischargePatient}
+    onClose={() => setDischargingPatient(false)}
+  />
+)}
       {restoringPatient && (
         <ConfirmModal
           title="Restore patient"

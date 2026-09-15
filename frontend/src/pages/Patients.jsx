@@ -100,7 +100,9 @@ export default function Patients() {
       if (search) {
         const q = search.toLowerCase();
         const matches =
-          p.full_name?.toLowerCase().includes(q) || p.patient_code?.toLowerCase().includes(q);
+          p.full_name?.toLowerCase().includes(q) ||
+          p.patient_code?.toLowerCase().includes(q) ||
+          p.pwud_code?.toLowerCase().includes(q);
         if (!matches) return false;
       }
       if (statusFilter && p.enrollment_status !== statusFilter) return false;
@@ -263,8 +265,8 @@ export default function Patients() {
                 <th style={styles.th}>Admission Date</th>
                 <th style={styles.th}>Case Manager</th>
                 <th style={styles.th}>Status</th>
-                <th style={styles.th}>Referral</th>
-                <th style={styles.th}>Attendance</th>
+                <th style={styles.th}>Admission Type</th>
+                <th style={styles.th}>Category</th>
                 <th style={{ ...styles.th, ...styles.actionsTh }}>Actions</th>
               </tr>
             </thead>
@@ -293,7 +295,7 @@ export default function Patients() {
                   const referralStyle = REFERRAL_STATUS[p.referral_status];
                   return (
                     <tr key={p.id} style={styles.row} onClick={() => navigate(`/patients/${p.id}`)}>
-                      <td style={{ ...styles.td, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{p.patient_code}</td>
+                      <td style={{ ...styles.td, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{p.pwud_code || p.patient_code}</td>
                       <td style={{ ...styles.td, fontWeight: 600 }}>
                         <span style={styles.nameCell}>
                           <RowAvatar name={p.full_name} photoUrl={p.photo_url} />
@@ -310,13 +312,11 @@ export default function Patients() {
                         </span>
                       </td>
                       <td style={styles.td}>
-                        {referralStyle ? (
-                          <span style={{ ...styles.statusBadge, background: referralStyle.bg, color: referralStyle.color }}>
-                            {referralStyle.label}
-                          </span>
-                        ) : "Not started"}
+                        {p.type_of_patient || "—"}
                       </td>
-                      <td style={styles.td}>{p.attendance_rate !== null ? `${p.attendance_rate}%` : "—"}</td>
+                      <td style={styles.td}>
+                        {p.admission_type ? p.admission_type.replace('_', ' ') : "—"}
+                      </td>
                       <td style={{ ...styles.td, ...styles.actionsTd }} onClick={(e) => e.stopPropagation()}>
                         <RowMenu
                           patientId={p.id}

@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { useNavigate, useParams } from "react-router-dom";
 import AppShell from "../components/AppShell.jsx";
 import PatientWorkflowProgress from "../components/PatientWorkflowProgress.jsx";
 import api from "../api/axios.js";
@@ -14,16 +14,28 @@ const EMPTY_FORM = {
   birthdate: "",
   civilStatus: "single",
   nationality: "",
+  employmentStatus: "Employed",
   occupation: "",
   educationalAttainment: "",
   religion: "",
   livingArrangement: "",
   estimatedFamilyMonthlyIncome: "",
+  numberOfSiblings: "",
+  ordinalPosition: "",
+  fatherName: "",
+  fatherOccupation: "",
+  motherName: "",
+  motherOccupation: "",
+  spouseName: "",
+  spouseOccupation: "",
   contactNumber: "",
   email: "",
   address: "",
-  municipality: "",
+  region: "",
   province: "",
+  municipality: "",
+  barangay: "",
+  streetAddress: "",
   postalCode: "",
   emergencyContactName: "",
   emergencyContactRelationship: "",
@@ -55,6 +67,24 @@ const EDUCATION_OPTIONS = [
 
 const SUFFIX_OPTIONS = ["Jr.", "Sr.", "II", "III", "IV", "V"];
 
+const RELIGION_OPTIONS = [
+  "Roman Catholic",
+  "Islam",
+  "Iglesia ni Cristo",
+  "Protestant",
+  "Aglipayan",
+  "Seventh-day Adventist",
+  "Other",
+];
+
+const EMPLOYMENT_STATUS_OPTIONS = [
+  "Employed",
+  "Unemployed",
+  "Student",
+  "Government",
+  "Private",
+];
+
 const LIVING_ARRANGEMENT_OPTIONS = [
   "With Parents",
   "With Relatives",
@@ -77,9 +107,76 @@ function calculateAge(birthdate) {
 
 export default function RegisterPatient() {
   const navigate = useNavigate();
+  const { id } = useParams();
   const [form, setForm] = useState(EMPTY_FORM);
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
+  const [loading, setLoading] = useState(Boolean(id));
+
+  useEffect(() => {
+    if (!id) return;
+    let active = true;
+    setLoading(true);
+    api.get(`/patients/${id}`)
+      .then(({ data }) => {
+        if (!active) return;
+        const p = data.patient;
+        if (!p) return;
+        setForm({
+          firstName: p.first_name || "",
+          middleName: p.middle_name || "",
+          lastName: p.last_name || "",
+          suffix: p.suffix || "",
+          preferredName: p.preferred_name || "",
+          gender: p.gender || "",
+          birthdate: p.birthdate ? String(p.birthdate).slice(0, 10) : "",
+          civilStatus: p.civil_status || "single",
+          nationality: p.nationality || "",
+          employmentStatus: p.employment_status || "Employed",
+          occupation: p.occupation || "",
+          educationalAttainment: p.educational_attainment || "",
+          religion: p.religion || "",
+          livingArrangement: p.living_arrangement || "",
+          estimatedFamilyMonthlyIncome: p.estimated_family_monthly_income ?? "",
+          numberOfSiblings: p.number_of_siblings ?? "",
+          ordinalPosition: p.ordinal_position || "",
+          fatherName: p.father_name || "",
+          fatherOccupation: p.father_occupation || "",
+          motherName: p.mother_name || "",
+          motherOccupation: p.mother_occupation || "",
+          spouseName: p.spouse_name || "",
+          spouseOccupation: p.spouse_occupation || "",
+          contactNumber: p.contact_number || "",
+          email: p.email || "",
+          address: p.address || "",
+          region: p.region || "",
+          province: p.province || "",
+          municipality: p.municipality || "",
+          barangay: p.barangay || "",
+          streetAddress: p.street_address || "",
+          postalCode: p.postal_code || "",
+          emergencyContactName: p.emergency_contact_name || "",
+          emergencyContactRelationship: p.emergency_contact_relationship || "",
+          emergencyContactNumber: p.emergency_contact_number || "",
+          emergencyContactEmail: p.emergency_contact_email || "",
+          emergencyContactAddress: p.emergency_contact_address || "",
+          emergencyContactMethod: p.emergency_contact_method || "",
+          emergencyContactMethodOther: "",
+          hasGuardian: Boolean(p.guardian_name),
+          guardianName: p.guardian_name || "",
+          guardianRelationship: p.guardian_relationship || "",
+          guardianContactNumber: p.guardian_contact_number || "",
+          guardianAddress: p.guardian_address || "",
+        });
+      })
+      .catch((err) => {
+        if (active) setError(err.response?.data?.message || "Could not load patient record.");
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => { active = false; };
+  }, [id]);
 
   const age = calculateAge(form.birthdate);
   const guardianRequired = age !== null && age < 18;
@@ -121,14 +218,21 @@ export default function RegisterPatient() {
           };
       const payload = {
         ...formPayload,
+        address: `${form.streetAddress}, ${form.barangay}, ${form.municipality}, ${form.province}, ${form.region}`,
         emergencyContactMethod: form.emergencyContactMethod === "other"
           ? form.emergencyContactMethodOther.trim()
           : form.emergencyContactMethod,
       };
       delete payload.emergencyContactMethodOther;
       delete payload.hasGuardian;
-      const { data } = await api.post("/patients", payload);
-      navigate(`/patients/${data.id}/referral`);
+
+      if (id) {
+        await api.put(`/patients/${id}`, payload);
+        navigate(`/patients/${id}/referral`);
+      } else {
+        const { data } = await api.post("/patients", payload);
+        navigate(`/patients/${data.id}/referral`);
+      }
     } catch (err) {
       setError(err.response?.data?.message || "Could not register the patient.");
     } finally {
@@ -139,7 +243,8 @@ export default function RegisterPatient() {
   return (
     <AppShell title="Demographics (IDADIN Part A)" description="Create the patient's background, identity, and contact record.">
       <form onSubmit={handleSubmit} style={styles.form}>
-        <PatientWorkflowProgress currentStep={1} />
+        <PatientWorkflowProgress currentStep={1} patientId={id} />
+        {loading && <div style={{ color: "var(--color-text-muted)", fontSize: 13 }}>Loading patient details…</div>}
         {error && <div role="alert" style={styles.error}>{error}</div>}
 
         <Section
@@ -184,13 +289,21 @@ export default function RegisterPatient() {
               <option value="married">Married</option>
               <option value="widowed">Widowed</option>
               <option value="separated">Separated</option>
+              <option value="live_in">Live-in</option>
+              <option value="divorced">Divorced</option>
             </select>
           </Field>
           <Field label="Nationality">
             <input style={styles.input} value={form.nationality} onChange={(e) => update("nationality", e.target.value)} />
           </Field>
-          <Field label="Occupation">
-            <input autoComplete="organization-title" style={styles.input} value={form.occupation} onChange={(e) => update("occupation", e.target.value)} />
+          <Field label="Employment status" required>
+            <select style={styles.input} value={form.employmentStatus} onChange={(e) => update("employmentStatus", e.target.value)} required>
+              <option value="">Select</option>
+              {EMPLOYMENT_STATUS_OPTIONS.map((option) => <option key={option} value={option}>{option}</option>)}
+            </select>
+          </Field>
+          <Field label="Occupation" hint="Specific job title or role">
+            <input autoComplete="organization-title" style={styles.input} value={form.occupation} onChange={(e) => update("occupation", e.target.value)} placeholder="e.g. Farmer, Driver, Teacher" />
           </Field>
           <Field label="Educational attainment">
             <select style={styles.input} value={form.educationalAttainment} onChange={(e) => update("educationalAttainment", e.target.value)}>
@@ -199,7 +312,10 @@ export default function RegisterPatient() {
             </select>
           </Field>
           <Field label="Religion">
-            <input style={styles.input} maxLength={100} value={form.religion} onChange={(e) => update("religion", e.target.value)} />
+            <select style={styles.input} value={form.religion} onChange={(e) => update("religion", e.target.value)}>
+              <option value="">Select</option>
+              {RELIGION_OPTIONS.map((option) => <option key={option} value={option}>{option}</option>)}
+            </select>
           </Field>
           <Field label="Living arrangement">
             <select style={styles.input} value={form.livingArrangement} onChange={(e) => update("livingArrangement", e.target.value)}>
@@ -222,18 +338,102 @@ export default function RegisterPatient() {
           <Field label="Email">
             <input type="email" autoComplete="email" style={styles.input} value={form.email} onChange={(e) => update("email", e.target.value)} />
           </Field>
-          <Field label="Home address" required wide>
-            <input autoComplete="street-address" style={styles.input} value={form.address} onChange={(e) => update("address", e.target.value)} required />
-          </Field>
-          <Field label="City or municipality" required>
-            <input autoComplete="address-level2" style={styles.input} value={form.municipality} onChange={(e) => update("municipality", e.target.value)} required />
+          <Field label="Region" required>
+            <input style={styles.input} value={form.region} onChange={(e) => update("region", e.target.value)} required />
           </Field>
           <Field label="Province" required>
             <input autoComplete="address-level1" style={styles.input} value={form.province} onChange={(e) => update("province", e.target.value)} required />
           </Field>
+          <Field label="City or municipality" required>
+            <input autoComplete="address-level2" style={styles.input} value={form.municipality} onChange={(e) => update("municipality", e.target.value)} required />
+          </Field>
+          <Field label="Barangay" required>
+            <input style={styles.input} value={form.barangay} onChange={(e) => update("barangay", e.target.value)} required />
+          </Field>
+          <Field label="House # / Street" required wide>
+            <input autoComplete="street-address" style={styles.input} value={form.streetAddress} onChange={(e) => update("streetAddress", e.target.value)} required />
+          </Field>
           <Field label="Postal code">
             <input inputMode="numeric" autoComplete="postal-code" style={styles.input} value={form.postalCode} onChange={(e) => update("postalCode", e.target.value)} />
           </Field>
+        </Section>
+
+        <Section
+          title="Family Background"
+          description="Record family background details required for IDADIN Form 6-06."
+        >
+          <Field label="Number of siblings">
+            <input
+              type="number"
+              min="0"
+              max="99"
+              step="1"
+              style={styles.input}
+              value={form.numberOfSiblings}
+              onChange={(e) => update("numberOfSiblings", e.target.value)}
+              placeholder="0"
+            />
+          </Field>
+          <Field label="Ordinal position in the family" hint="e.g., Eldest, 2nd, Youngest">
+            <input
+              style={styles.input}
+              value={form.ordinalPosition}
+              onChange={(e) => update("ordinalPosition", e.target.value)}
+              placeholder="e.g. Eldest, 2nd child"
+            />
+          </Field>
+          <Field label="Father's name">
+            <input
+              style={styles.input}
+              value={form.fatherName}
+              onChange={(e) => update("fatherName", e.target.value)}
+              placeholder="Full name of father"
+            />
+          </Field>
+          <Field label="Father's occupation">
+            <input
+              style={styles.input}
+              value={form.fatherOccupation}
+              onChange={(e) => update("fatherOccupation", e.target.value)}
+              placeholder="Father's occupation"
+            />
+          </Field>
+          <Field label="Mother's name">
+            <input
+              style={styles.input}
+              value={form.motherName}
+              onChange={(e) => update("motherName", e.target.value)}
+              placeholder="Full maiden/current name of mother"
+            />
+          </Field>
+          <Field label="Mother's occupation">
+            <input
+              style={styles.input}
+              value={form.motherOccupation}
+              onChange={(e) => update("motherOccupation", e.target.value)}
+              placeholder="Mother's occupation"
+            />
+          </Field>
+          {(form.civilStatus === "married" || form.civilStatus === "live_in") && (
+            <>
+              <Field label="Spouse's name">
+                <input
+                  style={styles.input}
+                  value={form.spouseName}
+                  onChange={(e) => update("spouseName", e.target.value)}
+                  placeholder="Full name of spouse / partner"
+                />
+              </Field>
+              <Field label="Spouse's occupation">
+                <input
+                  style={styles.input}
+                  value={form.spouseOccupation}
+                  onChange={(e) => update("spouseOccupation", e.target.value)}
+                  placeholder="Spouse's occupation"
+                />
+              </Field>
+            </>
+          )}
         </Section>
 
         <Section

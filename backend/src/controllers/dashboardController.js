@@ -250,6 +250,12 @@ export async function getAdmittingStats(req, res) {
       `SELECT COUNT(*) AS pendingRegistrations FROM patients WHERE enrollment_status = 'pending' AND is_archived = FALSE`
     );
 
+    const [[{ pendingTriageDDE }]] = await pool.query(
+      `SELECT COUNT(*) AS pendingTriageDDE FROM patients p
+       LEFT JOIN patient_intakes i ON i.patient_id = p.id
+       WHERE p.enrollment_status = 'pending' AND p.is_archived = FALSE AND (i.workflow_step IS NULL OR i.workflow_step < 5)`
+    );
+
     const [[{ certsToday }]] = await pool.query(
       `SELECT COUNT(*) AS certsToday FROM certificates WHERE DATE(issued_at) = CURDATE()`
     );
@@ -401,6 +407,7 @@ export async function getAdmittingStats(req, res) {
       todayAdmissions,
       totalPatients,
       pendingRegistrations,
+      pendingTriageDDE,
       certsToday,
       recentAdmissions,
       incompleteRecords,

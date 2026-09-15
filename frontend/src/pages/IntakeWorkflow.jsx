@@ -28,11 +28,13 @@ const EMPTY_FORM = {
   frequencyOfUse: "",
   primaryReason: "",
   drugSource: "",
-  drugsUsed: [],
+  substances: [],
   bloodPressure: "",
   pulseRate: "",
+  respiratoryRate: "",
   temperature: "",
   weight: "",
+  mseRemarks: "",
   socioeconomicClassification: "",
   serviceAgreementSigned: false,
   pledgeOfCommitmentSigned: false,
@@ -48,11 +50,13 @@ function toForm(intake) {
     frequencyOfUse: intake.frequency_of_use || "",
     primaryReason: intake.primary_reason_for_using || "",
     drugSource: intake.drug_source || "",
-    drugsUsed: Array.isArray(intake.drugs_used) ? intake.drugs_used : [],
+    substances: Array.isArray(intake.substances) ? intake.substances : [],
     bloodPressure: intake.blood_pressure || "",
     pulseRate: intake.pulse_rate ?? "",
+    respiratoryRate: intake.respiratory_rate ?? "",
     temperature: intake.temperature_celsius ?? "",
     weight: intake.weight_kg ?? "",
+    mseRemarks: intake.mse_remarks || "",
     socioeconomicClassification: intake.socioeconomic_classification || "",
     serviceAgreementSigned: Boolean(intake.service_agreement_signed),
     pledgeOfCommitmentSigned: Boolean(intake.pledge_of_commitment_signed),
@@ -108,7 +112,7 @@ export default function IntakeWorkflow() {
         frequencyOfUse: form.frequencyOfUse,
         primaryReason: form.primaryReason,
         drugSource: form.drugSource,
-        drugsUsed: form.drugsUsed,
+        substances: form.substances,
       });
       setIntake(data.intake);
       navigate(`/patients/${id}/intake/clinical-triage`);
@@ -127,8 +131,10 @@ export default function IntakeWorkflow() {
       const { data } = await api.put(`/intakes/patient/${id}/clinical-triage`, {
         bloodPressure: form.bloodPressure,
         pulseRate: form.pulseRate,
+        respiratoryRate: form.respiratoryRate,
         temperature: form.temperature,
         weight: form.weight,
+        mseRemarks: form.mseRemarks,
         socioeconomicClassification: form.socioeconomicClassification,
       });
       setIntake(data.intake);
@@ -184,7 +190,7 @@ export default function IntakeWorkflow() {
           <span style={styles.avatar}>{patient.full_name?.charAt(0) || "P"}</span>
           <strong>{patient.full_name}</strong>
           <span style={styles.divider} />
-          <span style={styles.patientCode}>{patient.patient_code}</span>
+          <span style={styles.patientCode}>{patient.pwud_code || patient.patient_code}</span>
           <span style={{ ...styles.statusBadge, ...(finalized ? styles.statusComplete : styles.statusPending) }}>
             {finalized ? "Enrolled" : `Step ${currentStep} of 5`}
           </span>
@@ -192,23 +198,21 @@ export default function IntakeWorkflow() {
 
         {error && <div role="alert" style={styles.error}>{error}</div>}
 
-        {prerequisitesMissing ? (
-          <section style={styles.noticeCard}>
-            <strong>Admission history must be completed first.</strong>
-            <span>Return to Step 2 and save the Admission & Confinement History before continuing.</span>
-            <button type="button" style={styles.primaryButton} onClick={() => navigate(`/patients/${id}/referral`)}>Go to Admission History</button>
-          </section>
-        ) : finalized ? (
-          <section style={styles.completeCard}>
-            <div style={styles.completeIcon}>✓</div>
-            <h2 style={styles.completeTitle}>Enrollment finalized</h2>
-            <p style={styles.completeText}>The patient profile is active and the Certificate of Enrollment is ready to print.</p>
-            <div style={styles.actions}>
-              <button type="button" style={styles.secondaryButton} onClick={() => navigate(`/patients/${id}`)}>View Patient Profile</button>
-              {certificateId && <button type="button" style={styles.primaryButton} onClick={() => setCertificateAction("print")}>Print Certificate of Enrollment</button>}
+        {prerequisitesMissing && (
+          <div style={{ ...styles.noticeCard, marginBottom: 8, flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+            <div>
+              <strong>Note: Admission history (Step 2) is not yet finalized for this patient.</strong>
+              <div style={{ fontSize: 12, marginTop: 3, color: "var(--color-text-muted)" }}>
+                Displaying section fields for inspection and review.
+              </div>
             </div>
-          </section>
-        ) : currentStep === 3 ? (
+            <button type="button" style={styles.secondaryButton} onClick={() => navigate(`/patients/${id}/referral`)}>
+              View Step 2
+            </button>
+          </div>
+        )}
+
+        {currentStep === 3 ? (
           <form onSubmit={saveDrugHistory} style={styles.form}>
             <Section title="Drug Use Details" description="Record IDADIN Part B drug use information for the 12 months prior to admission.">
               <Field label="Age at first drug use" required>
@@ -242,19 +246,12 @@ export default function IntakeWorkflow() {
               <Field label="Source of drugs" required wide>
                 <input maxLength={150} style={styles.input} value={form.drugSource} onChange={(event) => update("drugSource", event.target.value)} placeholder="e.g. Friend/peer, pusher, drugstore, relative" required />
               </Field>
-              <Field label="Specific drugs used in the past 12 months" required full hint="Hold Ctrl (Windows) or Command (Mac) to select multiple drugs.">
-                <select
-                  multiple
-                  size={12}
-                  style={styles.multiSelect}
-                  value={form.drugsUsed}
-                  onChange={(event) => update("drugsUsed", Array.from(event.target.selectedOptions, (option) => option.value))}
-                  required
-                >
-                  {DRUG_OPTIONS.map((drug) => <option key={drug} value={drug}>{drug}</option>)}
-                </select>
-              </Field>
             </Section>
+            <section style={styles.section}>
+              <div style={styles.sectionTitle}>Specific drugs used in the past 12 months</div>
+              <div style={styles.sectionDescription}>List all substances used, along with the route of administration.</div>
+              <SubstancesTable substances={form.substances} onChange={(s) => update("substances", s)} disabled={prerequisitesMissing} />
+            </section>
             <Actions back={() => navigate(`/patients/${id}/referral`)} saving={saving} label="Save & Continue to Clinical Triage" />
           </form>
         ) : currentStep === 4 ? (
@@ -266,11 +263,17 @@ export default function IntakeWorkflow() {
               <Field label="Pulse rate (bpm)" required>
                 <input type="number" min="20" max="250" step="1" style={styles.input} value={form.pulseRate} onChange={(event) => update("pulseRate", event.target.value)} required />
               </Field>
+              <Field label="Respiratory rate (cpm)" required>
+                <input type="number" min="10" max="60" step="1" style={styles.input} value={form.respiratoryRate} onChange={(event) => update("respiratoryRate", event.target.value)} required />
+              </Field>
               <Field label="Temperature (°C)" required>
                 <input type="number" min="30" max="45" step="0.1" style={styles.input} value={form.temperature} onChange={(event) => update("temperature", event.target.value)} required />
               </Field>
               <Field label="Weight (kg)" required>
                 <input type="number" min="1" max="500" step="0.01" style={styles.input} value={form.weight} onChange={(event) => update("weight", event.target.value)} required />
+              </Field>
+              <Field label="Mental Status Examination Remarks" wide>
+                <textarea rows={3} style={styles.textarea} value={form.mseRemarks} onChange={(event) => update("mseRemarks", event.target.value)} />
               </Field>
             </Section>
             <Section title="Social Classification" description="Record the classification assessed by the Medical Social Worker.">
@@ -280,24 +283,37 @@ export default function IntakeWorkflow() {
                   <option value="full_pay">Full Pay</option>
                   <option value="c1">C1</option>
                   <option value="c2">C2</option>
-                  <option value="indigent">Indigent</option>
+                  <option value="c3">C3 (Indigent)</option>
                 </select>
               </Field>
             </Section>
             <Actions back={() => navigate(`/patients/${id}/intake/drug-history`)} saving={saving} label="Save & Continue to Consents" />
           </form>
         ) : (
-          <form onSubmit={finalize} style={styles.form}>
-            <section style={styles.section}>
-              <div style={styles.sectionTitle}>Signed Documents</div>
-              <div style={styles.sectionDescription}>Confirm each signed document is present in the patient's admission record.</div>
-              <ConsentCheck id="service-agreement" label="Service Agreement signed" checked={form.serviceAgreementSigned} onChange={(checked) => update("serviceAgreementSigned", checked)} />
-              <ConsentCheck id="pledge-commitment" label="Pledge of Commitment signed" checked={form.pledgeOfCommitmentSigned} onChange={(checked) => update("pledgeOfCommitmentSigned", checked)} />
-              <ConsentCheck id="privacy-consent" label="Data Privacy Consent signed" checked={form.dataPrivacyConsentSigned} onChange={(checked) => update("dataPrivacyConsentSigned", checked)} />
-            </section>
-            <div style={styles.finalNotice}>Finalizing activates the patient record and creates a printable Certificate of Enrollment.</div>
-            <Actions back={() => navigate(`/patients/${id}/intake/clinical-triage`)} saving={saving} label="Finalize & Enroll" />
-          </form>
+          <>
+            {finalized && (
+              <section style={styles.completeCard}>
+                <div style={styles.completeIcon}>✓</div>
+                <h2 style={styles.completeTitle}>Enrollment finalized</h2>
+                <p style={styles.completeText}>The patient profile is active and the Certificate of Enrollment is ready to print.</p>
+                <div style={styles.actions}>
+                  <button type="button" style={styles.secondaryButton} onClick={() => navigate(`/patients/${id}`)}>View Patient Profile</button>
+                  {certificateId && <button type="button" style={styles.primaryButton} onClick={() => setCertificateAction("print")}>Print Certificate of Enrollment</button>}
+                </div>
+              </section>
+            )}
+            <form onSubmit={finalize} style={styles.form}>
+              <section style={styles.section}>
+                <div style={styles.sectionTitle}>Signed Documents</div>
+                <div style={styles.sectionDescription}>Confirm each signed document is present in the patient's admission record.</div>
+                <ConsentCheck id="service-agreement" label="Service Agreement signed" checked={form.serviceAgreementSigned} onChange={(checked) => update("serviceAgreementSigned", checked)} />
+                <ConsentCheck id="pledge-commitment" label="Pledge of Commitment signed" checked={form.pledgeOfCommitmentSigned} onChange={(checked) => update("pledgeOfCommitmentSigned", checked)} />
+                <ConsentCheck id="privacy-consent" label="Data Privacy Consent signed" checked={form.dataPrivacyConsentSigned} onChange={(checked) => update("dataPrivacyConsentSigned", checked)} />
+              </section>
+              <div style={styles.finalNotice}>Finalizing activates the patient record and creates a printable Certificate of Enrollment.</div>
+              <Actions back={() => navigate(`/patients/${id}/intake/clinical-triage`)} saving={saving} label={finalized ? "Save Consents" : "Finalize & Enroll"} />
+            </form>
+          </>
         )}
       </div>
 
@@ -347,6 +363,181 @@ function Actions({ back, saving, label }) {
   );
 }
 
+const DRUG_TYPE_OPTIONS = [
+  "Methamphetamine (Shabu)",
+  "Cannabis (Marijuana)",
+  "Cocaine",
+  "Inhalants / Solvents",
+  "MDMA (Ecstasy)",
+  "Opium",
+  "Morphine",
+  "Heroin",
+  "Codeine",
+  "Ketamine",
+  "Benzodiazepines / Sedatives",
+  "Other",
+  ...DRUG_OPTIONS.filter((d) => ![
+    "Methamphetamine Hydrochloride (Shabu)", "Cannabis (Marijuana)", "Cocaine", "MDMA (Ecstasy)", "Opium", "Morphine", "Heroin", "Codeine", "Ketamine"
+  ].includes(d)),
+];
+
+const MODE_OF_INTAKE_OPTIONS = [
+  "Inhalation/Sniffing",
+  "Injection",
+  "Oral",
+  "Smoking",
+];
+
+const FREQUENCY_OPTIONS = [
+  "Daily",
+  "Weekly",
+  "Monthly",
+];
+
+const UNIT_OF_MEASUREMENT_OPTIONS = [
+  "grams",
+  "sticks",
+  "ampule",
+  "sachet",
+  "tablet",
+  "bottle",
+  "capsule",
+  "ml",
+];
+
+function SubstancesTable({ substances, onChange, disabled }) {
+  function addRow() {
+    onChange([
+      ...substances,
+      {
+        drugUsed: "",
+        routeOfAdministration: "Inhalation/Sniffing",
+        frequency: "Daily",
+        amountSpent: "",
+        quantity: "",
+        unitOfMeasurement: "grams",
+      },
+    ]);
+  }
+
+  function updateRow(index, field, value) {
+    const list = [...substances];
+    list[index][field] = value;
+    onChange(list);
+  }
+
+  function removeRow(index) {
+    onChange(substances.filter((_, i) => i !== index));
+  }
+
+  return (
+    <div style={{ overflowX: "auto" }}>
+      {substances.length === 0 ? (
+        <div style={styles.emptyTable}>No substances recorded. Click "+ Add Substance" below to list specific drugs used.</div>
+      ) : (
+        <table style={styles.table}>
+          <thead>
+            <tr>
+              <th style={styles.th}>Type of Drug</th>
+              <th style={styles.th}>Mode of Intake</th>
+              <th style={styles.th}>Frequency</th>
+              <th style={{ ...styles.th, width: 130 }}>Amount Spent (₱)</th>
+              <th style={{ ...styles.th, width: 110 }}>Quantity</th>
+              <th style={styles.th}>Unit of Measurement</th>
+              <th style={styles.thAction}></th>
+            </tr>
+          </thead>
+          <tbody>
+            {substances.map((s, i) => (
+              <tr key={i}>
+                <td style={styles.td}>
+                  <select
+                    style={styles.input}
+                    value={s.drugUsed}
+                    onChange={(e) => updateRow(i, "drugUsed", e.target.value)}
+                    disabled={disabled}
+                    required
+                  >
+                    <option value="">Select drug</option>
+                    {DRUG_TYPE_OPTIONS.map((drug) => <option key={drug} value={drug}>{drug}</option>)}
+                  </select>
+                </td>
+                <td style={styles.td}>
+                  <select
+                    style={styles.input}
+                    value={s.routeOfAdministration || "Inhalation/Sniffing"}
+                    onChange={(e) => updateRow(i, "routeOfAdministration", e.target.value)}
+                    disabled={disabled}
+                    required
+                  >
+                    {MODE_OF_INTAKE_OPTIONS.map((mode) => <option key={mode} value={mode}>{mode}</option>)}
+                  </select>
+                </td>
+                <td style={styles.td}>
+                  <select
+                    style={styles.input}
+                    value={s.frequency || "Daily"}
+                    onChange={(e) => updateRow(i, "frequency", e.target.value)}
+                    disabled={disabled}
+                  >
+                    {FREQUENCY_OPTIONS.map((freq) => <option key={freq} value={freq}>{freq}</option>)}
+                  </select>
+                </td>
+                <td style={styles.td}>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    style={styles.input}
+                    value={s.amountSpent ?? ""}
+                    onChange={(e) => updateRow(i, "amountSpent", e.target.value)}
+                    placeholder="0.00"
+                    disabled={disabled}
+                  />
+                </td>
+                <td style={styles.td}>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    style={styles.input}
+                    value={s.quantity ?? ""}
+                    onChange={(e) => updateRow(i, "quantity", e.target.value)}
+                    placeholder="0"
+                    disabled={disabled}
+                  />
+                </td>
+                <td style={styles.td}>
+                  <select
+                    style={styles.input}
+                    value={s.unitOfMeasurement || "grams"}
+                    onChange={(e) => updateRow(i, "unitOfMeasurement", e.target.value)}
+                    disabled={disabled}
+                  >
+                    {UNIT_OF_MEASUREMENT_OPTIONS.map((unit) => <option key={unit} value={unit}>{unit}</option>)}
+                  </select>
+                </td>
+                <td style={styles.tdAction}>
+                  {!disabled && (
+                    <button type="button" style={styles.removeBtn} onClick={() => removeRow(i)} title="Remove row">
+                      &times;
+                    </button>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+      {!disabled && (
+        <button type="button" style={styles.addBtn} onClick={addRow}>
+          + Add Substance
+        </button>
+      )}
+    </div>
+  );
+}
+
 const styles = {
   page: { display: "flex", flexDirection: "column", gap: 18, maxWidth: 1320, width: "100%", margin: "0 auto" },
   form: { display: "flex", flexDirection: "column", gap: 18 },
@@ -379,4 +570,12 @@ const styles = {
   completeIcon: { width: 48, height: 48, borderRadius: "50%", display: "grid", placeItems: "center", background: "var(--color-primary)", color: "#fff", fontSize: 24, fontWeight: 800 },
   completeTitle: { marginTop: 6, color: "var(--color-primary-dark)", fontSize: 20 },
   completeText: { color: "var(--color-text-muted)", fontSize: 13, margin: "0 0 8px" },
+  emptyTable: { padding: 12, fontSize: 13, color: "var(--color-text-muted)", fontStyle: "italic", border: "1px dashed var(--color-border)", borderRadius: "var(--radius-sm)" },
+  table: { width: "100%", borderCollapse: "collapse", marginBottom: 12 },
+  th: { textAlign: "left", padding: "8px 10px", fontSize: 12, color: "var(--color-text-muted)", borderBottom: "1px solid var(--color-border)", fontWeight: 700 },
+  td: { padding: "8px 10px", borderBottom: "1px solid var(--color-border)" },
+  thAction: { width: 40, borderBottom: "1px solid var(--color-border)" },
+  tdAction: { width: 40, padding: "8px 0", borderBottom: "1px solid var(--color-border)", textAlign: "center" },
+  removeBtn: { border: "none", background: "none", color: "var(--color-danger)", fontSize: 20, cursor: "pointer", padding: 0 },
+  addBtn: { border: "1px dashed var(--color-primary)", background: "var(--color-primary-tint)", color: "var(--color-primary-dark)", padding: "8px 14px", borderRadius: "var(--radius-sm)", fontSize: 13, fontWeight: 700, cursor: "pointer" },
 };

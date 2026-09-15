@@ -338,7 +338,7 @@ export default function PatientProfile() {
           </div>
           <div>
             <div style={styles.headerName}>{patient.full_name}</div>
-            <div style={styles.headerMeta}>{patient.patient_code} · {patient.municipality || "—"}</div>
+            <div style={styles.headerMeta}>{patient.pwud_code || patient.patient_code} · {patient.municipality || "—"}</div>
           </div>
         </div>
                 <div style={styles.headerRight}>

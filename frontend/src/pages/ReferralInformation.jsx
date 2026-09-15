@@ -18,21 +18,48 @@ const EMPTY_FORM = {
   documentStatus: "pending",
   recommendedProgramId: "",
   referralPriority: "routine",
+  typeOfService: "",
+  typeOfPatient: "",
   admissionType: "",
   natureOfConfinement: "",
+  attendingPhysician: "",
   priorRehabAdmissions: 0,
   numberOfEscapes: 0,
-  priorDrugHospitalizations: 0,
+  hospitalizations: [],
 };
 
 const SOURCE_OPTIONS = [
-  { value: "physician", label: "Physician" },
-  { value: "hospital", label: "Hospital" },
-  { value: "community", label: "Community organization" },
-  { value: "self_referral", label: "Self-referral / voluntary walk-in" },
-  { value: "family", label: "Family" },
-  { value: "court", label: "Court or legal referral" },
-  { value: "other", label: "Other" },
+  { value: "Voluntary", label: "Voluntary" },
+  { value: "Court-Mandated", label: "Court-Mandated" },
+  { value: "LGU-Referred", label: "LGU-Referred" },
+  { value: "Workplace", label: "Workplace" },
+  { value: "NGO", label: "NGO" },
+];
+
+const TYPE_OF_SERVICE_OPTIONS = [
+  "Inpatient",
+  "Outpatient",
+  "Community-based",
+  "Other",
+];
+
+const TYPE_OF_PATIENT_OPTIONS = [
+  "New Admission",
+  "Readmit - Relapse",
+  "Readmit - Escape",
+];
+
+const ADMISSION_TYPE_OPTIONS = [
+  { value: "New Admission", label: "New Admission" },
+  { value: "Readmit - Relapse", label: "Readmit – Relapse" },
+  { value: "Readmit - Escape", label: "Readmit – Escape" },
+];
+
+const NATURE_OF_CONFINEMENT_OPTIONS = [
+  "First time",
+  "Second time",
+  "Third time",
+  "Multiple times",
 ];
 
 const STATUS_LABELS = {
@@ -61,11 +88,14 @@ function toForm(referral) {
     documentStatus: referral.document_status || "pending",
     recommendedProgramId: referral.recommended_program_id || "",
     referralPriority: referral.referral_priority || "routine",
+    typeOfService: referral.type_of_service || "",
+    typeOfPatient: referral.type_of_patient || "",
     admissionType: referral.admission_type || "",
     natureOfConfinement: referral.nature_of_confinement || "",
+    attendingPhysician: referral.attending_physician || "",
     priorRehabAdmissions: referral.prior_rehab_admissions ?? 0,
     numberOfEscapes: referral.number_of_escapes ?? 0,
-    priorDrugHospitalizations: referral.prior_drug_hospitalizations ?? 0,
+    hospitalizations: referral.hospitalizations || [],
   };
 }
 
@@ -292,7 +322,7 @@ export default function ReferralInformation() {
           <span style={styles.avatar}>{patient.full_name?.charAt(0) || "P"}</span>
           <strong>{patient.full_name}</strong>
           <span style={styles.divider} />
-          <span style={styles.patientCode}>{patient.patient_code}</span>
+          <span style={styles.patientCode}>{patient.pwud_code || patient.patient_code}</span>
           <span style={{ ...styles.statusBadge, ...(submitted ? styles.statusReady : styles.statusDraft) }}>
             {statusLabel}
           </span>
@@ -364,21 +394,32 @@ export default function ReferralInformation() {
           </Section>
 
           <Section title="Admission & Confinement" description="Record the IDADIN Part C admission classification and prior treatment history.">
-            <Field label="Admission type" required>
+            <Field label="Category (Admission Type)" required>
               <select style={styles.input} value={form.admissionType} onChange={(event) => update("admissionType", event.target.value)} required>
-                <option value="">Select admission type</option>
-                <option value="voluntary">Voluntary</option>
-                <option value="court_mandated">Court-Mandated</option>
-                <option value="lgu_referred">LGU-Referred</option>
+                <option value="">Select category</option>
+                {ADMISSION_TYPE_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
               </select>
             </Field>
-            <Field label="Nature of confinement">
-              <select style={styles.input} value={form.natureOfConfinement} onChange={(event) => update("natureOfConfinement", event.target.value)}>
-                <option value="">Not applicable / select</option>
-                <option value="arrested">Arrested</option>
-                <option value="suspended_sentence">Suspended Sentence</option>
-                <option value="compulsory_ra_9165">Compulsory Confinement (RA 9165)</option>
+            <Field label="Type of Service" required>
+              <select style={styles.input} value={form.typeOfService} onChange={(event) => update("typeOfService", event.target.value)} required>
+                <option value="">Select type of service</option>
+                {TYPE_OF_SERVICE_OPTIONS.map((o) => <option key={o} value={o}>{o}</option>)}
               </select>
+            </Field>
+            <Field label="Type of Patient" required>
+              <select style={styles.input} value={form.typeOfPatient} onChange={(event) => update("typeOfPatient", event.target.value)} required>
+                <option value="">Select type of patient</option>
+                {TYPE_OF_PATIENT_OPTIONS.map((o) => <option key={o} value={o}>{o}</option>)}
+              </select>
+            </Field>
+            <Field label="Nature of Confinement" required>
+              <select style={styles.input} value={form.natureOfConfinement} onChange={(event) => update("natureOfConfinement", event.target.value)} required>
+                <option value="">Select nature of confinement</option>
+                {NATURE_OF_CONFINEMENT_OPTIONS.map((o) => <option key={o} value={o}>{o}</option>)}
+              </select>
+            </Field>
+            <Field label="Attending Physician" wide>
+              <input style={styles.input} maxLength={255} value={form.attendingPhysician} onChange={(event) => update("attendingPhysician", event.target.value)} />
             </Field>
             <Field label="Prior rehabilitation admissions">
               <input type="number" min="0" max="999" step="1" style={styles.input} value={form.priorRehabAdmissions} onChange={(event) => update("priorRehabAdmissions", event.target.value)} />
@@ -386,10 +427,13 @@ export default function ReferralInformation() {
             <Field label="Number of escapes">
               <input type="number" min="0" max="999" step="1" style={styles.input} value={form.numberOfEscapes} onChange={(event) => update("numberOfEscapes", event.target.value)} />
             </Field>
-            <Field label="Prior drug-related hospitalizations">
-              <input type="number" min="0" max="999" step="1" style={styles.input} value={form.priorDrugHospitalizations} onChange={(event) => update("priorDrugHospitalizations", event.target.value)} />
-            </Field>
           </Section>
+
+          <section style={{...styles.section, gridColumn: "1 / -1"}}>
+            <div style={styles.sectionTitle}>Drug-related Hospitalizations</div>
+            <div style={styles.sectionDescription}>List prior hospitalizations due to drug use.</div>
+            <HospitalizationTable hospitalizations={form.hospitalizations} onChange={(h) => update("hospitalizations", h)} disabled={!editing || !canEdit || locked} />
+          </section>
 
         </fieldset>
 
@@ -559,6 +603,77 @@ function Field({ label, required, wide, full, children }) {
   );
 }
 
+function HospitalizationTable({ hospitalizations, onChange, disabled }) {
+  function addRow() {
+    onChange([...hospitalizations, { hospitalName: "", dateAdmitted: "" }]);
+  }
+
+  function updateRow(index, field, value) {
+    const list = [...hospitalizations];
+    list[index][field] = value;
+    onChange(list);
+  }
+
+  function removeRow(index) {
+    onChange(hospitalizations.filter((_, i) => i !== index));
+  }
+
+  return (
+    <div>
+      {hospitalizations.length === 0 ? (
+        <div style={styles.emptyTable}>No prior hospitalizations recorded.</div>
+      ) : (
+        <table style={styles.table}>
+          <thead>
+            <tr>
+              <th style={styles.th}>Facility Name</th>
+              <th style={styles.th}>Date Admitted</th>
+              <th style={styles.thAction}></th>
+            </tr>
+          </thead>
+          <tbody>
+            {hospitalizations.map((h, i) => (
+              <tr key={i}>
+                <td style={styles.td}>
+                  <input
+                    style={styles.input}
+                    value={h.hospitalName}
+                    onChange={(e) => updateRow(i, "hospitalName", e.target.value)}
+                    disabled={disabled}
+                    placeholder="Enter facility name"
+                  />
+                </td>
+                <td style={styles.td}>
+                  <input
+                    type="date"
+                    style={styles.input}
+                    value={h.dateAdmitted ? String(h.dateAdmitted).slice(0, 10) : ""}
+                    onChange={(e) => updateRow(i, "dateAdmitted", e.target.value)}
+                    disabled={disabled}
+                    max={TODAY}
+                  />
+                </td>
+                <td style={styles.tdAction}>
+                  {!disabled && (
+                    <button type="button" style={styles.removeBtn} onClick={() => removeRow(i)}>
+                      &times;
+                    </button>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+      {!disabled && (
+        <button type="button" style={styles.addBtn} onClick={addRow}>
+          + Add Hospitalization
+        </button>
+      )}
+    </div>
+  );
+}
+
 const styles = {
   page: { display: "flex", flexDirection: "column", gap: 16, maxWidth: 1400, width: "100%", margin: "0 auto" },
   loading: { padding: 30, color: "var(--color-text-muted)" },
@@ -601,4 +716,12 @@ const styles = {
   actions: { display: "flex", justifyContent: "flex-end", gap: 10, flexWrap: "wrap" },
   secondaryButton: { padding: "10px 16px", border: "1px solid var(--color-border)", borderRadius: "var(--radius-sm)", background: "var(--color-surface)", color: "var(--color-text)", fontSize: 13, fontWeight: 700 },
   primaryButton: { padding: "10px 18px", border: 0, borderRadius: "var(--radius-sm)", background: "var(--color-primary)", color: "#fff", fontSize: 13, fontWeight: 800 },
+  emptyTable: { padding: 12, fontSize: 13, color: "var(--color-text-muted)", fontStyle: "italic", border: "1px dashed var(--color-border)", borderRadius: "var(--radius-sm)" },
+  table: { width: "100%", borderCollapse: "collapse", marginBottom: 12 },
+  th: { textAlign: "left", padding: "8px 10px", fontSize: 12, color: "var(--color-text-muted)", borderBottom: "1px solid var(--color-border)", fontWeight: 700 },
+  td: { padding: "8px 10px", borderBottom: "1px solid var(--color-border)" },
+  thAction: { width: 40, borderBottom: "1px solid var(--color-border)" },
+  tdAction: { width: 40, padding: "8px 0", borderBottom: "1px solid var(--color-border)", textAlign: "center" },
+  removeBtn: { border: "none", background: "none", color: "var(--color-danger)", fontSize: 20, cursor: "pointer", padding: 0 },
+  addBtn: { border: "1px dashed var(--color-primary)", background: "var(--color-primary-tint)", color: "var(--color-primary-dark)", padding: "8px 14px", borderRadius: "var(--radius-sm)", fontSize: 13, fontWeight: 700, cursor: "pointer" },
 };

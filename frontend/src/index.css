@@ -142,6 +142,25 @@ a {
   color: var(--color-primary);
 }
 
+.patient-workflow__step.is-clickable {
+  cursor: pointer;
+  transition: opacity 0.15s ease, transform 0.15s ease;
+}
+
+.patient-workflow__step.is-clickable:hover {
+  opacity: 0.85;
+  transform: translateY(-1px);
+}
+
+.patient-workflow__step.is-clickable:active {
+  transform: translateY(0);
+}
+
+.patient-workflow__step.is-clickable:hover .patient-workflow__circle {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px rgba(34, 114, 79, 0.15);
+}
+
 .patient-workflow__line {
   flex: 1;
   min-width: 24px;

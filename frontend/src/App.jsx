@@ -88,6 +88,14 @@ export default function App() {
         }
       />
       <Route
+        path="/patients/:id/demographics"
+        element={
+          <ProtectedRoute allowedRoles={["admitting", "ict_admin"]}>
+            <RegisterPatient />
+          </ProtectedRoute>
+        }
+      />
+      <Route
         path="/patients/:id"
         element={
           <ProtectedRoute>

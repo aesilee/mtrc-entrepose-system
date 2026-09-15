@@ -1061,7 +1061,7 @@ function AdmittingDashboard() {
   const navigate = useNavigate();
   const { isMobile, isTablet } = useViewport();
   const isCompact = isMobile || isTablet;
-  const kpiCols = isCompact ? 2 : 4;
+  const kpiCols = isCompact ? 2 : 5;
   const mainPanelHeight = isMobile ? 320 : 286;
   const insightPanelHeight = isMobile ? 310 : 258;
   const activityPanelHeight = isMobile ? 270 : 210;
@@ -1116,6 +1116,17 @@ function AdmittingDashboard() {
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" width={18} height={18}>
           <rect x="3" y="5" width="18" height="16" rx="2" />
           <path d="M3 10h18M8 3v4M16 3v4" />
+        </svg>
+      ),
+    },
+    {
+      key: "pendingTriage",
+      label: "Pending Triage / DDE",
+      value: stats?.pendingTriageDDE ?? "—",
+      icon: (
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" width={18} height={18}>
+          <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+          <path d="M9 12l2 2 4-4" />
         </svg>
       ),
     },

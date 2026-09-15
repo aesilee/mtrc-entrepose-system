@@ -49,12 +49,14 @@ export async function listPatients(req, res) {
   }
 
   const [rows] = await pool.query(
-    `SELECT p.id, p.patient_code, p.full_name, p.photo_url, p.gender, p.municipality,
+    `SELECT p.id, p.patient_code, p.pwud_code, p.full_name, p.photo_url, p.gender, p.municipality,
             p.admission_date, p.enrollment_status, p.is_archived,
             p.assigned_case_manager_id AS case_manager_id,
             u.full_name AS case_manager_name,
             r.status AS referral_status,
             r.referral_priority,
+            r.type_of_patient,
+            p.admission_type,
             (SELECT COUNT(*) FROM attendance a WHERE a.patient_id = p.id) AS total_sessions,
             (SELECT COUNT(*) FROM attendance a WHERE a.patient_id = p.id AND a.status = 'present') AS present_sessions
      FROM patients p
@@ -111,8 +113,18 @@ export async function updatePatient(req, res) {
     nationality: "nationality", occupation: "occupation", educationalAttainment: "educational_attainment",
     religion: "religion", livingArrangement: "living_arrangement",
     estimatedFamilyMonthlyIncome: "estimated_family_monthly_income",
-    contactNumber: "contact_number", email: "email", address: "address", municipality: "municipality",
-    province: "province", postalCode: "postal_code",
+    employmentStatus: "employment_status",
+    numberOfSiblings: "number_of_siblings",
+    ordinalPosition: "ordinal_position",
+    fatherName: "father_name",
+    fatherOccupation: "father_occupation",
+    motherName: "mother_name",
+    motherOccupation: "mother_occupation",
+    spouseName: "spouse_name",
+    spouseOccupation: "spouse_occupation",
+    contactNumber: "contact_number", email: "email", address: "address",
+    region: "region", province: "province", municipality: "municipality",
+    barangay: "barangay", streetAddress: "street_address", postalCode: "postal_code",
     photoDataUrl: "photo_url",
     emergencyContactName: "emergency_contact_name",
     emergencyContactRelationship: "emergency_contact_relationship",
@@ -296,8 +308,9 @@ export async function getPatientHistory(req, res) {
 export async function createPatient(req, res) {
   const {
     firstName, middleName, lastName, suffix, preferredName, gender, birthdate, civilStatus,
-    nationality, occupation, educationalAttainment, religion, livingArrangement, estimatedFamilyMonthlyIncome,
-    contactNumber, email, address, municipality, province, postalCode,
+    nationality, occupation, employmentStatus, educationalAttainment, religion, livingArrangement, estimatedFamilyMonthlyIncome,
+    numberOfSiblings, ordinalPosition, fatherName, fatherOccupation, motherName, motherOccupation, spouseName, spouseOccupation,
+    contactNumber, email, address, region, province, municipality, barangay, streetAddress, postalCode,
     emergencyContactName, emergencyContactRelationship, emergencyContactNumber,
     emergencyContactEmail, emergencyContactAddress, emergencyContactMethod,
     guardianName, guardianRelationship, guardianContactNumber, guardianAddress,
@@ -318,17 +331,29 @@ export async function createPatient(req, res) {
     civilStatus: cleanText(civilStatus) || "single",
     nationality: cleanText(nationality),
     occupation: cleanText(occupation),
+    employmentStatus: cleanText(employmentStatus) || "Employed",
     educationalAttainment: cleanText(educationalAttainment),
     religion: cleanText(religion),
     livingArrangement: cleanText(livingArrangement),
     estimatedFamilyMonthlyIncome: estimatedFamilyMonthlyIncome === "" || estimatedFamilyMonthlyIncome === undefined
       ? null
       : Number(estimatedFamilyMonthlyIncome),
+    numberOfSiblings: numberOfSiblings === "" || numberOfSiblings === undefined ? null : Number(numberOfSiblings),
+    ordinalPosition: cleanText(ordinalPosition),
+    fatherName: cleanText(fatherName),
+    fatherOccupation: cleanText(fatherOccupation),
+    motherName: cleanText(motherName),
+    motherOccupation: cleanText(motherOccupation),
+    spouseName: cleanText(spouseName),
+    spouseOccupation: cleanText(spouseOccupation),
     contactNumber: cleanText(contactNumber),
     email: cleanText(email),
     address: cleanText(address),
-    municipality: cleanText(municipality),
+    region: cleanText(region),
     province: cleanText(province),
+    municipality: cleanText(municipality),
+    barangay: cleanText(barangay),
+    streetAddress: cleanText(streetAddress),
     postalCode: cleanText(postalCode),
     emergencyContactName: cleanText(emergencyContactName),
     emergencyContactRelationship: cleanText(emergencyContactRelationship),
@@ -361,8 +386,8 @@ export async function createPatient(req, res) {
     return res.status(400).json({ message: "Estimated family monthly income must be zero or greater." });
   }
 
-  if (!normalized.address || !normalized.municipality || !normalized.province) {
-    return res.status(400).json({ message: "Home address, city or municipality, and province are required." });
+  if (!normalized.region || !normalized.province || !normalized.municipality || !normalized.barangay || !normalized.streetAddress) {
+    return res.status(400).json({ message: "Region, Province, City/Municipality, Barangay, and Street Address are required." });
   }
 
   if (!normalized.emergencyContactName || !normalized.emergencyContactRelationship || !normalized.emergencyContactNumber) {
@@ -437,9 +462,19 @@ export async function createPatient(req, res) {
     }
 
     const patientCode = await generatePatientCode();
+    const lguCode = normalized.municipality
+      ? String(normalized.municipality).replace(/[^a-zA-Z]/g, "").slice(0, 3).toUpperCase() || "MTR"
+      : "MTR";
+    const year = new Date().getFullYear().toString().slice(-2);
+    const [[{ count: pwudCount }]] = await pool.query(
+      `SELECT COUNT(*) as count FROM patients WHERE pwud_code LIKE ?`,
+      [`OP-${lguCode}-${year}-%`]
+    );
+    const pwudCode = `OP-${lguCode}-${year}-${String(pwudCount + 1).padStart(3, "0")}`;
 
     const record = {
       patient_code: patientCode,
+      pwud_code: pwudCode,
       first_name: normalized.firstName,
       middle_name: normalized.middleName || null,
       last_name: normalized.lastName,
@@ -451,15 +486,27 @@ export async function createPatient(req, res) {
       civil_status: normalized.civilStatus,
       nationality: normalized.nationality || null,
       occupation: normalized.occupation || null,
+      employment_status: normalized.employmentStatus || null,
       educational_attainment: normalized.educationalAttainment || null,
       religion: normalized.religion || null,
       living_arrangement: normalized.livingArrangement || null,
       estimated_family_monthly_income: normalized.estimatedFamilyMonthlyIncome,
+      number_of_siblings: normalized.numberOfSiblings,
+      ordinal_position: normalized.ordinalPosition || null,
+      father_name: normalized.fatherName || null,
+      father_occupation: normalized.fatherOccupation || null,
+      mother_name: normalized.motherName || null,
+      mother_occupation: normalized.motherOccupation || null,
+      spouse_name: normalized.spouseName || null,
+      spouse_occupation: normalized.spouseOccupation || null,
       contact_number: normalized.contactNumber || null,
       email: normalized.email || null,
       address: normalized.address,
-      municipality: normalized.municipality,
+      region: normalized.region,
       province: normalized.province,
+      municipality: normalized.municipality,
+      barangay: normalized.barangay,
+      street_address: normalized.streetAddress,
       postal_code: normalized.postalCode || null,
       emergency_contact_name: normalized.emergencyContactName,
       emergency_contact_relationship: normalized.emergencyContactRelationship,
@@ -509,7 +556,7 @@ export async function createPatient(req, res) {
       );
     }
 
-    res.status(201).json({ id: result.insertId, patientCode, message: "Patient registered." });
+    res.status(201).json({ id: result.insertId, patientCode, pwudCode, message: "Patient registered." });
   } catch (err) {
     console.error(err);
     if (err.code === "ER_BAD_FIELD_ERROR") {

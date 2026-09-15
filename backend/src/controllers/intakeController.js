@@ -3,7 +3,7 @@ import { notifyRoles } from "../utils/notify.js";
 
 const VALID_LENGTHS = new Set(["under_2_years", "2_to_4_years", "4_to_6_years", "6_years_or_more"]);
 const VALID_FREQUENCIES = new Set(["daily", "2_to_5_weekly", "weekly", "monthly", "occasionally"]);
-const VALID_CLASSIFICATIONS = new Set(["full_pay", "c1", "c2", "indigent"]);
+const VALID_CLASSIFICATIONS = new Set(["full_pay", "c1", "c2", "c3"]);
 const IDADIN_DRUGS = new Set([
   "Opium", "Morphine", "Heroin", "Hydrocodone", "Codeine", "Methadone", "Demerol",
   "Nalbuphine Hydrochloride (Nubain)", "Ketamine", "Cannabis (Marijuana)", "Brownies/Cake",
@@ -63,7 +63,21 @@ async function getIntake(connection, patientId) {
     "SELECT * FROM patient_intakes WHERE patient_id = ?",
     [patientId]
   );
-  return shapeIntake(intake);
+  const shaped = shapeIntake(intake);
+  if (shaped) {
+    const [substances] = await connection.query(
+      `SELECT drug_used AS drugUsed,
+              route_of_administration AS routeOfAdministration,
+              frequency,
+              amount_spent AS amountSpent,
+              quantity,
+              unit_of_measurement AS unitOfMeasurement
+       FROM patient_substances WHERE patient_id = ?`,
+      [patientId]
+    );
+    shaped.substances = substances;
+  }
+  return shaped;
 }
 
 function canAccessPatient(user, patient) {
@@ -98,7 +112,7 @@ export async function saveDrugUseHistory(req, res) {
   const frequencyOfUse = cleanText(req.body.frequencyOfUse, 30);
   const primaryReason = cleanText(req.body.primaryReason);
   const drugSource = cleanText(req.body.drugSource, 150);
-  const drugsUsed = Array.isArray(req.body.drugsUsed) ? [...new Set(req.body.drugsUsed.map((drug) => cleanText(drug, 100)).filter(Boolean))] : [];
+  const substances = Array.isArray(req.body.substances) ? req.body.substances : [];
 
   if (!Number.isInteger(patientId)) return res.status(400).json({ message: "Invalid patient ID." });
   if (!Number.isInteger(ageAtFirstUse) || ageAtFirstUse < 0 || ageAtFirstUse > 130) return res.status(400).json({ message: "Age at first drug use must be from 0 to 130." });
@@ -106,7 +120,14 @@ export async function saveDrugUseHistory(req, res) {
   if (!VALID_LENGTHS.has(lengthOfUse)) return res.status(400).json({ message: "Select a valid length of drug use." });
   if (!VALID_FREQUENCIES.has(frequencyOfUse)) return res.status(400).json({ message: "Select a valid frequency of drug use." });
   if (!primaryReason || !drugSource) return res.status(400).json({ message: "Primary reason and source of drugs are required." });
-  if (!drugsUsed.length || drugsUsed.some((drug) => !IDADIN_DRUGS.has(drug))) return res.status(400).json({ message: "Select at least one valid drug used in the past 12 months." });
+  if (!substances.length) return res.status(400).json({ message: "Select at least one valid drug used in the past 12 months." });
+
+  const VALID_ROUTES = new Set([
+    'Oral', 'Orally', 'Smoking', 'Inhalation/Sniffing', 'Inhalation', 'Injection', 'Injection/Intravenous'
+  ]);
+  for (const sub of substances) {
+    if (!sub.drugUsed) return res.status(400).json({ message: "Drug type is required for all substances." });
+  }
 
   const connection = await pool.getConnection();
   try {
@@ -129,15 +150,33 @@ export async function saveDrugUseHistory(req, res) {
     await connection.query(
       `INSERT INTO patient_intakes
          (patient_id, age_at_first_drug_use, last_drug_use_date, length_of_use, frequency_of_use,
-          primary_reason_for_using, drug_source, drugs_used, workflow_step, created_by, updated_by)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 4, ?, ?)
+          primary_reason_for_using, drug_source, workflow_step, created_by, updated_by)
+       VALUES (?, ?, ?, ?, ?, ?, ?, 4, ?, ?)
        ON DUPLICATE KEY UPDATE
          age_at_first_drug_use = VALUES(age_at_first_drug_use), last_drug_use_date = VALUES(last_drug_use_date),
          length_of_use = VALUES(length_of_use), frequency_of_use = VALUES(frequency_of_use),
          primary_reason_for_using = VALUES(primary_reason_for_using), drug_source = VALUES(drug_source),
-         drugs_used = VALUES(drugs_used), workflow_step = GREATEST(workflow_step, 4), updated_by = VALUES(updated_by)`,
-      [patientId, ageAtFirstUse, lastDrugUseDate, lengthOfUse, frequencyOfUse, primaryReason, drugSource, JSON.stringify(drugsUsed), req.user.id, req.user.id]
+         workflow_step = GREATEST(workflow_step, 4), updated_by = VALUES(updated_by)`,
+      [patientId, ageAtFirstUse, lastDrugUseDate, lengthOfUse, frequencyOfUse, primaryReason, drugSource, req.user.id, req.user.id]
     );
+
+    await connection.query("DELETE FROM patient_substances WHERE patient_id = ?", [patientId]);
+    for (const sub of substances) {
+      await connection.query(
+        `INSERT INTO patient_substances 
+           (patient_id, drug_used, route_of_administration, frequency, amount_spent, quantity, unit_of_measurement)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        [
+          patientId,
+          cleanText(sub.drugUsed, 255),
+          cleanText(sub.routeOfAdministration || sub.modeOfIntake, 100) || "Oral",
+          cleanText(sub.frequency, 50) || null,
+          sub.amountSpent === "" || sub.amountSpent == null ? 0 : Number(sub.amountSpent),
+          sub.quantity === "" || sub.quantity == null ? 0 : Number(sub.quantity),
+          cleanText(sub.unitOfMeasurement, 50) || null,
+        ]
+      );
+    }
     await connection.query("UPDATE patient_referrals SET status = 'intake_in_progress' WHERE patient_id = ?", [patientId]);
     await connection.query(
       "INSERT INTO audit_log (actor_username, action, table_name, record_id) VALUES (?, ?, 'patient_intakes', ?)",
@@ -158,13 +197,16 @@ export async function saveClinicalTriage(req, res) {
   const patientId = Number(req.params.patientId);
   const bloodPressure = cleanText(req.body.bloodPressure, 20);
   const pulseRate = Number(req.body.pulseRate);
+  const respiratoryRate = Number(req.body.respiratoryRate);
   const temperature = Number(req.body.temperature);
   const weight = Number(req.body.weight);
   const socioeconomicClassification = cleanText(req.body.socioeconomicClassification, 20);
+  const mseRemarks = cleanText(req.body.mseRemarks);
 
   if (!Number.isInteger(patientId)) return res.status(400).json({ message: "Invalid patient ID." });
   if (!/^\d{2,3}\/\d{2,3}$/.test(bloodPressure || "")) return res.status(400).json({ message: "Enter blood pressure in systolic/diastolic format, such as 120/80." });
   if (!Number.isInteger(pulseRate) || pulseRate < 20 || pulseRate > 250) return res.status(400).json({ message: "Pulse rate must be from 20 to 250 bpm." });
+  if (!Number.isInteger(respiratoryRate) || respiratoryRate < 8 || respiratoryRate > 60) return res.status(400).json({ message: "Respiratory rate must be from 8 to 60 cpm." });
   if (!Number.isFinite(temperature) || temperature < 30 || temperature > 45) return res.status(400).json({ message: "Temperature must be from 30 to 45 °C." });
   if (!Number.isFinite(weight) || weight < 1 || weight > 500) return res.status(400).json({ message: "Weight must be from 1 to 500 kg." });
   if (!VALID_CLASSIFICATIONS.has(socioeconomicClassification)) return res.status(400).json({ message: "Select a valid socio-economic classification." });
@@ -192,10 +234,10 @@ export async function saveClinicalTriage(req, res) {
     }
 
     await connection.query(
-      `UPDATE patient_intakes SET blood_pressure = ?, pulse_rate = ?, temperature_celsius = ?, weight_kg = ?,
-         socioeconomic_classification = ?, workflow_step = GREATEST(workflow_step, 5), updated_by = ?
+      `UPDATE patient_intakes SET blood_pressure = ?, pulse_rate = ?, respiratory_rate = ?, temperature_celsius = ?, weight_kg = ?,
+         socioeconomic_classification = ?, mse_remarks = ?, workflow_step = GREATEST(workflow_step, 5), updated_by = ?
        WHERE patient_id = ?`,
-      [bloodPressure, pulseRate, temperature, weight, socioeconomicClassification, req.user.id, patientId]
+      [bloodPressure, pulseRate, respiratoryRate, temperature, weight, socioeconomicClassification, mseRemarks, req.user.id, patientId]
     );
     await connection.query(
       "INSERT INTO audit_log (actor_username, action, table_name, record_id) VALUES (?, ?, 'patient_intakes', ?)",
@@ -247,11 +289,30 @@ export async function finalizeEnrollment(req, res) {
          finalized_by = COALESCE(finalized_by, ?), updated_by = ? WHERE patient_id = ?`,
       [req.user.id, req.user.id, patientId]
     );
+
+    const lguCode = patient.municipality
+      ? String(patient.municipality).replace(/[^a-zA-Z]/g, "").slice(0, 3).toUpperCase() || "MTR"
+      : "MTR";
+    const year = new Date().getFullYear().toString().slice(-2);
+    const [[{ count }]] = await connection.query(
+      `SELECT COUNT(*) as count FROM patients WHERE pwud_code LIKE ?`,
+      [`OP-${lguCode}-${year}-%`]
+    );
+    const sequence = String(count + 1).padStart(3, "0");
+    const pwudCode = `OP-${lguCode}-${year}-${sequence}`;
+
     await connection.query(
-      "UPDATE patients SET admission_date = COALESCE(admission_date, CURDATE()), enrollment_status = 'active' WHERE id = ?",
-      [patientId]
+      "UPDATE patients SET admission_date = COALESCE(admission_date, CURDATE()), enrollment_status = 'active', current_status = 'active', pwud_code = COALESCE(pwud_code, ?) WHERE id = ?",
+      [pwudCode, patientId]
     );
     await connection.query("UPDATE patient_referrals SET status = 'intake_completed' WHERE patient_id = ?", [patientId]);
+    await connection.query(
+      `INSERT INTO patient_case_management 
+         (patient_id, date_of_initial_assessment, date_of_case_conference)
+       VALUES (?, NULL, NULL)
+       ON DUPLICATE KEY UPDATE updated_at = NOW()`,
+      [patientId]
+    );
 
     let [[certificate]] = await connection.query(
       "SELECT id FROM certificates WHERE patient_id = ? AND certificate_type = 'enrollment' AND is_archived = FALSE ORDER BY issued_at DESC LIMIT 1",

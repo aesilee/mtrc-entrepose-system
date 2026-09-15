@@ -7,7 +7,7 @@ function cleanText(value) {
 
 // List all discharges, optionally filtered by program_type
 export async function listDischarges(req, res) {
-  const { programType } = req.query;
+  const { programType, patientId } = req.query;
 
   try {
     let query = `
@@ -19,9 +19,17 @@ export async function listDischarges(req, res) {
     `;
     const params = [];
 
+        const conditions = [];
     if (programType) {
-      query += " WHERE d.program_type = ?";
+      conditions.push("d.program_type = ?");
       params.push(programType);
+    }
+    if (patientId) {
+      conditions.push("d.patient_id = ?");
+      params.push(patientId);
+    }
+    if (conditions.length > 0) {
+      query += " WHERE " + conditions.join(" AND ");
     }
 
     query += " ORDER BY d.discharge_date DESC";
@@ -70,6 +78,12 @@ export async function createDischarge(req, res) {
     );
 
     if (!patient) return res.status(404).json({ message: "Patient not found." });
+
+    const [[existing]] = await pool.query(
+  "SELECT id FROM discharges WHERE patient_id = ?",
+  [patientId]
+);
+if (existing) return res.status(409).json({ message: "This patient has already been discharged." });
 
     const [result] = await pool.query(
       `INSERT INTO discharges (patient_id, program_type, discharge_type, discharge_date, remarks, discharged_by)

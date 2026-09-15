@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import AppShell from "../components/AppShell.jsx";
 import api from "../api/axios.js";
 
@@ -38,6 +39,7 @@ const ICONS = {
 };
 
 export default function Discharges() {
+  const navigate = useNavigate();
   const [discharges, setDischarges] = useState([]);
   const [loading, setLoading] = useState(true);
   const [activeFilters, setActiveFilters] = useState([]);
@@ -138,7 +140,7 @@ export default function Discharges() {
               </thead>
               <tbody>
                 {filteredDischarges.map((d) => (
-                  <tr key={d.id}>
+                    <tr key={d.id} style={{ cursor: "pointer" }} onClick={() => navigate(`/patients/${d.patient_id}`)}>
                     <td style={{ ...styles.td, fontWeight: 600 }}>{d.full_name}</td>
                     <td style={styles.td}>
                       <span style={styles.programBadge}>

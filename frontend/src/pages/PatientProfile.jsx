@@ -113,6 +113,7 @@ export default function PatientProfile() {
   const [archivingCertificate, setArchivingCertificate] = useState(null);
   const [archivingPatient, setArchivingPatient] = useState(false);
   const [dischargingPatient, setDischargingPatient] = useState(false);
+  const [dischargeRecord, setDischargeRecord] = useState(null);
   const [restoringPatient, setRestoringPatient] = useState(false);
   const [toast, setToast] = useState("");
 
@@ -192,20 +193,22 @@ export default function PatientProfile() {
   const sectionRefs = { personal: personalRef, admission: admissionRef, rehab: rehabRef };
 
   function loadAll() {
-    setLoading(true);
-    Promise.all([
-      api.get(`/patients/${id}`),
-      api.get(`/patients/${id}/attendance`),
-      api.get(`/patients/${id}/progress-notes`),
-      api.get(`/patients/${id}/certificates`),
-      api.get(`/patients/${id}/history`),
-      api.get(`/patients/${id}/follow-ups`),
-      api.get(`/patients/${id}/timeline`),
-      api.get("/users/case-managers"),
-      api.get("/programs"),
-    ]).then(([p, a, pn, c, h, fu, tl, cm, pr]) => {
+  setLoading(true);
+  Promise.all([
+    api.get(`/patients/${id}`),
+    api.get(`/patients/${id}/attendance`),
+    api.get(`/patients/${id}/progress-notes`),
+    api.get(`/patients/${id}/certificates`),
+    api.get(`/patients/${id}/history`),
+    api.get(`/patients/${id}/follow-ups`),
+    api.get(`/patients/${id}/timeline`),
+    api.get("/users/case-managers"),
+    api.get("/programs"),
+    api.get(`/discharges?patientId=${id}`),
+  ]).then(([p, a, pn, c, h, fu, tl, cm, pr, disc]) => {
       setPatient(p.data.patient);
       setForm(toFormState(p.data.patient));
+      setDischargeRecord(disc.data[0] || null);
       setAttendance(a.data.attendance);
       setProgressNotes(pn.data.progressNotes);
       setCertificates(c.data.certificates);
@@ -371,11 +374,15 @@ export default function PatientProfile() {
               {user.role === "ict_admin" && (
                 patient.is_archived ? (
                   <button type="button" style={styles.editBtn} onClick={() => setRestoringPatient(true)}>Restore</button>
-                ) : (
+               ) : (
                   <>
                     <button type="button" style={styles.cancelBtn} onClick={() => setArchivingPatient(true)}>Archive</button>
-                    <button type="button" style={styles.editBtn} onClick={() => setDischargingPatient(true)}>Discharge</button>
-                 </>
+                    {dischargeRecord ? (
+                      <span style={styles.archivedBadge}>Discharged</span>
+                    ) : (
+                      <button type="button" style={styles.editBtn} onClick={() => setDischargingPatient(true)}>Discharge</button>
+                    )}
+                  </>
                 )
               )}
             </>

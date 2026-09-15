@@ -128,6 +128,15 @@ export default function Patients() {
       <div style={{ ...styles.wrapper, height: "100%" }}>
         <div style={{ ...styles.toolbar, flexWrap: isMobile ? "wrap" : "nowrap" }}>
           <div style={{ ...styles.leftControls, flexWrap: isMobile ? "wrap" : "nowrap", width: isMobile ? "100%" : "auto" }}>
+
+            <button
+              type="button"
+              style={styles.dischargedBtn}
+              onClick={() => navigate("/patients/discharges")}
+            >
+              View Discharged Patients
+            </button>
+
             <div style={{ position: "relative" }}>
               <button
                 type="button"
@@ -210,14 +219,6 @@ export default function Patients() {
                 </>
               )}
             </div>
-
-            <button
-              type="button"
-              style={styles.dischargedBtn}
-              onClick={() => navigate("/patients/discharges")}
-            >
-              View Discharged Patients
-            </button>
 
             <div style={styles.searchBox}>
               <svg {...iconProps} width="16" height="16" style={styles.searchIcon}>

@@ -53,10 +53,13 @@ export async function listPatients(req, res) {
             p.admission_date, p.enrollment_status, p.is_archived,
             p.assigned_case_manager_id AS case_manager_id,
             u.full_name AS case_manager_name,
+            r.status AS referral_status,
+            r.referral_priority,
             (SELECT COUNT(*) FROM attendance a WHERE a.patient_id = p.id) AS total_sessions,
             (SELECT COUNT(*) FROM attendance a WHERE a.patient_id = p.id AND a.status = 'present') AS present_sessions
      FROM patients p
      LEFT JOIN users u ON u.id = p.assigned_case_manager_id
+     LEFT JOIN patient_referrals r ON r.patient_id = p.id
      WHERE ${clauses.join(" AND ")}
      ORDER BY p.created_at DESC`,
     params
@@ -73,6 +76,18 @@ export async function listPatients(req, res) {
 export async function updatePatient(req, res) {
   const { id } = req.params;
   const fields = req.body;
+
+  if (fields.livingArrangement !== undefined
+      && !new Set(["", "With Parents", "With Relatives", "Boarding House", "Living Alone"]).has(cleanText(fields.livingArrangement) || "")) {
+    return res.status(400).json({ message: "Select a valid living arrangement." });
+  }
+
+  if (fields.estimatedFamilyMonthlyIncome !== undefined && fields.estimatedFamilyMonthlyIncome !== "") {
+    const income = Number(fields.estimatedFamilyMonthlyIncome);
+    if (!Number.isFinite(income) || income < 0) {
+      return res.status(400).json({ message: "Estimated family monthly income must be zero or greater." });
+    }
+  }
 
   if (fields.emergencyContactMethod !== undefined && (cleanText(fields.emergencyContactMethod) || "").length > 30) {
     return res.status(400).json({ message: "Preferred contact method must be 30 characters or fewer." });
@@ -94,6 +109,8 @@ export async function updatePatient(req, res) {
     preferredName: "preferred_name",
     gender: "gender", birthdate: "birthdate", civilStatus: "civil_status",
     nationality: "nationality", occupation: "occupation", educationalAttainment: "educational_attainment",
+    religion: "religion", livingArrangement: "living_arrangement",
+    estimatedFamilyMonthlyIncome: "estimated_family_monthly_income",
     contactNumber: "contact_number", email: "email", address: "address", municipality: "municipality",
     province: "province", postalCode: "postal_code",
     photoDataUrl: "photo_url",
@@ -279,7 +296,7 @@ export async function getPatientHistory(req, res) {
 export async function createPatient(req, res) {
   const {
     firstName, middleName, lastName, suffix, preferredName, gender, birthdate, civilStatus,
-    nationality, occupation, educationalAttainment,
+    nationality, occupation, educationalAttainment, religion, livingArrangement, estimatedFamilyMonthlyIncome,
     contactNumber, email, address, municipality, province, postalCode,
     emergencyContactName, emergencyContactRelationship, emergencyContactNumber,
     emergencyContactEmail, emergencyContactAddress, emergencyContactMethod,
@@ -302,6 +319,11 @@ export async function createPatient(req, res) {
     nationality: cleanText(nationality),
     occupation: cleanText(occupation),
     educationalAttainment: cleanText(educationalAttainment),
+    religion: cleanText(religion),
+    livingArrangement: cleanText(livingArrangement),
+    estimatedFamilyMonthlyIncome: estimatedFamilyMonthlyIncome === "" || estimatedFamilyMonthlyIncome === undefined
+      ? null
+      : Number(estimatedFamilyMonthlyIncome),
     contactNumber: cleanText(contactNumber),
     email: cleanText(email),
     address: cleanText(address),
@@ -322,6 +344,21 @@ export async function createPatient(req, res) {
 
   if (!normalized.firstName || !normalized.lastName || !normalized.gender || !normalized.birthdate) {
     return res.status(400).json({ message: "First name, last name, sex, and birthdate are required." });
+  }
+
+  const validSuffixes = new Set(["", "Jr.", "Sr.", "II", "III", "IV", "V"]);
+  if (!validSuffixes.has(normalized.suffix || "")) {
+    return res.status(400).json({ message: "Select a valid name suffix." });
+  }
+
+  const validLivingArrangements = new Set(["", "With Parents", "With Relatives", "Boarding House", "Living Alone"]);
+  if (!validLivingArrangements.has(normalized.livingArrangement || "")) {
+    return res.status(400).json({ message: "Select a valid living arrangement." });
+  }
+
+  if (normalized.estimatedFamilyMonthlyIncome !== null
+      && (!Number.isFinite(normalized.estimatedFamilyMonthlyIncome) || normalized.estimatedFamilyMonthlyIncome < 0)) {
+    return res.status(400).json({ message: "Estimated family monthly income must be zero or greater." });
   }
 
   if (!normalized.address || !normalized.municipality || !normalized.province) {
@@ -415,6 +452,9 @@ export async function createPatient(req, res) {
       nationality: normalized.nationality || null,
       occupation: normalized.occupation || null,
       educational_attainment: normalized.educationalAttainment || null,
+      religion: normalized.religion || null,
+      living_arrangement: normalized.livingArrangement || null,
+      estimated_family_monthly_income: normalized.estimatedFamilyMonthlyIncome,
       contact_number: normalized.contactNumber || null,
       email: normalized.email || null,
       address: normalized.address,

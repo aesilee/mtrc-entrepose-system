@@ -19,6 +19,14 @@ const STATUS_COLORS = {
   transferred: { bg: "#EDEAFB", color: "#5B3EC9" },
 };
 
+const REFERRAL_STATUS = {
+  draft: { label: "Draft", bg: "#EDEAFB", color: "#5B3EC9" },
+  ready_for_intake: { label: "Drug history next", bg: "#FFF3D6", color: "#9A6B00" },
+  returned_for_correction: { label: "Needs correction", bg: "#FDE2E2", color: "#B3261E" },
+  intake_in_progress: { label: "Intake in progress", bg: "#E1F0FF", color: "#0B5FA5" },
+  intake_completed: { label: "Registration complete", bg: "var(--color-primary-tint)", color: "var(--color-primary-dark)" },
+};
+
 function getInitials(name) {
   return String(name || "")
     .split(/\s+/)
@@ -242,6 +250,7 @@ export default function Patients() {
               <col style={{ width: 140 }} />
               <col style={{ width: 150 }} />
               <col style={{ width: 100 }} />
+              <col style={{ width: 145 }} />
               <col style={{ width: 130 }} />
               <col style={{ width: 90 }} />
             </colgroup>
@@ -254,16 +263,17 @@ export default function Patients() {
                 <th style={styles.th}>Admission Date</th>
                 <th style={styles.th}>Case Manager</th>
                 <th style={styles.th}>Status</th>
+                <th style={styles.th}>Referral</th>
                 <th style={styles.th}>Attendance</th>
                 <th style={{ ...styles.th, ...styles.actionsTh }}>Actions</th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
-                <tr><td style={styles.emptyCell} colSpan={9}>Loading patients…</td></tr>
+                <tr><td style={styles.emptyCell} colSpan={10}>Loading patients…</td></tr>
               ) : filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={9}>
+                  <td colSpan={10}>
                     <EmptyState
                       icon={
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="24" height="24">
@@ -280,6 +290,7 @@ export default function Patients() {
               ) : (
                 filtered.map((p) => {
                   const statusStyle = STATUS_COLORS[p.enrollment_status] || STATUS_COLORS.pending;
+                  const referralStyle = REFERRAL_STATUS[p.referral_status];
                   return (
                     <tr key={p.id} style={styles.row} onClick={() => navigate(`/patients/${p.id}`)}>
                       <td style={{ ...styles.td, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{p.patient_code}</td>
@@ -297,6 +308,13 @@ export default function Patients() {
                         <span style={{ ...styles.statusBadge, background: statusStyle.bg, color: statusStyle.color }}>
                           {p.enrollment_status}
                         </span>
+                      </td>
+                      <td style={styles.td}>
+                        {referralStyle ? (
+                          <span style={{ ...styles.statusBadge, background: referralStyle.bg, color: referralStyle.color }}>
+                            {referralStyle.label}
+                          </span>
+                        ) : "Not started"}
                       </td>
                       <td style={styles.td}>{p.attendance_rate !== null ? `${p.attendance_rate}%` : "—"}</td>
                       <td style={{ ...styles.td, ...styles.actionsTd }} onClick={(e) => e.stopPropagation()}>
@@ -359,6 +377,9 @@ function RowMenu({ patientId, isOpen, onToggle, onClose, navigate, onArchiveClic
             <div style={{ ...styles.menuPanel, position: "fixed", top: coords.top, left: coords.left }}>
               <button type="button" style={styles.menuItem} onClick={() => { onClose(); navigate(`/patients/${patientId}`); }}>
                 View
+              </button>
+              <button type="button" style={styles.menuItem} onClick={() => { onClose(); navigate(`/patients/${patientId}/referral`); }}>
+                Admission history
               </button>
               <button
                 type="button"
@@ -508,7 +529,7 @@ const styles = {
     borderRadius: "var(--radius-md, 10px)",
     overflow: "auto",
   },
-  table: { width: "100%", minWidth: 760, tableLayout: "fixed", borderCollapse: "collapse", fontSize: 13 },
+  table: { width: "100%", minWidth: 1355, tableLayout: "fixed", borderCollapse: "collapse", fontSize: 13 },
   th: {
     textAlign: "left",
     padding: "12px 16px",

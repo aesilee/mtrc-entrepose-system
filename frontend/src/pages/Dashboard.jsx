@@ -647,6 +647,15 @@ function CaseManagerDashboard() {
     loadStats();
   }, []);
 
+  function registrationPath(patient) {
+    if (!patient?.id) return "/patients";
+    if (Number(patient.next_step) === 2) return `/patients/${patient.id}/referral`;
+    if (Number(patient.next_step) === 3) return `/patients/${patient.id}/intake/drug-history`;
+    if (Number(patient.next_step) === 4) return `/patients/${patient.id}/intake/clinical-triage`;
+    if (Number(patient.next_step) === 5) return `/patients/${patient.id}/intake/finalize`;
+    return `/patients/${patient.id}`;
+  }
+
   const statusOverview = [
     { key: "active", label: "Active", value: stats?.caseStatusOverview?.active || 0, color: "#2F855A", tint: "#D8F5E9" },
     { key: "followUp", label: "Follow-up", value: stats?.caseStatusOverview?.followUp || 0, color: "#B7791F", tint: "#FFF3D6" },
@@ -670,6 +679,19 @@ function CaseManagerDashboard() {
       description: "Document a patient's session and progress.",
       icon: <svg {...iconProps} width={18} height={18}><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><path d="M14 2v6h6M12 12v6M9 15h6" /></svg>,
       onClick: () => setNoteModalOpen(true),
+    },
+    {
+      key: "continue-registration",
+      label: "Continue Registration",
+      description: stats?.pendingRegistrationRecords?.length
+        ? `Resume ${stats.pendingRegistrationRecords[0].next_step_label}.`
+        : "No incomplete registrations.",
+      icon: (
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" width={16} height={16}>
+          <path d="M5 12h14M13 6l6 6-6 6" />
+        </svg>
+      ),
+      onClick: () => navigate(registrationPath(stats?.pendingRegistrationRecords?.[0])),
     },
     {
       key: "patients",
@@ -1221,7 +1243,7 @@ function AdmittingDashboard() {
                   key={patient.id}
                   type="button"
                   style={apStyles.pendingRow}
-                  onClick={() => navigate(`/patients/${patient.id}`)}
+                  onClick={() => navigate(registrationPath(patient))}
                 >
                   <PatientAvatar name={patient.full_name} photoUrl={patient.photo_url} style={apStyles.pendingAvatar} />
                   <span style={apStyles.pendingIdentity}>
@@ -1229,6 +1251,7 @@ function AdmittingDashboard() {
                     <span style={apStyles.pendingMeta}>
                       {patient.patient_code} · {fmtShortDate(patient.admission_date || patient.created_at)}
                     </span>
+                    <span style={apStyles.pendingStage}>Next: {patient.next_step_label}</span>
                   </span>
                   <span aria-hidden="true" style={apStyles.pendingChevron}>›</span>
                 </button>
@@ -1285,7 +1308,7 @@ function AdmittingDashboard() {
                           <td style={apStyles.td}>{fmtDate(p.admission_date || p.created_at)}</td>
                           <td style={apStyles.td}>
                             <span style={{ ...apStyles.statusBadge, background: sc.bg, color: sc.color }}>
-                              {p.enrollment_status}
+                              {p.enrollment_status === "pending" ? p.registration_stage : p.enrollment_status}
                             </span>
                           </td>
                         </tr>
@@ -1314,7 +1337,7 @@ function AdmittingDashboard() {
                     key={p.id}
                     type="button"
                     style={apStyles.incompleteRow}
-                    onClick={() => navigate(`/patients/${p.id}`)}
+                    onClick={() => navigate(registrationPath(p))}
                   >
                     <PatientAvatar name={p.full_name} photoUrl={p.photo_url} style={apStyles.incompleteAvatar} />
                     <div style={apStyles.incompletePatient}>
@@ -2089,6 +2112,7 @@ const apStyles = {
   pendingIdentity: { display: "flex", flexDirection: "column", gap: 3, flex: 1, minWidth: 0 },
   pendingName: { color: "var(--color-text)", fontSize: 13, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
   pendingMeta: { color: "var(--color-text-muted)", fontSize: 11, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
+  pendingStage: { color: "var(--color-primary-dark)", fontSize: 10.5, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
   pendingChevron: { color: "var(--color-text-muted)", fontSize: 20, lineHeight: 1, flexShrink: 0 },
   incompleteRow: {
     display: "flex",

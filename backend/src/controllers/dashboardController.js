@@ -257,70 +257,91 @@ export async function getAdmittingStats(req, res) {
     // Recent admissions, newest first, capped at 8
     const [recentAdmissions] = await pool.query(
       `SELECT p.id, p.patient_code, p.full_name, p.photo_url, p.admission_date, p.enrollment_status, p.municipality,
-              p.created_at
+              p.created_at,
+              CASE
+                WHEN i.workflow_step >= 6 OR p.enrollment_status <> 'pending' THEN 'Enrollment Complete'
+                WHEN i.workflow_step = 5 THEN 'Consents & Finalization'
+                WHEN i.workflow_step = 4 THEN 'Clinical Triage'
+                WHEN r.status IN ('ready_for_intake', 'intake_in_progress') THEN 'Drug Use History'
+                ELSE 'Admission History'
+              END AS registration_stage
        FROM patients p
+       LEFT JOIN patient_referrals r ON r.patient_id = p.id
+       LEFT JOIN patient_intakes i ON i.patient_id = p.id
        WHERE p.is_archived = FALSE
        ORDER BY p.created_at DESC
        LIMIT 8`
     );
 
-    // Patients that may still have missing info (no emergency contact or no program assigned)
+    // Patients whose five-step admitting workflow has not reached finalization.
     const [incompleteRecords] = await pool.query(
-      `SELECT id, full_name, patient_code, photo_url,
+      `SELECT p.id, p.full_name, p.patient_code, p.photo_url,
               CASE
-                WHEN emergency_contact_name IS NULL OR emergency_contact_name = '' THEN 'Missing Emergency Contact'
-                WHEN program_id IS NULL THEN 'No Program Assigned'
-                WHEN initial_assessment IS NULL OR initial_assessment = '' THEN 'Missing Initial Assessment'
-                ELSE 'Incomplete Record'
-              END AS missing_info
-       FROM patients
-       WHERE is_archived = FALSE
-         AND enrollment_status = 'pending'
-         AND (
-           emergency_contact_name IS NULL OR emergency_contact_name = ''
-           OR program_id IS NULL
-           OR initial_assessment IS NULL OR initial_assessment = ''
-         )
-       ORDER BY created_at DESC
+                WHEN r.id IS NULL OR r.status = 'draft' THEN 'Admission History'
+                WHEN i.id IS NULL OR i.workflow_step <= 3 THEN 'Drug Use History'
+                WHEN i.workflow_step = 4 THEN 'Clinical Triage'
+                ELSE 'Consents & Finalization'
+              END AS missing_info,
+              CASE
+                WHEN r.id IS NULL OR r.status = 'draft' THEN 2
+                WHEN i.id IS NULL OR i.workflow_step <= 3 THEN 3
+                WHEN i.workflow_step = 4 THEN 4
+                ELSE 5
+              END AS next_step
+       FROM patients p
+       LEFT JOIN patient_referrals r ON r.patient_id = p.id
+       LEFT JOIN patient_intakes i ON i.patient_id = p.id
+       WHERE p.is_archived = FALSE
+         AND p.enrollment_status = 'pending'
+       ORDER BY p.created_at DESC
        LIMIT 6`
     );
 
     const [pendingRegistrationRecords] = await pool.query(
-      `SELECT id, full_name, patient_code, photo_url, admission_date, enrollment_status, created_at
-       FROM patients
-       WHERE is_archived = FALSE
-         AND enrollment_status = 'pending'
-       ORDER BY created_at DESC
+      `SELECT p.id, p.full_name, p.patient_code, p.photo_url, p.admission_date, p.enrollment_status, p.created_at,
+              CASE
+                WHEN r.id IS NULL OR r.status = 'draft' THEN 2
+                WHEN i.id IS NULL OR i.workflow_step <= 3 THEN 3
+                WHEN i.workflow_step = 4 THEN 4
+                ELSE 5
+              END AS next_step,
+              CASE
+                WHEN r.id IS NULL OR r.status = 'draft' THEN 'Admission History'
+                WHEN i.id IS NULL OR i.workflow_step <= 3 THEN 'Drug Use History'
+                WHEN i.workflow_step = 4 THEN 'Clinical Triage'
+                ELSE 'Consents & Finalization'
+              END AS next_step_label
+       FROM patients p
+       LEFT JOIN patient_referrals r ON r.patient_id = p.id
+       LEFT JOIN patient_intakes i ON i.patient_id = p.id
+       WHERE p.is_archived = FALSE
+         AND p.enrollment_status = 'pending'
+       ORDER BY p.created_at DESC
        LIMIT 10`
     );
 
     const [[registrationProcess]] = await pool.query(
       `SELECT
-         SUM(CASE WHEN DATE(created_at) = CURDATE() THEN 1 ELSE 0 END) AS newRegistrations,
+         SUM(CASE WHEN DATE(p.created_at) = CURDATE() AND p.enrollment_status = 'pending' THEN 1 ELSE 0 END) AS newRegistrations,
          SUM(CASE
-           WHEN DATE(created_at) <> CURDATE() AND enrollment_status <> 'pending'
+           WHEN p.enrollment_status <> 'pending' OR i.workflow_step >= 6
            THEN 1 ELSE 0
          END) AS completed,
          SUM(CASE
-           WHEN DATE(created_at) <> CURDATE()
-             AND enrollment_status = 'pending'
-             AND emergency_contact_name IS NOT NULL AND emergency_contact_name <> ''
-             AND program_id IS NOT NULL
-             AND initial_assessment IS NOT NULL AND initial_assessment <> ''
+           WHEN DATE(p.created_at) <> CURDATE()
+             AND p.enrollment_status = 'pending'
+             AND i.workflow_step IN (4, 5)
            THEN 1 ELSE 0
          END) AS pending,
          SUM(CASE
-           WHEN DATE(created_at) <> CURDATE()
-             AND enrollment_status = 'pending'
-             AND (
-               emergency_contact_name IS NULL OR emergency_contact_name = ''
-               OR program_id IS NULL
-               OR initial_assessment IS NULL OR initial_assessment = ''
-             )
+           WHEN DATE(p.created_at) <> CURDATE()
+             AND p.enrollment_status = 'pending'
+             AND (i.id IS NULL OR i.workflow_step <= 3)
            THEN 1 ELSE 0
          END) AS incomplete
-       FROM patients
-       WHERE is_archived = FALSE`
+       FROM patients p
+       LEFT JOIN patient_intakes i ON i.patient_id = p.id
+       WHERE p.is_archived = FALSE`
     );
 
     const [todayAdmissionActivity] = await pool.query(

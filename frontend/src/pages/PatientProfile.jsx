@@ -60,6 +60,9 @@ const EDUCATION_OPTIONS = [
   "Postgraduate",
 ];
 
+const SUFFIX_OPTIONS = ["Jr.", "Sr.", "II", "III", "IV", "V"];
+const LIVING_ARRANGEMENT_OPTIONS = ["With Parents", "With Relatives", "Boarding House", "Living Alone"];
+
 const CONTACT_METHOD_OPTIONS = [
   { value: "call", label: "Phone call" },
   { value: "sms", label: "SMS or text message" },
@@ -225,6 +228,8 @@ export default function PatientProfile() {
       preferredName: p.preferred_name || "",
       gender: p.gender || "", birthdate: toInputDate(p.birthdate), civilStatus: p.civil_status || "single",
       nationality: p.nationality || "", occupation: p.occupation || "", educationalAttainment: p.educational_attainment || "",
+      religion: p.religion || "", livingArrangement: p.living_arrangement || "",
+      estimatedFamilyMonthlyIncome: p.estimated_family_monthly_income ?? "",
       contactNumber: p.contact_number || "", email: p.email || "", address: p.address || "", municipality: p.municipality || "",
       province: p.province || "", postalCode: p.postal_code || "",
       emergencyContactName: p.emergency_contact_name || "", emergencyContactRelationship: p.emergency_contact_relationship || "",
@@ -407,7 +412,7 @@ export default function PatientProfile() {
                   <EditField label="First name" editing={editing} value={form.firstName} onChange={(v) => update("firstName", v)} />
                   <EditField label="Middle name" editing={editing} value={form.middleName} onChange={(v) => update("middleName", v)} />
                   <EditField label="Last name" editing={editing} value={form.lastName} onChange={(v) => update("lastName", v)} />
-                  <EditField label="Suffix" editing={editing} value={form.suffix} onChange={(v) => update("suffix", v)} />
+                  <EditField label="Suffix" editing={editing} type="select" options={SUFFIX_OPTIONS} value={form.suffix} onChange={(v) => update("suffix", v)} />
                   <EditField label="Preferred name" editing={editing} value={form.preferredName} onChange={(v) => update("preferredName", v)} />
                   <EditField label="Sex" editing={editing} type="select" options={["male", "female", "other"]} value={form.gender} onChange={(v) => update("gender", v)} />
                   <EditField label="Birthdate" editing={editing} type="date" value={form.birthdate} onChange={(v) => update("birthdate", v)} display={fmtDate(patient.birthdate)} />
@@ -416,6 +421,9 @@ export default function PatientProfile() {
                   <EditField label="Nationality" editing={editing} value={form.nationality} onChange={(v) => update("nationality", v)} />
                   <EditField label="Occupation" editing={editing} value={form.occupation} onChange={(v) => update("occupation", v)} />
                   <EditField label="Educational attainment" editing={editing} type="select" options={EDUCATION_OPTIONS} value={form.educationalAttainment} onChange={(v) => update("educationalAttainment", v)} />
+                  <EditField label="Religion" editing={editing} value={form.religion} onChange={(v) => update("religion", v)} />
+                  <EditField label="Living arrangement" editing={editing} type="select" options={LIVING_ARRANGEMENT_OPTIONS} value={form.livingArrangement} onChange={(v) => update("livingArrangement", v)} />
+                  <EditField label="Estimated family monthly income" editing={editing} type="number" value={form.estimatedFamilyMonthlyIncome} onChange={(v) => update("estimatedFamilyMonthlyIncome", v)} display={patient.estimated_family_monthly_income == null ? "—" : `₱${Number(patient.estimated_family_monthly_income).toLocaleString("en-PH", { minimumFractionDigits: 2 })}`} />
 
                   <div style={styles.subsectionTitle}>Contact Information</div>
                   <EditField label="Home address" span={2} editing={editing} value={form.address} onChange={(v) => update("address", v)} />

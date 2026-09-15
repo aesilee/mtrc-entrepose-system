@@ -60,6 +60,9 @@ export const ROLE_PERMISSIONS = {
   admitting: [
     "View and register patients",
     "Fill out admission information",
+    "Complete the five-step IDADIN registration workflow",
+    "Record clinical triage, social classification, and signed consents",
+    "Record referral information",
     "Edit patient information",
     "Generate and print enrollment certificates",
     "Search patient records",

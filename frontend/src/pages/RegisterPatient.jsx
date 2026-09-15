@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import AppShell from "../components/AppShell.jsx";
+import PatientWorkflowProgress from "../components/PatientWorkflowProgress.jsx";
 import api from "../api/axios.js";
 
 const EMPTY_FORM = {
@@ -15,6 +16,9 @@ const EMPTY_FORM = {
   nationality: "",
   occupation: "",
   educationalAttainment: "",
+  religion: "",
+  livingArrangement: "",
+  estimatedFamilyMonthlyIncome: "",
   contactNumber: "",
   email: "",
   address: "",
@@ -47,6 +51,15 @@ const EDUCATION_OPTIONS = [
   "College level",
   "College graduate",
   "Postgraduate",
+];
+
+const SUFFIX_OPTIONS = ["Jr.", "Sr.", "II", "III", "IV", "V"];
+
+const LIVING_ARRANGEMENT_OPTIONS = [
+  "With Parents",
+  "With Relatives",
+  "Boarding House",
+  "Living Alone",
 ];
 
 function calculateAge(birthdate) {
@@ -115,7 +128,7 @@ export default function RegisterPatient() {
       delete payload.emergencyContactMethodOther;
       delete payload.hasGuardian;
       const { data } = await api.post("/patients", payload);
-      navigate(`/patients/${data.id}`);
+      navigate(`/patients/${data.id}/referral`);
     } catch (err) {
       setError(err.response?.data?.message || "Could not register the patient.");
     } finally {
@@ -124,13 +137,14 @@ export default function RegisterPatient() {
   }
 
   return (
-    <AppShell title="Register Patient" description="Create the patient's identity and contact record.">
+    <AppShell title="Demographics (IDADIN Part A)" description="Create the patient's background, identity, and contact record.">
       <form onSubmit={handleSubmit} style={styles.form}>
+        <PatientWorkflowProgress currentStep={1} />
         {error && <div role="alert" style={styles.error}>{error}</div>}
 
         <Section
-          title="Patient Identity"
-          description="Record the patient's identifying and basic demographic information."
+          title="Background Information"
+          description="Record IDADIN Part A identifying and basic demographic information."
         >
           <Field label="First name" required>
             <input autoComplete="given-name" style={styles.input} value={form.firstName} onChange={(e) => update("firstName", e.target.value)} required />
@@ -142,7 +156,10 @@ export default function RegisterPatient() {
             <input autoComplete="family-name" style={styles.input} value={form.lastName} onChange={(e) => update("lastName", e.target.value)} required />
           </Field>
           <Field label="Suffix">
-            <input style={styles.input} value={form.suffix} onChange={(e) => update("suffix", e.target.value)} placeholder="e.g. Jr., Sr., III" />
+            <select style={styles.input} value={form.suffix} onChange={(e) => update("suffix", e.target.value)}>
+              <option value="">None</option>
+              {SUFFIX_OPTIONS.map((option) => <option key={option} value={option}>{option}</option>)}
+            </select>
           </Field>
           <Field label="Preferred name">
             <input style={styles.input} value={form.preferredName} onChange={(e) => update("preferredName", e.target.value)} />
@@ -180,6 +197,18 @@ export default function RegisterPatient() {
               <option value="">Select</option>
               {EDUCATION_OPTIONS.map((option) => <option key={option} value={option}>{option}</option>)}
             </select>
+          </Field>
+          <Field label="Religion">
+            <input style={styles.input} maxLength={100} value={form.religion} onChange={(e) => update("religion", e.target.value)} />
+          </Field>
+          <Field label="Living arrangement">
+            <select style={styles.input} value={form.livingArrangement} onChange={(e) => update("livingArrangement", e.target.value)}>
+              <option value="">Select</option>
+              {LIVING_ARRANGEMENT_OPTIONS.map((option) => <option key={option} value={option}>{option}</option>)}
+            </select>
+          </Field>
+          <Field label="Estimated family monthly income" hint="Enter the estimated amount in Philippine pesos.">
+            <input type="number" min="0" step="0.01" inputMode="decimal" style={styles.input} value={form.estimatedFamilyMonthlyIncome} onChange={(e) => update("estimatedFamilyMonthlyIncome", e.target.value)} placeholder="0.00" />
           </Field>
         </Section>
 
@@ -298,7 +327,7 @@ export default function RegisterPatient() {
         <div style={styles.actionsRow}>
           <button type="button" style={styles.cancelBtn} onClick={() => navigate("/patients")}>Cancel</button>
           <button type="submit" style={styles.submitBtn} disabled={saving}>
-            {saving ? "Registering…" : "Register Patient"}
+            {saving ? "Saving…" : "Save Demographics & Continue"}
           </button>
         </div>
       </form>

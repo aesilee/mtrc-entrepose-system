@@ -80,6 +80,80 @@ a {
   grid-column: 1 / -1;
 }
 
+.patient-workflow {
+  display: flex;
+  align-items: flex-start;
+  width: 100%;
+  padding: 4px 18px 2px;
+}
+
+.patient-workflow__segment {
+  display: flex;
+  align-items: flex-start;
+  flex: 1;
+  min-width: 0;
+}
+
+.patient-workflow__step {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 7px;
+  min-width: 150px;
+  color: var(--color-text-muted);
+}
+
+.patient-workflow__circle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: 1px solid #b9bdb9;
+  border-radius: 50%;
+  background: var(--color-surface);
+  color: var(--color-text-muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.patient-workflow__label {
+  color: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.patient-workflow__step.is-active,
+.patient-workflow__step.is-complete {
+  color: var(--color-primary-dark);
+}
+
+.patient-workflow__step.is-active .patient-workflow__circle {
+  border-color: var(--color-primary);
+  background: var(--color-primary);
+  color: #fff;
+}
+
+.patient-workflow__step.is-complete .patient-workflow__circle {
+  border-color: var(--color-primary);
+  background: var(--color-surface);
+  color: var(--color-primary);
+}
+
+.patient-workflow__line {
+  flex: 1;
+  min-width: 24px;
+  height: 1px;
+  margin-top: 16px;
+  background: #cfd2cf;
+}
+
+.patient-workflow__line.is-complete {
+  background: var(--color-primary);
+}
+
 @media (max-width: 1300px) {
   .registration-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -100,6 +174,23 @@ a {
   .registration-field--wide,
   .registration-field--full {
     grid-column: span 1;
+  }
+
+  .patient-workflow {
+    padding-inline: 0;
+  }
+
+  .patient-workflow__step {
+    min-width: 88px;
+  }
+
+  .patient-workflow__label {
+    max-width: 92px;
+    white-space: normal;
+  }
+
+  .patient-workflow__line {
+    min-width: 10px;
   }
 }
 

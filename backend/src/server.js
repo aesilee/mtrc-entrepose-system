@@ -19,6 +19,8 @@ import certificateRoutes from "./routes/certificateRoutes.js";
 import profileRoutes from "./routes/profileRoutes.js";
 import notificationRoutes from "./routes/notificationRoutes.js";
 import archiveRoutes from "./routes/archiveRoutes.js";
+import referralRoutes from "./routes/referralRoutes.js";
+import intakeRoutes from "./routes/intakeRoutes.js";
 
 dotenv.config();
 
@@ -46,6 +48,8 @@ app.use("/api/certificates", certificateRoutes);
 app.use("/api/profile", profileRoutes);
 app.use("/api/notifications", notificationRoutes);
 app.use("/api/archives", archiveRoutes);
+app.use("/api/referrals", referralRoutes);
+app.use("/api/intakes", intakeRoutes);
 
 import pool from "./config/db.js";
 

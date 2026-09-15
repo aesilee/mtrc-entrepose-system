@@ -211,6 +211,14 @@ export default function Patients() {
               )}
             </div>
 
+            <button
+              type="button"
+              style={styles.dischargedBtn}
+              onClick={() => navigate("/patients/discharges")}
+            >
+              View Discharged Patients
+            </button>
+
             <div style={styles.searchBox}>
               <svg {...iconProps} width="16" height="16" style={styles.searchIcon}>
                 <circle cx="11" cy="11" r="7" />
@@ -230,13 +238,6 @@ export default function Patients() {
               + Register Patient
             </button>
           )}
-          <button
-  type="button"
-  style={styles.dischargedBtn}
-  onClick={() => navigate("/discharges")}
->
-  View Discharged Patients
-</button>
         </div>
 
         <div style={{ ...styles.tableCard, flex: 1, minHeight: 0 }}>
@@ -468,16 +469,16 @@ const styles = {
     whiteSpace: "nowrap",
   },
   dischargedBtn: {
-  background: "var(--color-primary)",
-  color: "#fff",
-  border: "none",
-  padding: "10px 18px",
-  borderRadius: "var(--radius-sm)",
-  fontWeight: 700,
-  fontSize: 13,
-  cursor: "pointer",
-  whiteSpace: "nowrap",
-},
+    background: "var(--color-surface)",
+    color: "var(--color-primary)",
+    border: "1.5px solid var(--color-primary)",
+    padding: "9px 14px",
+    borderRadius: "var(--radius-sm)",
+    fontWeight: 600,
+    fontSize: 13,
+    cursor: "pointer",
+    whiteSpace: "nowrap",
+  },
   filterSelect: {
     padding: "8px 10px",
     borderRadius: "var(--radius-sm)",

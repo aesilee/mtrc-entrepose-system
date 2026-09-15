@@ -37,7 +37,7 @@ export default function App() {
       />
 
       <Route
-        path="/discharges"
+        path="/patients/discharges"
         element={
     <ProtectedRoute allowedRoles={["case_manager", "him_staff", "ict_admin", "admitting"]}>
       <Discharges />

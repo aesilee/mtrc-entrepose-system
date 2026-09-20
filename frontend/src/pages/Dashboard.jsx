@@ -634,8 +634,14 @@ function CaseManagerDashboard() {
     setLoadError("");
     setLoading(true);
     try {
-      const { data } = await api.get("/dashboard/case-manager-stats");
-      setStats(data);
+      const [statsRes, flagsRes] = await Promise.all([
+        api.get("/dashboard/case-manager-stats"),
+        api.get("/case-management/attention")
+      ]);
+      setStats({
+        ...statsRes.data,
+        patientsNeedingAttention: flagsRes.data.patientsNeedingAttention
+      });
     } catch (err) {
       setLoadError(err.response?.data?.message || "Could not load the case manager dashboard.");
     } finally {
@@ -769,7 +775,11 @@ function CaseManagerDashboard() {
                 >
                   <PatientAvatar name={p.full_name} photoUrl={p.photo_url} style={cmStyles.patientAvatar} />
                   <span style={cmStyles.rowMain}>{p.full_name}</span>
-                  <span style={cmStyles.issueBadge}>{p.issue}</span>
+                  <span style={{ 
+                    ...cmStyles.issueBadge, 
+                    backgroundColor: p.color === "red" ? "#FDE2E2" : p.color === "blue" ? "#E1F0FF" : "#FFF3D6",
+                    color: p.color === "red" ? "#C53030" : p.color === "blue" ? "#0B5FA5" : "#9A6B00"
+                  }}>{p.issue}</span>
                   <span aria-hidden="true" style={cmStyles.rowChevron}>›</span>
                 </button>
               ))}

@@ -9,6 +9,8 @@ import CompleteFollowUpModal from "../components/CompleteFollowUpModal.jsx";
 import SharedEmptyState from "../components/EmptyState.jsx";
 import CertificateGeneratorModal from "../components/CertificateGeneratorModal.jsx";
 import CertificateViewModal from "../components/CertificateViewModal.jsx";
+import DrugTestModal from "../components/DrugTestModal.jsx";
+import DischargeModal from "../components/DischargeModal.jsx";
 import CardActionMenu from "../components/CardActionMenu.jsx";
 import ArchiveConfirmModal from "../components/ArchiveConfirmModal.jsx";
 import ConfirmModal from "../components/ConfirmModal.jsx";
@@ -103,6 +105,13 @@ export default function PatientProfile() {
   const [timeline, setTimeline] = useState([]);
   const [noteModal, setNoteModal] = useState(null); // null closed, {} = new, note object = edit
   const [followUpModalOpen, setFollowUpModalOpen] = useState(false);
+  const [drugTestModalOpen, setDrugTestModalOpen] = useState(false);
+  const [dischargeModalOpen, setDischargeModalOpen] = useState(false);
+  
+  const [milestones, setMilestones] = useState(null);
+  const [sessionSummary, setSessionSummary] = useState(null);
+  const [drugTests, setDrugTests] = useState([]);
+  
   const [certGeneratorOpen, setCertGeneratorOpen] = useState(false);
   const [viewingCertificateId, setViewingCertificateId] = useState(null);
   const [certAction, setCertAction] = useState(null);
@@ -191,7 +200,10 @@ export default function PatientProfile() {
       api.get(`/patients/${id}/timeline`),
       api.get("/users/case-managers"),
       api.get("/programs"),
-    ]).then(([p, a, pn, c, h, fu, tl, cm, pr]) => {
+      api.get(`/case-management/patients/${id}/milestones`),
+      api.get(`/case-management/patients/${id}/sessions/summary`),
+      api.get(`/case-management/patients/${id}/drug-tests`),
+    ]).then(([p, a, pn, c, h, fu, tl, cm, pr, ms, ss, dt]) => {
       setPatient(p.data.patient);
       setForm(toFormState(p.data.patient));
       setAttendance(a.data.attendance);
@@ -202,6 +214,9 @@ export default function PatientProfile() {
       setTimeline(tl.data.timeline);
       setCaseManagers(cm.data.caseManagers);
       setPrograms(pr.data.programs);
+      setMilestones(ms.data.milestones || {});
+      setSessionSummary(ss.data);
+      setDrugTests(dt.data.drugTests || []);
     }).finally(() => setLoading(false));
   }
 
@@ -535,7 +550,9 @@ export default function PatientProfile() {
 
               <div style={styles.subTabBar}>
                 {[
-                  { key: "summary", label: "Rehabilitation Summary" },
+                  { key: "summary", label: "Progress & Summary" },
+                  { key: "milestones", label: "Milestones" },
+                  { key: "drug-tests", label: "Drug Tests" },
                   { key: "notes", label: "Progress Notes" },
                   { key: "followups", label: "Follow-up Actions" },
                 ].map((t) => (
@@ -552,26 +569,130 @@ export default function PatientProfile() {
 
               {caseSubTab === "summary" && (
                 <div>
+                  <div style={{ ...styles.card, padding: 20, marginBottom: 20, border: "1px solid #E2E8F0", borderRadius: 8 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+                      <h3 style={{ margin: 0, fontSize: 16, color: "#2D3748" }}>Progress Toward 43 Core Sessions</h3>
+                      {canManageCase && (
+                        <button type="button" style={styles.generateBtn} onClick={() => setNoteModal({})}>+ Log Session & SOAP Note</button>
+                      )}
+                    </div>
+                    
+                    <div style={{ background: "#EDF2F7", borderRadius: 8, height: 12, overflow: "hidden", marginBottom: 12 }}>
+                      <div style={{ background: "var(--color-primary)", height: "100%", width: `${sessionSummary?.percentage || 0}%`, transition: "width 0.3s ease" }} />
+                    </div>
+                    <div style={{ fontSize: 14, color: "#4A5568", fontWeight: 600, marginBottom: 24 }}>
+                      {sessionSummary?.attendedCore || 0} / 43 Prescribed Core Sessions Completed ({sessionSummary?.percentage || 0}%)
+                    </div>
+                    
+                    <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+                      <span style={styles.sessionPill}>CBT Group ({sessionSummary?.cbtGroup || 0}/28)</span>
+                      <span style={styles.sessionPill}>Psycho-Education ({sessionSummary?.psychoEd || 0}/12)</span>
+                      <span style={styles.sessionPill}>CBT Evaluations (0/3)</span>
+                      <span style={styles.sessionPill}>Individual Counseling ({sessionSummary?.indCounseling || 0})</span>
+                      <span style={styles.sessionPill}>SHGM ({sessionSummary?.shgm || 0})</span>
+                      <span style={styles.sessionPill}>Conjoint / Family ({sessionSummary?.conjointFamily || 0})</span>
+                    </div>
+                  </div>
+
                   <div style={styles.grid}>
-                    <Field label="Current status">{patient.current_status || "—"}</Field>
-                    <Field label="Program phase">{patient.program_phase || "—"}</Field>
+                    <Field label="Current status">{patient.enrollment_status || "—"}</Field>
+                    <Field label="Program phase">{patient.treatment_phase || patient.program_phase || "—"}</Field>
                     <Field label="Assigned case manager">{patient.case_manager_name || "Unassigned"}</Field>
                     <Field label="Admission date">{fmtDate(patient.admission_date)}</Field>
                     <Field label="Expected completion">{fmtDate(patient.expected_completion_date)}</Field>
-                    <Field label="Completion %">
-                      {patient.sessions_required ? `${Math.round((presentCount / patient.sessions_required) * 100)}%` : "—"}
-                    </Field>
                   </div>
+                  
                   {canManageCase && !editing && (
-                    <div style={{ marginTop: 16 }}>
+                    <div style={{ marginTop: 24, display: "flex", gap: 12 }}>
                       <button
                         type="button"
-                        style={styles.generateBtn}
+                        style={{ ...styles.generateBtn, background: "#fff", color: "var(--color-primary)", border: "1px solid var(--color-primary)" }}
                         onClick={() => { goToSection("rehab"); startEditing(); }}
                       >
                         Update rehabilitation status
                       </button>
+                      {patient.enrollment_status === 'active' && (
+                        <button 
+                          type="button" 
+                          style={{ ...styles.generateBtn, background: "#C53030" }}
+                          onClick={() => setDischargeModalOpen(true)}
+                        >
+                          Process Program Discharge
+                        </button>
+                      )}
                     </div>
+                  )}
+                </div>
+              )}
+
+              {caseSubTab === "milestones" && (
+                <div>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+                    <h3 style={{ margin: 0, fontSize: 16, color: "#2D3748" }}>Clinical & Legal Milestones</h3>
+                    {canManageCase && (
+                      <button type="button" style={styles.generateBtn} onClick={async () => {
+                        setSaving(true);
+                        try {
+                          await api.put(`/case-management/patients/${id}/milestones`, milestones);
+                          setToast("Milestones saved successfully.");
+                        } catch(e) {
+                          alert("Failed to save milestones.");
+                        }
+                        setSaving(false);
+                      }}>
+                        {saving ? "Saving..." : "Save Milestones"}
+                      </button>
+                    )}
+                  </div>
+                  
+                  <div style={styles.grid}>
+                    {[
+                      { key: "date_po", label: "Date of Program Orientation (PO)" },
+                      { key: "date_vlts_referral", label: "Date of Referral to VLTS" },
+                      { key: "date_initial_assessment", label: "Date of Initial Assessment (ASI)" },
+                      { key: "date_initial_tx_planning", label: "Date of Initial Treatment Planning" },
+                      { key: "date_initial_progress_report", label: "Date of Initial Progress Report (Court)" },
+                      { key: "date_case_conference", label: "Date of Case Conference" },
+                      { key: "date_status_reporting", label: "Date of Status Reporting (Court)" },
+                      { key: "date_home_visit", label: "Date of Home Visit" },
+                      { key: "date_followup_assessment", label: "Date of Follow-up Assessment (ASI)" },
+                      { key: "date_acp_planning", label: "Date of ACP Treatment Planning (Aftercare)" },
+                      { key: "date_pdc", label: "Date of Pre-Discharge Conference (PDC)" },
+                      { key: "date_final_progress_report", label: "Date of Final Progress Report (Court)" },
+                    ].map(field => (
+                      <label key={field.key} style={{ display: "flex", flexDirection: "column", gap: 6, fontSize: 13, fontWeight: 500, color: "#4A5568" }}>
+                        {field.label}
+                        <input 
+                          type="date" 
+                          style={{ padding: "8px 12px", border: "1px solid #E2E8F0", borderRadius: 6, fontSize: 14 }} 
+                          value={toInputDate(milestones?.[field.key])} 
+                          onChange={(e) => canManageCase && setMilestones(m => ({...m, [field.key]: e.target.value}))}
+                          disabled={!canManageCase || saving}
+                        />
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {caseSubTab === "drug-tests" && (
+                <div>
+                  {canManageCase && (
+                    <div style={{ marginBottom: 16 }}>
+                      <button type="button" style={styles.generateBtn} onClick={() => setDrugTestModalOpen(true)}>+ Record Drug Test</button>
+                    </div>
+                  )}
+                  {drugTests.length === 0 ? <EmptyState text="No drug test records found." /> : (
+                    <SimpleTable 
+                      columns={["Test Date", "Days Enrolled", "Substance Screened", "Result", "Action / Remarks"]} 
+                      rows={drugTests.map((d) => [
+                        fmtDate(d.test_date), 
+                        `${d.days_from_enrollment} days`,
+                        d.substance_tested,
+                        <span style={{ padding: "2px 8px", borderRadius: 12, fontSize: 12, fontWeight: 600, background: d.result === 'POSITIVE' ? "#FDE2E2" : "#D8F5E9", color: d.result === 'POSITIVE' ? "#B3261E" : "#2F855A" }}>{d.result}</span>,
+                        d.action_taken || d.remarks || "—"
+                      ])} 
+                    />
                   )}
                 </div>
               )}
@@ -758,7 +879,24 @@ export default function PatientProfile() {
           onClose={() => setRestoringPatient(false)}
         />
       )}
-      <Toast message={toast} onDismiss={() => setToast("")} />
+      {drugTestModalOpen && (
+        <DrugTestModal 
+          patientId={id} 
+          onClose={() => setDrugTestModalOpen(false)} 
+          onSaved={() => { setDrugTestModalOpen(false); loadAll(); setToast("Drug test recorded."); }} 
+        />
+      )}
+      
+      {dischargeModalOpen && (
+        <DischargeModal 
+          patientId={id} 
+          admissionDate={patient?.admission_date}
+          onClose={() => setDischargeModalOpen(false)} 
+          onSaved={() => { setDischargeModalOpen(false); loadAll(); setToast("Patient formally discharged."); }} 
+        />
+      )}
+
+      {toast && <Toast message={toast} onDismiss={() => setToast("")} />}
     </AppShell>
   );
 }
@@ -924,6 +1062,7 @@ const styles = {
   noteHeader: { display: "flex", justifyContent: "space-between", fontSize: 12, marginBottom: 8 },
   noteMeta: { color: "var(--color-text-muted)" },
   noteContent: { fontSize: 13, color: "var(--color-text)", margin: 0, lineHeight: 1.6 },
+  sessionPill: { padding: "4px 12px", background: "#E2E8F0", borderRadius: 16, fontSize: 13, fontWeight: 500, color: "#2D3748" },
 
   subTabBar: { display: "flex", gap: 4, marginBottom: 18, borderBottom: "1px solid var(--color-border)" },
   subTabButton: { padding: "9px 4px", marginRight: 20, fontSize: 13, fontWeight: 600, color: "var(--color-text-muted)", background: "none", border: "none", borderBottom: "2px solid transparent", cursor: "pointer" },

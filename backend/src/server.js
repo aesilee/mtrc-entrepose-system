@@ -21,6 +21,7 @@ import notificationRoutes from "./routes/notificationRoutes.js";
 import archiveRoutes from "./routes/archiveRoutes.js";
 import referralRoutes from "./routes/referralRoutes.js";
 import intakeRoutes from "./routes/intakeRoutes.js";
+import caseManagementRoutes from "./routes/caseManagementRoutes.js";
 
 dotenv.config();
 
@@ -50,6 +51,7 @@ app.use("/api/notifications", notificationRoutes);
 app.use("/api/archives", archiveRoutes);
 app.use("/api/referrals", referralRoutes);
 app.use("/api/intakes", intakeRoutes);
+app.use("/api/case-management", caseManagementRoutes);
 
 import pool from "./config/db.js";
 

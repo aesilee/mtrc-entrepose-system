@@ -1,17 +1,38 @@
 import pool from "../config/db.js";
 
-export async function createSession(req, res) {
-  const { sessionName, programId, caseManagerId, sessionDate, sessionTime } = req.body;
+const VALID_SESSION_TYPES = new Set([
+  "CBT_GROUP",
+  "PSYCHO_EDUCATION",
+  "SHGM",
+  "INDIVIDUAL_COUNSELING",
+  "CONJOINT_FAMILY",
+]);
 
-  if (!sessionName || !sessionDate) {
-    return res.status(400).json({ message: "Session name and date are required." });
+const SESSION_TYPE_LABELS = {
+  CBT_GROUP:             "CBT Group Session",
+  PSYCHO_EDUCATION:      "Psycho-Education / PE Meeting",
+  SHGM:                  "Self-Help Group Meeting",
+  INDIVIDUAL_COUNSELING: "Individual Counseling",
+  CONJOINT_FAMILY:       "Conjoint / Family Session",
+};
+
+export async function createSession(req, res) {
+  const { sessionType, caseManagerId, sessionDate, sessionTime } = req.body;
+
+  if (!sessionType || !VALID_SESSION_TYPES.has(sessionType)) {
+    return res.status(400).json({ message: "Select a valid session type from the 5 therapeutic modalities." });
   }
+  if (!sessionDate) {
+    return res.status(400).json({ message: "Session date is required." });
+  }
+
+  const sessionName = SESSION_TYPE_LABELS[sessionType];
 
   try {
     const [result] = await pool.query(
-      `INSERT INTO sessions (session_name, program_id, case_manager_id, session_date, session_time, created_by)
+      `INSERT INTO sessions (session_name, session_type, case_manager_id, session_date, session_time, created_by)
        VALUES (?, ?, ?, ?, ?, ?)`,
-      [sessionName, programId || null, caseManagerId || null, sessionDate, sessionTime || null, req.user.id]
+      [sessionName, sessionType, caseManagerId || null, sessionDate, sessionTime || null, req.user.id]
     );
     res.status(201).json({ id: result.insertId });
   } catch (err) {

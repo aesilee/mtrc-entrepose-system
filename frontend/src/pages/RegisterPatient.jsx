@@ -5,6 +5,9 @@ import PatientWorkflowProgress from "../components/PatientWorkflowProgress.jsx";
 import api from "../api/axios.js";
 
 const EMPTY_FORM = {
+  caseType: "substance_use",
+  assignedCaseManagerId: "",
+  attendingPhysician: "",
   firstName: "",
   middleName: "",
   lastName: "",
@@ -112,6 +115,14 @@ export default function RegisterPatient() {
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(Boolean(id));
+  const [caseManagers, setCaseManagers] = useState([]);
+
+  // Fetch case managers for the PWUD assignment dropdown
+  useEffect(() => {
+    api.get("/users/case-managers")
+      .then(({ data }) => setCaseManagers(data.caseManagers || []))
+      .catch(() => {}); // non-critical — silently fail
+  }, []);
 
   useEffect(() => {
     if (!id) return;
@@ -123,6 +134,9 @@ export default function RegisterPatient() {
         const p = data.patient;
         if (!p) return;
         setForm({
+          caseType: p.case_type || "substance_use",
+          assignedCaseManagerId: p.assigned_case_manager_id ? String(p.assigned_case_manager_id) : "",
+          attendingPhysician: p.attending_physician || "",
           firstName: p.first_name || "",
           middleName: p.middle_name || "",
           lastName: p.last_name || "",
@@ -205,6 +219,11 @@ export default function RegisterPatient() {
       return;
     }
 
+    if (!form.assignedCaseManagerId) {
+      setError("Select an assigned Case Manager before saving.");
+      return;
+    }
+
     setSaving(true);
     try {
       const formPayload = showGuardian
@@ -222,9 +241,12 @@ export default function RegisterPatient() {
         emergencyContactMethod: form.emergencyContactMethod === "other"
           ? form.emergencyContactMethodOther.trim()
           : form.emergencyContactMethod,
+        caseType: "substance_use",
+        assignedCaseManagerId: form.assignedCaseManagerId,
       };
       delete payload.emergencyContactMethodOther;
       delete payload.hasGuardian;
+      delete payload.attendingPhysician;
 
       if (id) {
         await api.put(`/patients/${id}`, payload);
@@ -243,9 +265,18 @@ export default function RegisterPatient() {
   return (
     <AppShell title="Demographics (IDADIN Part A)" description="Create the patient's background, identity, and contact record.">
       <form onSubmit={handleSubmit} style={styles.form}>
-        <PatientWorkflowProgress currentStep={1} patientId={id} />
+        <PatientWorkflowProgress currentStep={1} patientId={id} caseType={form.caseType} />
         {loading && <div style={{ color: "var(--color-text-muted)", fontSize: 13 }}>Loading patient details…</div>}
         {error && <div role="alert" style={styles.error}>{error}</div>}
+
+        {/* Program Identity — Scope Locked to ENTREPOSE SUD */}
+        <section style={{ background: "var(--color-primary-tint)", border: "1.5px solid var(--color-primary)", borderRadius: "var(--radius-lg)", padding: "14px 20px", display: "flex", alignItems: "center", gap: 12 }}>
+          <div style={{ fontSize: 18 }}>🏥</div>
+          <div>
+            <div style={{ fontWeight: 700, fontSize: 13, color: "var(--color-primary-dark)" }}>ENTREPOSE Outpatient Program — Substance Use Disorder (PWUD)</div>
+            <div style={{ fontSize: 12, color: "var(--color-text-muted)", marginTop: 2 }}>All registrations are enrolled under the MTRC ENTREPOSE SUD pathway. A PWUD tracking code (OP-LGU-YY-NNN) will be assigned automatically.</div>
+          </div>
+        </section>
 
         <Section
           title="Background Information"
@@ -356,6 +387,38 @@ export default function RegisterPatient() {
           <Field label="Postal code">
             <input inputMode="numeric" autoComplete="postal-code" style={styles.input} value={form.postalCode} onChange={(e) => update("postalCode", e.target.value)} />
           </Field>
+        </Section>
+
+        {/* Clinical Assignment */}
+        <Section
+          title="Clinical Assignment"
+          description={form.caseType === "substance_use" ? "Assign a Case Manager who will oversee the patient's treatment. Required for PWUD cases." : "Record the Attending Physician for this outpatient case."}
+        >
+          {form.caseType === "substance_use" ? (
+            <Field label="Assigned Case Manager" required>
+              <select
+                style={styles.input}
+                value={form.assignedCaseManagerId}
+                onChange={(e) => update("assignedCaseManagerId", e.target.value)}
+                required
+              >
+                <option value="">Select Case Manager</option>
+                {caseManagers.map((cm) => (
+                  <option key={cm.id} value={String(cm.id)}>{cm.full_name}</option>
+                ))}
+              </select>
+            </Field>
+          ) : (
+            <Field label="Attending Physician" required>
+              <input
+                style={styles.input}
+                value={form.attendingPhysician}
+                onChange={(e) => update("attendingPhysician", e.target.value)}
+                placeholder="e.g. Dr. Juan Dela Cruz"
+                required
+              />
+            </Field>
+          )}
         </Section>
 
         <Section

@@ -3,9 +3,16 @@ import api from "../api/axios.js";
 
 const STATUS_OPTIONS = ["present", "absent", "excused", "late"];
 
+const SESSION_TYPE_OPTIONS = [
+  { value: "CBT_GROUP",             label: "CBT Group Session" },
+  { value: "PSYCHO_EDUCATION",      label: "Psycho-Education / PE Meeting" },
+  { value: "SHGM",                  label: "Self-Help Group Meeting" },
+  { value: "INDIVIDUAL_COUNSELING", label: "Individual Counseling" },
+  { value: "CONJOINT_FAMILY",       label: "Conjoint / Family Session" },
+];
+
 export default function RecordAttendanceModal({ onClose, onSaved }) {
   const [step, setStep] = useState(1);
-  const [programs, setPrograms] = useState([]);
   const [caseManagers, setCaseManagers] = useState([]);
   const [patients, setPatients] = useState([]);
   const [patientSearch, setPatientSearch] = useState("");
@@ -13,14 +20,13 @@ export default function RecordAttendanceModal({ onClose, onSaved }) {
   const [error, setError] = useState("");
 
   const [session, setSession] = useState({
-    sessionName: "", programId: "", caseManagerId: "",
+    sessionType: "", caseManagerId: "",
     sessionDate: new Date().toISOString().slice(0, 10), sessionTime: "",
   });
   const [selections, setSelections] = useState({});
   const [remarks, setRemarks] = useState("");
 
   useEffect(() => {
-    api.get("/programs").then(({ data }) => setPrograms(data.programs));
     api.get("/users/case-managers").then(({ data }) => setCaseManagers(data.caseManagers));
     api.get("/patients").then(({ data }) => setPatients(data.patients));
   }, []);
@@ -65,6 +71,8 @@ export default function RecordAttendanceModal({ onClose, onSaved }) {
     }
   }
 
+  const canProceedStep1 = session.sessionType && session.sessionDate;
+
   return (
     <div style={styles.backdrop} onClick={onClose}>
       <div style={styles.modal} onClick={(e) => e.stopPropagation()}>
@@ -86,15 +94,18 @@ export default function RecordAttendanceModal({ onClose, onSaved }) {
         <div style={styles.body}>
           {step === 1 && (
             <div style={styles.grid}>
-              <label style={styles.label}>
-                Session name
-                <input style={styles.input} value={session.sessionName} onChange={(e) => setSession({ ...session, sessionName: e.target.value })} />
-              </label>
-              <label style={styles.label}>
-                Program
-                <select style={styles.input} value={session.programId} onChange={(e) => setSession({ ...session, programId: e.target.value })}>
-                  <option value="">Select a program</option>
-                  {programs.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+              <label style={{ ...styles.label, gridColumn: "1 / -1" }}>
+                Session Type <span style={{ color: "var(--color-danger)" }}>*</span>
+                <select
+                  style={styles.input}
+                  value={session.sessionType}
+                  onChange={(e) => setSession({ ...session, sessionType: e.target.value })}
+                  required
+                >
+                  <option value="">— Select a session type —</option>
+                  {SESSION_TYPE_OPTIONS.map((o) => (
+                    <option key={o.value} value={o.value}>{o.label}</option>
+                  ))}
                 </select>
               </label>
               <label style={styles.label}>
@@ -105,7 +116,7 @@ export default function RecordAttendanceModal({ onClose, onSaved }) {
                 </select>
               </label>
               <label style={styles.label}>
-                Session date
+                Session date <span style={{ color: "var(--color-danger)" }}>*</span>
                 <input type="date" style={styles.input} value={session.sessionDate} onChange={(e) => setSession({ ...session, sessionDate: e.target.value })} />
               </label>
               <label style={styles.label}>
@@ -157,7 +168,7 @@ export default function RecordAttendanceModal({ onClose, onSaved }) {
           {step > 1 && <button type="button" style={styles.secondaryBtn} onClick={() => setStep(step - 1)}>Back</button>}
           <div style={{ flex: 1 }} />
           {step < 3 ? (
-            <button type="button" style={styles.primaryBtn} onClick={() => setStep(step + 1)} disabled={step === 2 && selectedCount === 0}>
+            <button type="button" style={styles.primaryBtn} onClick={() => setStep(step + 1)} disabled={(step === 1 && !canProceedStep1) || (step === 2 && selectedCount === 0)}>
               Next
             </button>
           ) : (

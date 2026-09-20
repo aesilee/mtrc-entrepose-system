@@ -1,6 +1,14 @@
 import { useEffect, useState } from "react";
 import api from "../api/axios.js";
 
+const SESSION_TYPE_OPTIONS = [
+  { value: "CBT_GROUP",             label: "CBT Group Session" },
+  { value: "PSYCHO_EDUCATION",      label: "Psycho-Education / PE Meeting" },
+  { value: "SHGM",                  label: "Self-Help Group Meeting" },
+  { value: "INDIVIDUAL_COUNSELING", label: "Individual Counseling" },
+  { value: "CONJOINT_FAMILY",       label: "Conjoint / Family Session" },
+];
+
 export default function ProgressNoteModal({ patientId: initialPatientId, note, onClose, onSaved }) {
   const [selectedPatientId, setSelectedPatientId] = useState(initialPatientId || "");
   const [patients, setPatients] = useState([]);
@@ -88,7 +96,12 @@ export default function ProgressNoteModal({ patientId: initialPatientId, note, o
             </label>
             <label style={styles.label}>
               Session type
-              <input style={styles.input} value={form.sessionType} onChange={(e) => update("sessionType", e.target.value)} placeholder="e.g. Individual counseling" />
+              <select style={styles.input} value={form.sessionType} onChange={(e) => update("sessionType", e.target.value)}>
+                <option value="">— Select session type —</option>
+                {SESSION_TYPE_OPTIONS.map((o) => (
+                  <option key={o.value} value={o.value}>{o.label}</option>
+                ))}
+              </select>
             </label>
           </div>
           <label style={styles.label}>

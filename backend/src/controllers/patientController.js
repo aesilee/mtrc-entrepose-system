@@ -29,6 +29,32 @@ function ageFromBirthdate(birthdate) {
   return age;
 }
 
+// Official 3-letter LGU codes for Albay/Bicol municipalities
+const LGU_CODE_MAP = {
+  "legazpi":       "LEG",
+  "legazpi city":  "LEG",
+  "tabaco":        "TAB",
+  "tabaco city":   "TAB",
+  "ligao":         "LIG",
+  "ligao city":    "LIG",
+  "daraga":        "DAR",
+  "malinao":       "MAL",
+  "guinobatan":    "GUI",
+  "polangui":      "POL",
+  "tiwi":          "TIW",
+  "camalig":       "CAM",
+  "oas":           "OAS",
+  "bacacay":       "BAC",
+  "santo domingo": "STO",
+  "casiguran":     "CAS",
+};
+
+function getLguCode(municipality) {
+  if (!municipality) return "OTH";
+  const key = String(municipality).trim().toLowerCase();
+  return LGU_CODE_MAP[key] || "OTH";
+}
+
 async function generatePatientCode() {
   const year = new Date().getFullYear();
   const [[{ count }]] = await pool.query(
@@ -141,6 +167,9 @@ export async function updatePatient(req, res) {
     enrollmentStatus: "enrollment_status",
     currentStatus: "current_status", programPhase: "program_phase",
     expectedCompletionDate: "expected_completion_date", sessionsRequired: "sessions_required",
+    caseType: "case_type",
+    attendingPhysician: "attending_physician",
+    opdNumber: "opd_number",
   };
 
   const setClauses = [];
@@ -318,6 +347,7 @@ export async function createPatient(req, res) {
     assignedCaseManagerId, admissionNotes,
     caseClassification, initialStatus, programPhase,
     expectedCompletionDate, sessionsRequired,
+    caseType, attendingPhysician,
   } = req.body;
 
   const normalized = {
@@ -462,19 +492,28 @@ export async function createPatient(req, res) {
     }
 
     const patientCode = await generatePatientCode();
-    const lguCode = normalized.municipality
-      ? String(normalized.municipality).replace(/[^a-zA-Z]/g, "").slice(0, 3).toUpperCase() || "MTR"
-      : "MTR";
-    const year = new Date().getFullYear().toString().slice(-2);
-    const [[{ count: pwudCount }]] = await pool.query(
-      `SELECT COUNT(*) as count FROM patients WHERE pwud_code LIKE ?`,
-      [`OP-${lguCode}-${year}-%`]
-    );
-    const pwudCode = `OP-${lguCode}-${year}-${String(pwudCount + 1).padStart(3, "0")}`;
+    const resolvedCaseType = "substance_use"; // Scope locked: ENTREPOSE SUD only
+
+    // Enforce case manager assignment for all PWUD registrations
+    if (!assignedCaseManagerId) {
+      return res.status(400).json({ message: "An assigned Case Manager is required before registering an ENTREPOSE patient." });
+    }
+
+    let pwudCode = null;
+    if (resolvedCaseType === "substance_use") {
+      const lguCode = getLguCode(normalized.municipality);
+      const year = new Date().getFullYear().toString().slice(-2);
+      const [[{ count: pwudCount }]] = await pool.query(
+        `SELECT COUNT(*) as count FROM patients WHERE pwud_code LIKE ?`,
+        [`OP-${lguCode}-${year}-%`]
+      );
+      pwudCode = `OP-${lguCode}-${year}-${String(pwudCount + 1).padStart(3, "0")}`;
+    }
 
     const record = {
       patient_code: patientCode,
       pwud_code: pwudCode,
+      case_type: resolvedCaseType,
       first_name: normalized.firstName,
       middle_name: normalized.middleName || null,
       last_name: normalized.lastName,
@@ -522,7 +561,8 @@ export async function createPatient(req, res) {
       referral_source: referralSource || null,
       admission_type: admissionType || null,
       program_id: programId || null,
-      assigned_case_manager_id: assignedCaseManagerId || null,
+      assigned_case_manager_id: resolvedCaseType === "substance_use" ? (assignedCaseManagerId || null) : null,
+      attending_physician: resolvedCaseType === "general_outpatient" ? (attendingPhysician || null) : null,
       admission_notes: admissionNotes || null,
       case_classification: caseClassification || null,
       initial_status: initialStatus || null,

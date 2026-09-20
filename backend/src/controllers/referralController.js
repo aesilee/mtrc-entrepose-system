@@ -1,41 +1,31 @@
 import pool from "../config/db.js";
 
 const VALID_SOURCES = new Set([
-  "Voluntary",
-  "Court-Mandated",
-  "LGU-Referred",
-  "Workplace",
-  "NGO",
-  "voluntary",
-  "court_mandated",
-  "lgu_referred",
-  "workplace",
-  "ngo",
-  "physician",
-  "hospital",
-  "community",
-  "self_referral",
-  "family",
-  "court",
-  "other",
+  "Voluntary", "Court-Mandated", "LGU-Referred", "Workplace", "NGO",
+  "voluntary", "court_mandated", "lgu_referred", "workplace", "ngo",
+  "physician", "hospital", "community", "self_referral", "family", "court", "other",
 ]);
 
 const VALID_PRIORITIES = new Set(["routine", "urgent", "emergency"]);
 const VALID_DOCUMENT_STATUSES = new Set(["pending", "none_received", "paper_copy", "uploaded"]);
 const VALID_ADMISSION_TYPES = new Set([
-  "New Admission",
-  "Readmit - Relapse",
-  "Readmit - Escape",
-  "Readmit – Relapse",
-  "Readmit – Escape",
-  "new_admission",
-  "readmit_relapse",
-  "readmit_escape",
-  "voluntary",
-  "court_mandated",
-  "lgu_referred",
+  "New Admission", "Readmission (Relapse)", "Recommitment",
+  "Readmit - Relapse", "Readmit - Escape",
+  "Readmit – Relapse", "Readmit – Escape",
+  "new_admission", "readmit_relapse", "readmit_escape",
+  "voluntary", "court_mandated", "lgu_referred",
 ]);
-const VALID_CONFINEMENT_NATURES = new Set(["arrested", "suspended_sentence", "compulsory_ra_9165"]);
+const VALID_CONFINEMENT_NATURES = new Set([
+  // Old values (backward compat)
+  "arrested", "suspended_sentence", "compulsory_ra_9165",
+  // New IDADIN / DOH standard values
+  "Plea Bargaining Agreement (Court-Mandated)",
+  "Compulsory Confinement under Section 61, RA 9165",
+  "Compulsory Confinement under Section 62, RA 9165",
+  "Voluntary with Court Order",
+  "Voluntary without Court Order (Self-Referral)",
+  "Arrested / Suspended Sentence",
+]);
 
 function cleanText(value, maxLength = null) {
   if (value === undefined || value === null) return null;
@@ -56,20 +46,31 @@ function normalizeReferral(body = {}) {
     documentStatus: cleanText(body.documentStatus, 20) || "pending",
     recommendedProgramId: body.recommendedProgramId ? Number(body.recommendedProgramId) : null,
     referralPriority: cleanText(body.referralPriority, 20) || "routine",
-    admissionType: cleanText(body.admissionType, 30),
-    natureOfConfinement: cleanText(body.natureOfConfinement, 40),
+    admissionType: cleanText(body.admissionType, 50),
+    natureOfConfinement: cleanText(body.natureOfConfinement, 80),
     typeOfService: cleanText(body.typeOfService, 100),
     typeOfPatient: cleanText(body.typeOfPatient, 100),
     attendingPhysician: cleanText(body.attendingPhysician, 150),
     priorRehabAdmissions: body.priorRehabAdmissions === "" || body.priorRehabAdmissions == null ? 0 : Number(body.priorRehabAdmissions),
     numberOfEscapes: body.numberOfEscapes === "" || body.numberOfEscapes == null ? 0 : Number(body.numberOfEscapes),
     priorDrugHospitalizations: body.priorDrugHospitalizations === "" || body.priorDrugHospitalizations == null ? 0 : Number(body.priorDrugHospitalizations),
+    assistRiskLevel: cleanText(body.assistRiskLevel, 50),
+    ddeSeverityDiagnosis: cleanText(body.ddeSeverityDiagnosis, 50),
+    medicalClearanceStatus: cleanText(body.medicalClearanceStatus, 50),
+    baselineDtDate: cleanText(body.baselineDtDate, 10),
+    baselineDtReferenceNumber: cleanText(body.baselineDtReferenceNumber, 100),
+    baselineDtMeth: body.baselineDtMeth ? 1 : 0,
+    baselineDtThc: body.baselineDtThc ? 1 : 0,
+    baselineDtOther: body.baselineDtOther ? 1 : 0,
+    baselineDtFinding: cleanText(body.baselineDtFinding, 50),
     hospitalizations: Array.isArray(body.hospitalizations) ? body.hospitalizations.map(h => ({
       hospitalName: cleanText(h.hospitalName, 255),
-      dateAdmitted: cleanText(h.dateAdmitted, 10)
+      dateAdmitted: cleanText(h.dateAdmitted, 10),
+      natureOfEvent: cleanText(h.natureOfEvent, 100),
     })).filter(h => h.hospitalName) : [],
   };
 }
+
 
 function validateReferralValues(referral, { submitting = false } = {}) {
   if (referral.referralSource && !VALID_SOURCES.has(referral.referralSource)) {
@@ -110,7 +111,7 @@ function validateReferralValues(referral, { submitting = false } = {}) {
 
 async function getPatient(connection, patientId) {
   const [[patient]] = await connection.query(
-    `SELECT p.id, p.patient_code, p.full_name, p.photo_url, p.is_archived,
+    `SELECT p.id, p.patient_code, p.pwud_code, p.case_type, p.full_name, p.photo_url, p.is_archived,
             p.assigned_case_manager_id, u.full_name AS case_manager_name
      FROM patients p
      LEFT JOIN users u ON u.id = p.assigned_case_manager_id
@@ -149,7 +150,8 @@ async function findReferral(connection, patientId) {
   );
   if (referral) {
     const [hospitalizations] = await connection.query(
-      `SELECT hospital_name AS hospitalName, date_admitted AS dateAdmitted FROM patient_hospitalizations WHERE patient_id = ? ORDER BY date_admitted DESC`,
+      `SELECT hospital_name AS hospitalName, date_admitted AS dateAdmitted, nature_of_event AS natureOfEvent
+       FROM patient_hospitalizations WHERE patient_id = ? ORDER BY date_admitted DESC`,
       [patientId]
     );
     referral.hospitalizations = hospitalizations;
@@ -228,6 +230,8 @@ export async function savePatientReferralDraft(req, res) {
            supporting_documents = ?, document_status = ?, recommended_program_id = ?, referral_priority = ?,
            admission_type = ?, nature_of_confinement = ?, type_of_service = ?, type_of_patient = ?, attending_physician = ?,
            prior_rehab_admissions = ?, number_of_escapes = ?, prior_drug_hospitalizations = ?,
+           assist_risk_level = ?, dde_severity_diagnosis = ?, medical_clearance_status = ?,
+           baseline_dt_date = ?, baseline_dt_reference_number = ?, baseline_dt_meth = ?, baseline_dt_thc = ?, baseline_dt_other = ?, baseline_dt_finding = ?,
            status = 'draft', submitted_by = NULL, submitted_at = NULL
          WHERE patient_id = ?`,
         [
@@ -236,6 +240,8 @@ export async function savePatientReferralDraft(req, res) {
           referral.supportingDocuments, documentStatus, referral.recommendedProgramId, referral.referralPriority,
           referral.admissionType, referral.natureOfConfinement, referral.typeOfService, referral.typeOfPatient, referral.attendingPhysician,
           referral.priorRehabAdmissions, referral.numberOfEscapes, referral.priorDrugHospitalizations,
+          referral.assistRiskLevel, referral.ddeSeverityDiagnosis, referral.medicalClearanceStatus,
+          referral.baselineDtDate, referral.baselineDtReferenceNumber, referral.baselineDtMeth, referral.baselineDtThc, referral.baselineDtOther, referral.baselineDtFinding,
           patientId,
         ]
       );
@@ -245,24 +251,30 @@ export async function savePatientReferralDraft(req, res) {
            patient_id, referral_source, referring_organization, referring_professional,
            referral_date, reason_for_referral, presenting_concern, supporting_documents, document_status,
            recommended_program_id, referral_priority, admission_type, nature_of_confinement, type_of_service, type_of_patient, attending_physician,
-           prior_rehab_admissions, number_of_escapes, prior_drug_hospitalizations, status, created_by
-         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'draft', ?)`,
+           prior_rehab_admissions, number_of_escapes, prior_drug_hospitalizations,
+           assist_risk_level, dde_severity_diagnosis, medical_clearance_status,
+           baseline_dt_date, baseline_dt_reference_number, baseline_dt_meth, baseline_dt_thc, baseline_dt_other, baseline_dt_finding,
+           status, created_by
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'draft', ?)`,
         [
           patientId, referral.referralSource, referral.referringOrganization, referral.referringProfessional,
           referral.referralDate, referral.reasonForReferral, referral.presentingConcern,
           referral.supportingDocuments, documentStatus, referral.recommendedProgramId, referral.referralPriority,
           referral.admissionType, referral.natureOfConfinement, referral.typeOfService, referral.typeOfPatient, referral.attendingPhysician,
           referral.priorRehabAdmissions, referral.numberOfEscapes, referral.priorDrugHospitalizations,
+          referral.assistRiskLevel, referral.ddeSeverityDiagnosis, referral.medicalClearanceStatus,
+          referral.baselineDtDate, referral.baselineDtReferenceNumber, referral.baselineDtMeth, referral.baselineDtThc, referral.baselineDtOther, referral.baselineDtFinding,
           req.user.id,
         ]
       );
     }
 
+
     await connection.query("DELETE FROM patient_hospitalizations WHERE patient_id = ?", [patientId]);
     for (const hosp of referral.hospitalizations) {
       await connection.query(
-        "INSERT INTO patient_hospitalizations (patient_id, hospital_name, date_admitted) VALUES (?, ?, ?)",
-        [patientId, hosp.hospitalName, hosp.dateAdmitted || null]
+        "INSERT INTO patient_hospitalizations (patient_id, hospital_name, date_admitted, nature_of_event) VALUES (?, ?, ?, ?)",
+        [patientId, hosp.hospitalName, hosp.dateAdmitted || null, hosp.natureOfEvent || null]
       );
     }
 
@@ -324,6 +336,8 @@ export async function submitPatientReferral(req, res) {
            supporting_documents = ?, document_status = ?, recommended_program_id = ?, referral_priority = ?,
            admission_type = ?, nature_of_confinement = ?, type_of_service = ?, type_of_patient = ?, attending_physician = ?,
            prior_rehab_admissions = ?, number_of_escapes = ?, prior_drug_hospitalizations = ?,
+           assist_risk_level = ?, dde_severity_diagnosis = ?, medical_clearance_status = ?,
+           baseline_dt_date = ?, baseline_dt_reference_number = ?, baseline_dt_meth = ?, baseline_dt_thc = ?, baseline_dt_other = ?, baseline_dt_finding = ?,
            intake_assignee_id = NULL, status = 'ready_for_intake', submitted_by = ?, submitted_at = NOW()
          WHERE patient_id = ?`,
         [
@@ -332,6 +346,8 @@ export async function submitPatientReferral(req, res) {
           referral.supportingDocuments, documentStatus, referral.recommendedProgramId, referral.referralPriority,
           referral.admissionType, referral.natureOfConfinement, referral.typeOfService, referral.typeOfPatient, referral.attendingPhysician,
           referral.priorRehabAdmissions, referral.numberOfEscapes, referral.priorDrugHospitalizations,
+          referral.assistRiskLevel, referral.ddeSeverityDiagnosis, referral.medicalClearanceStatus,
+          referral.baselineDtDate, referral.baselineDtReferenceNumber, referral.baselineDtMeth, referral.baselineDtThc, referral.baselineDtOther, referral.baselineDtFinding,
           req.user.id, patientId,
         ]
       );
@@ -341,15 +357,19 @@ export async function submitPatientReferral(req, res) {
            patient_id, referral_source, referring_organization, referring_professional,
            referral_date, reason_for_referral, presenting_concern, supporting_documents, document_status,
            recommended_program_id, referral_priority, admission_type, nature_of_confinement, type_of_service, type_of_patient, attending_physician,
-           prior_rehab_admissions, number_of_escapes, prior_drug_hospitalizations, status,
-           created_by, submitted_by, submitted_at
-         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'ready_for_intake', ?, ?, NOW())`,
+           prior_rehab_admissions, number_of_escapes, prior_drug_hospitalizations,
+           assist_risk_level, dde_severity_diagnosis, medical_clearance_status,
+           baseline_dt_date, baseline_dt_reference_number, baseline_dt_meth, baseline_dt_thc, baseline_dt_other, baseline_dt_finding,
+           status, created_by, submitted_by, submitted_at
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'ready_for_intake', ?, ?, NOW())`,
         [
           patientId, referral.referralSource, referral.referringOrganization, referral.referringProfessional,
           referral.referralDate, referral.reasonForReferral, referral.presentingConcern,
           referral.supportingDocuments, documentStatus, referral.recommendedProgramId, referral.referralPriority,
           referral.admissionType, referral.natureOfConfinement, referral.typeOfService, referral.typeOfPatient, referral.attendingPhysician,
           referral.priorRehabAdmissions, referral.numberOfEscapes, referral.priorDrugHospitalizations,
+          referral.assistRiskLevel, referral.ddeSeverityDiagnosis, referral.medicalClearanceStatus,
+          referral.baselineDtDate, referral.baselineDtReferenceNumber, referral.baselineDtMeth, referral.baselineDtThc, referral.baselineDtOther, referral.baselineDtFinding,
           req.user.id, req.user.id,
         ]
       );
@@ -358,8 +378,8 @@ export async function submitPatientReferral(req, res) {
     await connection.query("DELETE FROM patient_hospitalizations WHERE patient_id = ?", [patientId]);
     for (const hosp of referral.hospitalizations) {
       await connection.query(
-        "INSERT INTO patient_hospitalizations (patient_id, hospital_name, date_admitted) VALUES (?, ?, ?)",
-        [patientId, hosp.hospitalName, hosp.dateAdmitted || null]
+        "INSERT INTO patient_hospitalizations (patient_id, hospital_name, date_admitted, nature_of_event) VALUES (?, ?, ?, ?)",
+        [patientId, hosp.hospitalName, hosp.dateAdmitted || null, hosp.natureOfEvent || null]
       );
     }
 

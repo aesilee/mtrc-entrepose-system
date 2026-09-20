@@ -19,48 +19,63 @@ const EMPTY_FORM = {
   recommendedProgramId: "",
   referralPriority: "routine",
   typeOfService: "",
-  typeOfPatient: "",
   admissionType: "",
   natureOfConfinement: "",
   attendingPhysician: "",
   priorRehabAdmissions: 0,
   numberOfEscapes: 0,
+  priorDrugHospitalizations: 0,
+  assistRiskLevel: "",
+  ddeSeverityDiagnosis: "",
+  medicalClearanceStatus: "",
+  baselineDtDate: "",
+  baselineDtReferenceNumber: "",
+  baselineDtMeth: false,
+  baselineDtThc: false,
+  baselineDtOther: false,
+  baselineDtFinding: "",
   hospitalizations: [],
 };
 
 const SOURCE_OPTIONS = [
-  { value: "Voluntary", label: "Voluntary" },
+  { value: "Voluntary", label: "Voluntary Walk-In" },
   { value: "Court-Mandated", label: "Court-Mandated" },
-  { value: "LGU-Referred", label: "LGU-Referred" },
-  { value: "Workplace", label: "Workplace" },
-  { value: "NGO", label: "NGO" },
+  { value: "LGU-Referred", label: "LGU-Referred (CADAC / MADAC / BADAC)" },
+  { value: "Workplace", label: "Workplace-Referred" },
+  { value: "NGO", label: "NGO-Referred" },
 ];
 
+// DOH/DDB-standard service categories (IDADIN Part C)
 const TYPE_OF_SERVICE_OPTIONS = [
-  "Inpatient",
-  "Outpatient",
-  "Community-based",
-  "Other",
+  { value: "Outpatient Service (ENTREPOSE)", label: "Outpatient Service (ENTREPOSE)" },
+  { value: "Inpatient / Residential Service", label: "Inpatient / Residential Service" },
+  { value: "Aftercare Program (ACP / SIBOL)", label: "Aftercare Program (ACP / SIBOL)" },
 ];
 
-const TYPE_OF_PATIENT_OPTIONS = [
-  "New Admission",
-  "Readmit - Relapse",
-  "Readmit - Escape",
-];
-
+// IDADIN admission category
 const ADMISSION_TYPE_OPTIONS = [
   { value: "New Admission", label: "New Admission" },
-  { value: "Readmit - Relapse", label: "Readmit – Relapse" },
-  { value: "Readmit - Escape", label: "Readmit – Escape" },
+  { value: "Readmission (Relapse)", label: "Readmission – Relapse" },
+  { value: "Recommitment", label: "Recommitment" },
 ];
 
+// RA 9165 confinement legal tracks (IDADIN Part C)
 const NATURE_OF_CONFINEMENT_OPTIONS = [
-  "First time",
-  "Second time",
-  "Third time",
-  "Multiple times",
+  { value: "Plea Bargaining Agreement (Court-Mandated)", label: "Plea Bargaining Agreement (Court-Mandated)" },
+  { value: "Compulsory Confinement under Section 61, RA 9165", label: "Compulsory Confinement — Sec. 61, RA 9165" },
+  { value: "Compulsory Confinement under Section 62, RA 9165", label: "Compulsory Confinement — Sec. 62, RA 9165" },
+  { value: "Voluntary with Court Order", label: "Voluntary with Court Order" },
+  { value: "Voluntary without Court Order (Self-Referral)", label: "Voluntary without Court Order (Self-Referral)" },
+  { value: "Arrested / Suspended Sentence", label: "Arrested / Suspended Sentence" },
 ];
+
+const NATURE_OF_EVENT_OPTIONS = [
+  { value: "", label: "Select event type" },
+  { value: "Drug Overdose", label: "Drug Overdose" },
+  { value: "Severe Intoxication / Poisoning", label: "Severe Intoxication / Poisoning" },
+  { value: "Adverse Drug Reaction", label: "Adverse Drug Reaction" },
+];
+
 
 const STATUS_LABELS = {
   draft: "Draft",
@@ -89,13 +104,22 @@ function toForm(referral) {
     recommendedProgramId: referral.recommended_program_id || "",
     referralPriority: referral.referral_priority || "routine",
     typeOfService: referral.type_of_service || "",
-    typeOfPatient: referral.type_of_patient || "",
     admissionType: referral.admission_type || "",
     natureOfConfinement: referral.nature_of_confinement || "",
     attendingPhysician: referral.attending_physician || "",
-    priorRehabAdmissions: referral.prior_rehab_admissions ?? 0,
-    numberOfEscapes: referral.number_of_escapes ?? 0,
-    hospitalizations: referral.hospitalizations || [],
+    priorRehabAdmissions: referral.prior_rehab_admissions || 0,
+    numberOfEscapes: referral.number_of_escapes || 0,
+    priorDrugHospitalizations: referral.prior_drug_hospitalizations || 0,
+    assistRiskLevel: referral.assist_risk_level || "",
+    ddeSeverityDiagnosis: referral.dde_severity_diagnosis || "",
+    medicalClearanceStatus: referral.medical_clearance_status || "",
+    baselineDtDate: toInputDate(referral.baseline_dt_date),
+    baselineDtReferenceNumber: referral.baseline_dt_reference_number || "",
+    baselineDtMeth: Boolean(referral.baseline_dt_meth),
+    baselineDtThc: Boolean(referral.baseline_dt_thc),
+    baselineDtOther: Boolean(referral.baseline_dt_other),
+    baselineDtFinding: referral.baseline_dt_finding || "",
+    hospitalizations: Array.isArray(referral.hospitalizations) ? referral.hospitalizations : [],
   };
 }
 
@@ -136,6 +160,7 @@ export default function ReferralInformation() {
   const [message, setMessage] = useState("");
   const fileInputRef = useRef(null);
   const ddeFileInputRef = useRef(null);
+  const xrayFileInputRef = useRef(null);
 
   useEffect(() => {
     let active = true;
@@ -251,32 +276,50 @@ export default function ReferralInformation() {
   }
 
   async function saveDraft() {
+    const payload = {
+      ...form,
+      patientId: id,
+      priorRehabAdmissions: Number(form.priorRehabAdmissions),
+      numberOfEscapes: Number(form.numberOfEscapes),
+      priorDrugHospitalizations: Number(form.priorDrugHospitalizations),
+      hospitalizations: form.hospitalizations,
+    };
+
     setSaving(true);
     setError("");
-    setMessage("");
     try {
-      const { data } = await api.put(`/referrals/patient/${id}`, form);
+      const { data } = await api.put(`/referrals/patient/${id}`, payload);
       setReferral(data.referral);
-      setForm(toForm(data.referral));
-      setMessage(data.message);
+      setEditing(false);
+      if (!submitted) setMessage("Draft saved successfully.");
     } catch (requestError) {
-      setError(requestError.response?.data?.message || "Could not save the referral draft.");
+      setError(requestError.response?.data?.message || "Could not save draft.");
     } finally {
       setSaving(false);
     }
   }
 
-  async function submitReferral() {
+  async function submitReferral(event) {
+    event.preventDefault();
+    const payload = {
+      ...form,
+      patientId: id,
+      priorRehabAdmissions: Number(form.priorRehabAdmissions),
+      numberOfEscapes: Number(form.numberOfEscapes),
+      priorDrugHospitalizations: Number(form.priorDrugHospitalizations),
+      hospitalizations: form.hospitalizations,
+    };
+
     setSaving(true);
     setError("");
-    setMessage("");
     try {
-      const { data } = await api.post(`/referrals/patient/${id}/submit`, form);
+      const { data } = await api.post(`/referrals/patient/${id}/submit`, payload);
       setReferral(data.referral);
-      setForm(toForm(data.referral));
-      navigate(`/patients/${id}/intake/drug-history`);
+      setEditing(false);
+      setMessage("Admission history saved successfully.");
+      setTimeout(() => navigate(`/patients/${id}/intake/drug-history`), 800);
     } catch (requestError) {
-      setError(requestError.response?.data?.message || "Could not submit the referral.");
+      setError(requestError.response?.data?.message || "Could not save admission history.");
     } finally {
       setSaving(false);
     }
@@ -316,7 +359,7 @@ export default function ReferralInformation() {
   return (
     <AppShell title="Admission & Confinement History (IDADIN Part C)" description="Record referral, admission, confinement, and prior-treatment details.">
       <div style={styles.page}>
-        <PatientWorkflowProgress currentStep={2} completedThrough={1} />
+        <PatientWorkflowProgress currentStep={2} completedThrough={1} caseType={patient.case_type} />
 
         <div style={styles.patientStrip}>
           <span style={styles.avatar}>{patient.full_name?.charAt(0) || "P"}</span>
@@ -347,18 +390,18 @@ export default function ReferralInformation() {
         )}
 
         <fieldset disabled={!editing || !canEdit || locked} style={styles.fieldset}>
-          <Section title="Referral Source" description="Identify where the referral came from and when it was received.">
+          <Section title="Referral Source & Priority" description="Identify where the referral came from, the referring party, and the urgency level.">
             <Field label="Referral source" required>
               <select style={styles.input} value={form.referralSource} onChange={(event) => update("referralSource", event.target.value)} required>
                 <option value="">Select referral source</option>
                 {SOURCE_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
               </select>
             </Field>
-            <Field label={form.referralSource === "other" ? "Specify referral source" : "Referring organization"} required={form.referralSource === "other"}>
-              <input style={styles.input} maxLength={150} value={form.referringOrganization} onChange={(event) => update("referringOrganization", event.target.value)} required={form.referralSource === "other"} />
+            <Field label="Referring organization" required>
+              <input style={styles.input} maxLength={150} value={form.referringOrganization} onChange={(event) => update("referringOrganization", event.target.value)} placeholder="e.g. Legazpi City CADAC, RTC Branch 10" required />
             </Field>
-            <Field label="Referring physician or professional">
-              <input style={styles.input} maxLength={150} value={form.referringProfessional} onChange={(event) => update("referringProfessional", event.target.value)} />
+            <Field label="Referring physician / professional">
+              <input style={styles.input} maxLength={150} value={form.referringProfessional} onChange={(event) => update("referringProfessional", event.target.value)} placeholder="Name of judge, social worker, or officer (or N/A)" />
             </Field>
             <Field label="Referral date" required>
               <input type="date" max={TODAY} style={styles.input} value={form.referralDate} onChange={(event) => update("referralDate", event.target.value)} required />
@@ -393,47 +436,99 @@ export default function ReferralInformation() {
             </Field>
           </Section>
 
-          <Section title="Admission & Confinement" description="Record the IDADIN Part C admission classification and prior treatment history.">
-            <Field label="Category (Admission Type)" required>
+          <Section title="Admission & Confinement (IDADIN Part C)" description="Record the DOH-standard admission category, legal confinement track, and prior treatment history.">
+            <Field label="Admission type" required>
               <select style={styles.input} value={form.admissionType} onChange={(event) => update("admissionType", event.target.value)} required>
-                <option value="">Select category</option>
+                <option value="">Select admission type</option>
                 {ADMISSION_TYPE_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
               </select>
             </Field>
-            <Field label="Type of Service" required>
+            <Field label="Type of service" required>
               <select style={styles.input} value={form.typeOfService} onChange={(event) => update("typeOfService", event.target.value)} required>
                 <option value="">Select type of service</option>
-                {TYPE_OF_SERVICE_OPTIONS.map((o) => <option key={o} value={o}>{o}</option>)}
+                {TYPE_OF_SERVICE_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
               </select>
             </Field>
-            <Field label="Type of Patient" required>
-              <select style={styles.input} value={form.typeOfPatient} onChange={(event) => update("typeOfPatient", event.target.value)} required>
-                <option value="">Select type of patient</option>
-                {TYPE_OF_PATIENT_OPTIONS.map((o) => <option key={o} value={o}>{o}</option>)}
-              </select>
-            </Field>
-            <Field label="Nature of Confinement" required>
+            <Field label="Nature of confinement" required>
               <select style={styles.input} value={form.natureOfConfinement} onChange={(event) => update("natureOfConfinement", event.target.value)} required>
                 <option value="">Select nature of confinement</option>
-                {NATURE_OF_CONFINEMENT_OPTIONS.map((o) => <option key={o} value={o}>{o}</option>)}
+                {NATURE_OF_CONFINEMENT_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
               </select>
             </Field>
-            <Field label="Attending Physician" wide>
-              <input style={styles.input} maxLength={255} value={form.attendingPhysician} onChange={(event) => update("attendingPhysician", event.target.value)} />
+            <Field label="ASSIST Screening Risk Level">
+              <select style={styles.input} value={form.assistRiskLevel} onChange={(event) => update("assistRiskLevel", event.target.value)}>
+                <option value="">Select risk level</option>
+                <option value="Low Risk">Low Risk</option>
+                <option value="Moderate Risk">Moderate Risk</option>
+                <option value="High Risk">High Risk</option>
+                <option value="Pre-Screened by LGU / Not Administered">Pre-Screened by LGU / Not Administered</option>
+              </select>
+            </Field>
+            <Field label="DDE Clinical Dependency Severity">
+              <select style={styles.input} value={form.ddeSeverityDiagnosis} onChange={(event) => update("ddeSeverityDiagnosis", event.target.value)}>
+                <option value="">Select severity diagnosis</option>
+                <option value="Mild Dependence">Mild Dependence (LGU Track)</option>
+                <option value="Moderate Dependence">Moderate Dependence (Outpatient Track)</option>
+                <option value="Severe Dependence">Severe Dependence (Inpatient Track)</option>
+              </select>
+            </Field>
+            {form.ddeSeverityDiagnosis === "Severe Dependence" && form.typeOfService.includes("Outpatient") && (
+              <div style={{ ...styles.noticeCard, gridColumn: "1 / -1" }}>
+                <strong>Clinical Advisory: Severe Dependence in Outpatient Setting</strong>
+                <p style={{ margin: "4px 0 0", fontSize: 12 }}>
+                  Standard protocol recommends Inpatient/Residential admission for Severe Dependence. Ensure you have a court order or documented clinical override authorizing outpatient enrollment for this client.
+                </p>
+              </div>
+            )}
+
+            <Field label="Attending DDE physician">
+              <input style={styles.input} maxLength={255} value={form.attendingPhysician} onChange={(event) => update("attendingPhysician", event.target.value)} placeholder="DOH-accredited Drug Dependency Examiner" />
             </Field>
             <Field label="Prior rehabilitation admissions">
               <input type="number" min="0" max="999" step="1" style={styles.input} value={form.priorRehabAdmissions} onChange={(event) => update("priorRehabAdmissions", event.target.value)} />
             </Field>
-            <Field label="Number of escapes">
+            <Field label="Number of escapes from any facility">
               <input type="number" min="0" max="999" step="1" style={styles.input} value={form.numberOfEscapes} onChange={(event) => update("numberOfEscapes", event.target.value)} />
             </Field>
           </Section>
 
           <section style={{...styles.section, gridColumn: "1 / -1"}}>
-            <div style={styles.sectionTitle}>Drug-related Hospitalizations</div>
-            <div style={styles.sectionDescription}>List prior hospitalizations due to drug use.</div>
+            <div style={styles.sectionTitle}>Drug-Related Hospitalization History</div>
+            <div style={styles.sectionDescription}>List prior medical hospitalizations resulting from substance use. Leave empty if none.</div>
             <HospitalizationTable hospitalizations={form.hospitalizations} onChange={(h) => update("hospitalizations", h)} disabled={!editing || !canEdit || locked} />
           </section>
+
+          <Section title="Baseline Urine Drug Test (Form 11 Initial Entry)" description="Record the client's initial screening required for the 0-60 day surveillance phase.">
+            <Field label="Drug test date" required>
+              <input type="date" max={TODAY} style={styles.input} value={form.baselineDtDate} onChange={(event) => update("baselineDtDate", event.target.value)} required />
+            </Field>
+            <Field label="Laboratory specimen / reference number">
+              <input style={styles.input} maxLength={100} value={form.baselineDtReferenceNumber} onChange={(event) => update("baselineDtReferenceNumber", event.target.value)} placeholder="e.g. DT-2026-001" />
+            </Field>
+            <Field label="Tested Substances" required>
+              <div style={{ display: "flex", gap: 16, marginTop: 4 }}>
+                <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13 }}>
+                  <input type="checkbox" checked={form.baselineDtMeth} onChange={(e) => update("baselineDtMeth", e.target.checked)} />
+                  Methamphetamine (Shabu)
+                </label>
+                <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13 }}>
+                  <input type="checkbox" checked={form.baselineDtThc} onChange={(e) => update("baselineDtThc", e.target.checked)} />
+                  THC (Marijuana)
+                </label>
+                <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13 }}>
+                  <input type="checkbox" checked={form.baselineDtOther} onChange={(e) => update("baselineDtOther", e.target.checked)} />
+                  Other
+                </label>
+              </div>
+            </Field>
+            <Field label="Overall screening finding" required>
+              <select style={styles.input} value={form.baselineDtFinding} onChange={(event) => update("baselineDtFinding", event.target.value)} required>
+                <option value="">Select finding</option>
+                <option value="Positive">Positive</option>
+                <option value="Negative">Negative</option>
+              </select>
+            </Field>
+          </Section>
 
         </fieldset>
 
@@ -444,7 +539,7 @@ export default function ReferralInformation() {
           </div>
 
           <div style={styles.documentStatusRow}>
-            <label style={styles.label}>
+            <label style={{ ...styles.label, flex: 1 }}>
               <span>Document status</span>
               <select
                 style={styles.input}
@@ -456,6 +551,15 @@ export default function ReferralInformation() {
                 <option value="none_received">No documents received</option>
                 <option value="paper_copy">Paper copy is in the physical chart</option>
                 {documents.length > 0 && <option value="uploaded">Uploaded electronically</option>}
+              </select>
+            </label>
+            <label style={{ ...styles.label, flex: 1 }}>
+              <span>Medical clearance status</span>
+              <select style={styles.input} value={form.medicalClearanceStatus} onChange={(event) => update("medicalClearanceStatus", event.target.value)} disabled={!editing || !canEdit || locked}>
+                <option value="">Select clearance status</option>
+                <option value="Verified Normal / Clear">Verified Normal / Clear</option>
+                <option value="Under Evaluation">Under Evaluation (Needs clearance)</option>
+                <option value="Pending Result">Pending Result</option>
               </select>
             </label>
           </div>
@@ -475,10 +579,7 @@ export default function ReferralInformation() {
             disabled={!editing || !canEdit || locked || uploading}
           >
             <span style={styles.uploadIcon} aria-hidden="true">
-              <svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M12 16V7m0 0-3 3m3-3 3 3" />
-                <path d="M7 18H6a4 4 0 0 1-.7-7.94A7 7 0 0 1 18.9 9.3 4.5 4.5 0 0 1 18.5 18H17" />
-              </svg>
+              <svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 16V7m0 0-3 3m3-3 3 3" /><path d="M7 18H6a4 4 0 0 1-.7-7.94A7 7 0 0 1 18.9 9.3 4.5 4.5 0 0 1 18.5 18H17" /></svg>
             </span>
             <span style={styles.uploadText}>
               <strong>{uploading ? "Uploading document…" : "Upload Court Order / LGU Letter"}</strong>
@@ -501,14 +602,34 @@ export default function ReferralInformation() {
             disabled={!editing || !canEdit || locked || uploading}
           >
             <span style={styles.uploadIcon} aria-hidden="true">
-              <svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M12 16V7m0 0-3 3m3-3 3 3" />
-                <path d="M7 18H6a4 4 0 0 1-.7-7.94A7 7 0 0 1 18.9 9.3 4.5 4.5 0 0 1 18.5 18H17" />
-              </svg>
+              <svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 16V7m0 0-3 3m3-3 3 3" /><path d="M7 18H6a4 4 0 0 1-.7-7.94A7 7 0 0 1 18.9 9.3 4.5 4.5 0 0 1 18.5 18H17" /></svg>
             </span>
             <span style={styles.uploadText}>
               <strong>{uploading ? "Uploading document…" : "Upload Official DDE Result"}</strong>
               <small>PDF, JPG, or PNG — maximum 10 MB</small>
+            </span>
+          </button>
+
+          <input
+            ref={xrayFileInputRef}
+            type="file"
+            accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png"
+            onChange={(event) => uploadDocuments(event, "chest_xray_medical_clearance")}
+            disabled={!editing || !canEdit || locked || uploading}
+            style={styles.hiddenFileInput}
+          />
+          <button
+            type="button"
+            style={{ ...styles.uploadBox, marginTop: 10, ...((!editing || !canEdit || locked || uploading) ? styles.uploadBoxDisabled : {}) }}
+            onClick={() => xrayFileInputRef.current?.click()}
+            disabled={!editing || !canEdit || locked || uploading}
+          >
+            <span style={styles.uploadIcon} aria-hidden="true">
+              <svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 16V7m0 0-3 3m3-3 3 3" /><path d="M7 18H6a4 4 0 0 1-.7-7.94A7 7 0 0 1 18.9 9.3 4.5 4.5 0 0 1 18.5 18H17" /></svg>
+            </span>
+            <span style={styles.uploadText}>
+              <strong>{uploading ? "Uploading document…" : "Upload Chest X-Ray / Medical Clearance"}</strong>
+              <small>Valid within last 3 months (PDF, JPG, PNG)</small>
             </span>
           </button>
 
@@ -520,7 +641,7 @@ export default function ReferralInformation() {
                   <span style={styles.documentInfo}>
                     <strong style={styles.documentName}>{document.original_name}</strong>
                     <small style={styles.documentMeta}>
-                      {document.document_type === "dde_result" ? "DDE Result" : document.document_type === "court_order_lgu_letter" ? "Court Order / LGU Letter" : "Other Document"} · {formatFileSize(document.file_size)} · Uploaded {formatDateTime(document.created_at)}
+                      {document.document_type === "dde_result" ? "DDE Result" : document.document_type === "chest_xray_medical_clearance" ? "Chest X-Ray / Medical Clearance" : document.document_type === "court_order_lgu_letter" ? "Court Order / LGU Letter" : "Other Document"} · {formatFileSize(document.file_size)} · Uploaded {formatDateTime(document.created_at)}
                       {document.uploaded_by_name ? ` by ${document.uploaded_by_name}` : ""}
                     </small>
                   </span>
@@ -535,6 +656,7 @@ export default function ReferralInformation() {
             </div>
           )}
 
+
           <label style={{ ...styles.label, marginTop: 16 }}>
             <span>Document notes or approved storage references</span>
             <textarea
@@ -548,30 +670,35 @@ export default function ReferralInformation() {
           </label>
         </section>
 
-        <div style={styles.actions}>
-          <button type="button" style={styles.secondaryButton} onClick={() => navigate(`/patients/${id}`)}>View Patient Profile</button>
-          {editing && canEdit ? (
-            <>
-              <button type="button" style={styles.secondaryButton} onClick={cancelEditing}>Cancel</button>
-              {!submitted && (
-                <button type="button" style={styles.secondaryButton} onClick={saveDraft} disabled={saving}>
-                  {saving ? "Saving…" : "Save Draft"}
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10 }}>
+          <button type="button" style={styles.secondaryButton} onClick={() => navigate(`/patients/${id}/demographics`)}>
+            ← Back to Demographics
+          </button>
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+            <button type="button" style={styles.secondaryButton} onClick={() => navigate(`/patients/${id}`)}>View Patient Profile</button>
+            {editing && canEdit ? (
+              <>
+                <button type="button" style={styles.secondaryButton} onClick={cancelEditing}>Cancel</button>
+                {!submitted && (
+                  <button type="button" style={styles.secondaryButton} onClick={saveDraft} disabled={saving}>
+                    {saving ? "Saving…" : "Save Draft"}
+                  </button>
+                )}
+                <button type="button" style={styles.primaryButton} onClick={submitReferral} disabled={saving}>
+                  {saving ? "Saving…" : submitted ? "Save Changes" : "Save Admission & Continue to Drug Use History"}
                 </button>
-              )}
-              <button type="button" style={styles.primaryButton} onClick={submitReferral} disabled={saving}>
-                  {saving ? "Saving…" : submitted ? "Save Admission History Changes" : "Save & Continue to Drug Use History"}
-              </button>
-            </>
-          ) : (
-            <>
-              {canEdit && !locked && (
-                <button type="button" style={styles.secondaryButton} onClick={() => setEditing(true)}>Edit Referral</button>
-              )}
-              <button type="button" style={styles.primaryButton} onClick={() => submitted ? navigate(`/patients/${id}/intake/drug-history`) : navigate("/patients")}>
-                {submitted ? "Continue to Drug Use History" : "Return to Patients"}
-              </button>
-            </>
-          )}
+              </>
+            ) : (
+              <>
+                {canEdit && !locked && (
+                  <button type="button" style={styles.secondaryButton} onClick={() => setEditing(true)}>Edit Referral</button>
+                )}
+                <button type="button" style={styles.primaryButton} onClick={() => submitted ? navigate(`/patients/${id}/intake/drug-history`) : navigate("/patients")}>
+                  {submitted ? "Continue to Drug Use History →" : "Return to Patients"}
+                </button>
+              </>
+            )}
+          </div>
         </div>
       </div>
     </AppShell>
@@ -605,7 +732,7 @@ function Field({ label, required, wide, full, children }) {
 
 function HospitalizationTable({ hospitalizations, onChange, disabled }) {
   function addRow() {
-    onChange([...hospitalizations, { hospitalName: "", dateAdmitted: "" }]);
+    onChange([...hospitalizations, { hospitalName: "", dateAdmitted: "", natureOfEvent: "" }]);
   }
 
   function updateRow(index, field, value) {
@@ -621,13 +748,14 @@ function HospitalizationTable({ hospitalizations, onChange, disabled }) {
   return (
     <div>
       {hospitalizations.length === 0 ? (
-        <div style={styles.emptyTable}>No prior hospitalizations recorded.</div>
+        <div style={styles.emptyTable}>No prior drug-related hospitalizations recorded.</div>
       ) : (
         <table style={styles.table}>
           <thead>
             <tr>
-              <th style={styles.th}>Facility Name</th>
+              <th style={styles.th}>Hospital / Facility Name</th>
               <th style={styles.th}>Date Admitted</th>
+              <th style={styles.th}>Nature of Medical Event</th>
               <th style={styles.thAction}></th>
             </tr>
           </thead>
@@ -652,6 +780,18 @@ function HospitalizationTable({ hospitalizations, onChange, disabled }) {
                     disabled={disabled}
                     max={TODAY}
                   />
+                </td>
+                <td style={styles.td}>
+                  <select
+                    style={styles.input}
+                    value={h.natureOfEvent || ""}
+                    onChange={(e) => updateRow(i, "natureOfEvent", e.target.value)}
+                    disabled={disabled}
+                  >
+                    {NATURE_OF_EVENT_OPTIONS.map((opt) => (
+                      <option key={opt.value} value={opt.value}>{opt.label}</option>
+                    ))}
+                  </select>
                 </td>
                 <td style={styles.tdAction}>
                   {!disabled && (

@@ -11,7 +11,7 @@ export async function recordAttendanceBulk(req, res) {
   const connection = await pool.getConnection();
   try {
     const [[session]] = await connection.query(
-      `SELECT session_name, session_date FROM sessions WHERE id = ?`,
+      `SELECT session_name, session_type, session_date FROM sessions WHERE id = ?`,
       [sessionId]
     );
     if (!session) {
@@ -24,7 +24,7 @@ export async function recordAttendanceBulk(req, res) {
       await connection.query(
         `INSERT INTO attendance (patient_id, session_id, session_date, session_type, status, notes, recorded_by)
          VALUES (?, ?, ?, ?, ?, ?, ?)`,
-        [r.patientId, sessionId, session.session_date, session.session_name, r.status, r.remarks || null, req.user.id]
+        [r.patientId, sessionId, session.session_date, session.session_type || session.session_name, r.status, r.remarks || null, req.user.id]
       );
     }
     await connection.commit();

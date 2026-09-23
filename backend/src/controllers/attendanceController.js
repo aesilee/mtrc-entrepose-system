@@ -60,6 +60,49 @@ export async function recordAttendanceBulk(req, res) {
             `Patient "${p.full_name}" missed today's session "${session.session_name}"`
           );
         }
+
+        // Phase 1.3 Flag: Check if client has 2 consecutive absences
+        if (p.assigned_case_manager_id) {
+          const [recentAtt] = await pool.query(
+            "SELECT status FROM attendance WHERE patient_id = ? ORDER BY session_date DESC, id DESC LIMIT 2",
+            [p.id]
+          );
+          if (recentAtt.length === 2 && recentAtt[0].status === "absent" && recentAtt[1].status === "absent") {
+            await notifyUser(
+              p.assigned_case_manager_id,
+              "patients",
+              "consecutive_absences",
+              `Clinical Flag: "${p.full_name}" has accumulated 2 consecutive absences and requires clinical follow-up.`
+            );
+          }
+        }
+      }
+    }
+
+    // Phase 1.3 Flag: Check if any attended patient reached 43 core sessions (PDC Readiness)
+    const presentRecords = records.filter((r) => r.status === "present");
+    if (presentRecords.length > 0) {
+      const presentPatientIds = presentRecords.map((r) => r.patientId);
+      const [presentPatients] = await pool.query(
+        `SELECT id, full_name, assigned_case_manager_id FROM patients WHERE id IN (?) AND is_archived = FALSE`,
+        [presentPatientIds]
+      );
+      for (const p of presentPatients) {
+        if (p.assigned_case_manager_id) {
+          const [[{ coreCount }]] = await pool.query(
+            `SELECT COUNT(*) as coreCount FROM attendance 
+             WHERE patient_id = ? AND status = 'present' AND session_type IN ('CBT_GROUP', 'PSYCHO_EDUCATION')`,
+            [p.id]
+          );
+          if (coreCount === 43) {
+            await notifyUser(
+              p.assigned_case_manager_id,
+              "patients",
+              "milestone_readiness",
+              `Milestone Alert: "${p.full_name}" has completed 43 core sessions and is ready for Pre-Discharge Conference (PDC).`
+            );
+          }
+        }
       }
     }
 

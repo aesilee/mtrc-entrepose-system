@@ -1,4 +1,5 @@
 import pool from "../config/db.js";
+import { notifyUser, notifyRoles } from "../utils/notify.js";
 
 // 1. Milestones
 export async function getMilestones(req, res) {
@@ -143,6 +144,47 @@ export async function logSessionWithNote(req, res) {
     }
 
     await connection.commit();
+
+    // Background alert checks
+    try {
+      const [[p]] = await pool.query(
+        "SELECT id, full_name, assigned_case_manager_id FROM patients WHERE id = ? AND is_archived = FALSE",
+        [patientId]
+      );
+      if (p && p.assigned_case_manager_id) {
+        if (status === "absent") {
+          const [recentAtt] = await pool.query(
+            "SELECT status FROM attendance WHERE patient_id = ? ORDER BY session_date DESC, id DESC LIMIT 2",
+            [patientId]
+          );
+          if (recentAtt.length === 2 && recentAtt[0].status === "absent" && recentAtt[1].status === "absent") {
+            await notifyUser(
+              p.assigned_case_manager_id,
+              "patients",
+              "consecutive_absences",
+              `Clinical Flag: "${p.full_name}" has accumulated 2 consecutive absences and requires clinical follow-up.`
+            );
+          }
+        } else if (status === "present") {
+          const [[{ coreCount }]] = await pool.query(
+            `SELECT COUNT(*) as coreCount FROM attendance 
+             WHERE patient_id = ? AND status = 'present' AND session_type IN ('CBT_GROUP', 'PSYCHO_EDUCATION')`,
+            [patientId]
+          );
+          if (coreCount === 43) {
+            await notifyUser(
+              p.assigned_case_manager_id,
+              "patients",
+              "milestone_readiness",
+              `Milestone Alert: "${p.full_name}" has completed 43 core sessions and is ready for Pre-Discharge Conference (PDC).`
+            );
+          }
+        }
+      }
+    } catch (notifyErr) {
+      console.error("Session notification error:", notifyErr);
+    }
+
     res.json({ message: "Session and progress note logged successfully." });
   } catch (err) {
     await connection.rollback();
@@ -181,6 +223,31 @@ export async function addDrugTest(req, res) {
        VALUES (?, ?, ?, ?, ?, ?)`,
       [id, testDate, substanceTested, result, actionTaken || null, remarks || null]
     );
+
+    // Phase 1.3 & Phase 4 Alert: Positive Drug Test
+    if (result === "POSITIVE") {
+      const [[patient]] = await pool.query(
+        "SELECT id, full_name, assigned_case_manager_id FROM patients WHERE id = ?",
+        [id]
+      );
+      if (patient) {
+        if (patient.assigned_case_manager_id) {
+          await notifyUser(
+            patient.assigned_case_manager_id,
+            "patients",
+            "positive_drug_test",
+            `Clinical Alert: Patient "${patient.full_name}" tested POSITIVE for ${substanceTested}. Schedule case conference.`
+          );
+        }
+        await notifyRoles(
+          ["ict_admin", "him_staff"],
+          "patients",
+          "positive_drug_test",
+          `Clinical Alert: Patient "${patient.full_name}" tested POSITIVE for ${substanceTested}.`
+        );
+      }
+    }
+
     res.json({ message: "Drug test logged successfully." });
   } catch (err) {
     console.error(err);

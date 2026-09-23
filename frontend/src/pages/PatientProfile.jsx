@@ -7,8 +7,7 @@ import ProgressNoteModal from "../components/ProgressNoteModal.jsx";
 import FollowUpModal from "../components/FollowUpModal.jsx";
 import CompleteFollowUpModal from "../components/CompleteFollowUpModal.jsx";
 import SharedEmptyState from "../components/EmptyState.jsx";
-import CertificateGeneratorModal from "../components/CertificateGeneratorModal.jsx";
-import CertificateViewModal from "../components/CertificateViewModal.jsx";
+import StatutoryCertificateModal from "../components/StatutoryCertificateModal.jsx";
 import DrugTestModal from "../components/DrugTestModal.jsx";
 import DischargeModal from "../components/DischargeModal.jsx";
 import CardActionMenu from "../components/CardActionMenu.jsx";
@@ -112,14 +111,7 @@ export default function PatientProfile() {
   const [sessionSummary, setSessionSummary] = useState(null);
   const [drugTests, setDrugTests] = useState([]);
   
-  const [certGeneratorOpen, setCertGeneratorOpen] = useState(false);
-  const [viewingCertificateId, setViewingCertificateId] = useState(null);
-  const [certAction, setCertAction] = useState(null);
-
-  function openCertificate(certId, action = null) {
-    setViewingCertificateId(certId);
-    setCertAction(action);
-  }
+  const [statutoryCertModal, setStatutoryCertModal] = useState(null);
 
   const [archivingCertificate, setArchivingCertificate] = useState(null);
   const [archivingPatient, setArchivingPatient] = useState(false);
@@ -194,7 +186,7 @@ export default function PatientProfile() {
       api.get(`/patients/${id}`),
       api.get(`/patients/${id}/attendance`),
       api.get(`/patients/${id}/progress-notes`),
-      api.get(`/patients/${id}/certificates`),
+      api.get(`/certificates/${id}/history`),
       api.get(`/patients/${id}/history`),
       api.get(`/patients/${id}/follow-ups`),
       api.get(`/patients/${id}/timeline`),
@@ -208,7 +200,7 @@ export default function PatientProfile() {
       setForm(toFormState(p.data.patient));
       setAttendance(a.data.attendance);
       setProgressNotes(pn.data.progressNotes);
-      setCertificates(c.data.certificates);
+      setCertificates(c.data.history || []);
       setHistory(h.data.history);
       setFollowUps(fu.data.followUps);
       setTimeline(tl.data.timeline);
@@ -779,32 +771,70 @@ export default function PatientProfile() {
           ) : activeSection === "certificates" ? (
             <div>
               <SectionHeader icon={NAV_ICONS.certificates} title="Certificates" />
-              <div style={{ marginBottom: 16 }}>
-                {user.role !== "case_manager" && (
-                  <button type="button" style={styles.generateBtn} onClick={() => setCertGeneratorOpen(true)}>+ Generate Certificate</button>
-                )}
+              
+              <div style={{ display: "flex", gap: 12, marginBottom: 20, flexWrap: "wrap" }}>
+                <button
+                  type="button"
+                  style={styles.generateBtn}
+                  onClick={() => setStatutoryCertModal({ type: "ENROLLMENT" })}
+                >
+                  + Issue Certificate of Enrollment
+                </button>
+                <button
+                  type="button"
+                  style={{ ...styles.generateBtn, background: "var(--color-primary-dark, #0d4a2b)" }}
+                  onClick={() => setStatutoryCertModal({ type: "COMPLETION" })}
+                >
+                  + Issue Certificate of Completion
+                </button>
               </div>
-              {certificates.length === 0 ? <EmptyState text="No certificates issued yet." /> : (
-                <div style={styles.certGrid}>
-                  {certificates.map((c) => (
-                    <div key={c.id} style={{ ...styles.certCard, position: "relative", cursor: "pointer" }} onClick={() => openCertificate(c.id)}>
-                      <CardActionMenu
-                        items={[
-                          { label: "Print", onClick: () => openCertificate(c.id, "print") },
-                          { label: "Download PDF", onClick: () => openCertificate(c.id, "download") },
-                          ...(user.role !== "admitting" ? [{ label: "Archive", onClick: () => setArchivingCertificate(c) }] : []),
-                        ]}
-                      />
-                      <div style={styles.certCardIcon}>{NAV_ICONS.certificates}</div>
-                      <div style={styles.certCardTitle}>Certificate of Completion</div>
-                      <div style={styles.certCardMeta}>{c.completion_date ? `Completed ${fmtDateTime(c.completion_date)}` : ""}</div>
-                      <div style={styles.certCardFooter}>
-                        <span>{c.issued_by_name || "—"}</span>
-                        <span>{fmtDateTime(c.issued_at)}</span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
+
+              {certificates.length === 0 ? (
+                <EmptyState text="No certificates issued for this patient yet." />
+              ) : (
+                <table style={styles.table}>
+                  <thead>
+                    <tr>
+                      <th style={styles.th}>Type</th>
+                      <th style={styles.th}>Control No.</th>
+                      <th style={styles.th}>Date Issued</th>
+                      <th style={styles.th}>Issued By</th>
+                      <th style={styles.th}>Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {certificates.map((c) => (
+                      <tr key={c.id}>
+                        <td style={styles.td}><strong>{c.certificate_type}</strong></td>
+                        <td style={styles.td}>
+                          <span style={{ fontFamily: "monospace", fontWeight: 700, color: "var(--color-primary-dark)" }}>
+                            {c.certificate_control_no}
+                          </span>
+                        </td>
+                        <td style={styles.td}>{fmtDate(c.issued_date)}</td>
+                        <td style={styles.td}>{c.issued_by_name}</td>
+                        <td style={styles.td}>
+                          <button
+                            type="button"
+                            style={{
+                              padding: "5px 12px",
+                              fontSize: 12,
+                              fontWeight: 700,
+                              cursor: "pointer",
+                              background: "#f1f5f9",
+                              border: "1px solid #cbd5e1",
+                              borderRadius: 4,
+                              color: "#1e293b",
+                            }}
+                            onClick={() => setStatutoryCertModal({ type: c.certificate_type, reprintRecord: c })}
+                          >
+                            🖨️ View / Reprint
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               )}
             </div>
           ) : activeSection === "history" ? (
@@ -840,18 +870,17 @@ export default function PatientProfile() {
           onSaved={() => { setCompletingFollowUpId(null); loadAll(); }}
         />
       )}
-      {certGeneratorOpen && (
-        <CertificateGeneratorModal
-          patientId={id}
-          onClose={() => setCertGeneratorOpen(false)}
-          onGenerated={refreshCertificates}
-        />
-      )}
-            {viewingCertificateId && (
-        <CertificateViewModal
-          certificateId={viewingCertificateId}
-          autoAction={certAction}
-          onClose={() => setViewingCertificateId(null)}
+      {statutoryCertModal && (
+        <StatutoryCertificateModal
+          patient={patient}
+          initialType={statutoryCertModal.type || "ENROLLMENT"}
+          reprintRecord={statutoryCertModal.reprintRecord || null}
+          onClose={() => setStatutoryCertModal(null)}
+          onIssued={() => {
+            api.get(`/certificates/${id}/history`).then((res) => {
+              setCertificates(res.data.history || []);
+            });
+          }}
         />
       )}
       {archivingCertificate && (

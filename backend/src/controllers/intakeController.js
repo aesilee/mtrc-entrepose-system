@@ -1,5 +1,5 @@
 import pool from "../config/db.js";
-import { notifyRoles } from "../utils/notify.js";
+import { notifyRoles, notifyUser } from "../utils/notify.js";
 
 // Official 3-letter LGU codes for Albay/Bicol municipalities
 const LGU_CODE_MAP = {
@@ -474,6 +474,15 @@ export async function finalizeEnrollment(req, res) {
       ? `OPD registration finalized: "${patient.full_name}" (${patient.patient_code})`
       : `Patient enrollment finalized: "${patient.full_name}" (${patient.patient_code})`;
     await notifyRoles(["ict_admin", "him_staff", "admitting"], "patients", "patient_enrolled", noticeMsg);
+
+    if (patient.assigned_case_manager_id) {
+      await notifyUser(
+        patient.assigned_case_manager_id,
+        "patients",
+        "case_assigned",
+        `New Intake: "${patient.full_name}" (${patient.pwud_code || patient.patient_code}) has been enrolled and added to your caseload.`
+      );
+    }
     res.json({ message: isOPD ? "OPD registration finalized and Outpatient Consultation Slip generated." : "Enrollment finalized and Certificate of Enrollment generated.", certificateId: certificate.id });
   } catch (error) {
     await connection.rollback();

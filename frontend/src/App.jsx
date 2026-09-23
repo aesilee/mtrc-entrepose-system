@@ -8,6 +8,7 @@ import Patients from "./pages/Patients.jsx";
 import RegisterPatient from "./pages/RegisterPatient.jsx";
 import PatientProfile from "./pages/PatientProfile.jsx";
 import Reports from "./pages/Reports.jsx";
+import Certificates from "./pages/Certificates.jsx";
 import Analytics from "./pages/Analytics.jsx";
 import Attendance from "./pages/Attendance.jsx";
 import AuditLogs from "./pages/AuditLogs.jsx";
@@ -141,6 +142,14 @@ export default function App() {
         element={
           <ProtectedRoute allowedRoles={["case_manager", "him_staff", "ict_admin"]}>
             <Analytics />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/certificates"
+        element={
+          <ProtectedRoute>
+            <Certificates />
           </ProtectedRoute>
         }
       />

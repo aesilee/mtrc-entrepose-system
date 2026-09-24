@@ -187,7 +187,7 @@ export async function updatePatient(req, res) {
 
   // Single consolidated pre-fetch query to check current patient state
   const [[current]] = await pool.query(
-    "SELECT first_name, middle_name, last_name, suffix, full_name, enrollment_status, assigned_case_manager_id FROM patients WHERE id = ?",
+    "SELECT first_name, middle_name, last_name, suffix, full_name, enrollment_status, admission_date, assigned_case_manager_id FROM patients WHERE id = ?",
     [id]
   );
 
@@ -200,6 +200,14 @@ export async function updatePatient(req, res) {
     ].map(cleanText).filter(Boolean).join(" ");
     setClauses.push("full_name = ?");
     values.push(fullName);
+  }
+
+  // Ensure active status and admission_date stay harmonized
+  if (fields.enrollmentStatus === "active" && !fields.admissionDate && !current?.admission_date) {
+    setClauses.push("admission_date = CURDATE()");
+  } else if (fields.admissionDate && !fields.enrollmentStatus && current?.enrollment_status === "pending") {
+    setClauses.push("enrollment_status = 'active'");
+    setClauses.push("current_status = 'active'");
   }
 
   // Check for an enrollment status change

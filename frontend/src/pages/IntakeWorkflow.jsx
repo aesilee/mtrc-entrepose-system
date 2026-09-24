@@ -73,10 +73,18 @@ const EMPTY_FORM = {
   dataPrivacyConsentSigned: false,
   generalMedicalConsentSigned: false,
   programOrientationDate: "",
+  admissionDate: TODAY,
+  assignedCaseManagerId: "",
 };
 
-function toForm(intake) {
-  if (!intake) return { ...EMPTY_FORM };
+function toForm(intake, patientData) {
+  if (!intake) {
+    return {
+      ...EMPTY_FORM,
+      admissionDate: patientData?.admission_date ? String(patientData.admission_date).slice(0, 10) : TODAY,
+      assignedCaseManagerId: patientData?.assigned_case_manager_id || "",
+    };
+  }
   let comorbidities = { ...EMPTY_FORM.comorbidities };
   if (intake.comorbidities) {
     try {
@@ -115,6 +123,8 @@ function toForm(intake) {
     dataPrivacyConsentSigned: Boolean(intake.data_privacy_consent_signed),
     generalMedicalConsentSigned: Boolean(intake.general_medical_consent_signed),
     programOrientationDate: "",
+    admissionDate: patientData?.admission_date ? String(patientData.admission_date).slice(0, 10) : TODAY,
+    assignedCaseManagerId: patientData?.assigned_case_manager_id || "",
   };
 }
 
@@ -133,6 +143,13 @@ export default function IntakeWorkflow() {
   const [message, setMessage] = useState("");
   const [certificateId, setCertificateId] = useState(null);
   const [certificateAction, setCertificateAction] = useState(null);
+  const [caseManagers, setCaseManagers] = useState([]);
+
+  useEffect(() => {
+    api.get("/users/case-managers")
+      .then(({ data }) => setCaseManagers(data.caseManagers || []))
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -143,7 +160,7 @@ export default function IntakeWorkflow() {
         setPatient(data.patient);
         setReferral(data.referral);
         setIntake(data.intake);
-        setForm(toForm(data.intake));
+        setForm(toForm(data.intake, data.patient));
         setCertificateId(data.enrollmentCertificateId || null);
       })
       .catch((requestError) => active && setError(requestError.response?.data?.message || "Could not load the intake workflow."))
@@ -246,12 +263,15 @@ export default function IntakeWorkflow() {
             generalMedicalConsentSigned: form.generalMedicalConsentSigned,
             dataPrivacyConsentSigned: form.dataPrivacyConsentSigned,
             programOrientationDate: form.programOrientationDate,
+            admissionDate: form.admissionDate,
           }
         : {
             serviceAgreementSigned: form.serviceAgreementSigned,
             pledgeOfCommitmentSigned: form.pledgeOfCommitmentSigned,
             dataPrivacyConsentSigned: form.dataPrivacyConsentSigned,
             programOrientationDate: form.programOrientationDate,
+            admissionDate: form.admissionDate,
+            assignedCaseManagerId: form.assignedCaseManagerId || patient?.assigned_case_manager_id,
           };
       const { data } = await api.post(`/intakes/patient/${id}/finalize`, payload);
       setCertificateId(data.certificateId);
@@ -454,11 +474,45 @@ export default function IntakeWorkflow() {
             )}
             <form onSubmit={finalize} style={styles.form}>
               <section style={styles.section}>
-                <div style={styles.sectionTitle}>Program Orientation & Caseload Activation</div>
-                <div style={styles.sectionDescription}>Set the scheduled orientation date for this client. Once finalized, the case manager will automatically receive this record.</div>
+                <div style={styles.sectionTitle}>Admission & Caseload Activation</div>
+                <div style={styles.sectionDescription}>
+                  Confirm the official admission date and assigned Case Manager. Once finalized, this client will become an active enrollee and appear on the Case Manager's caseload and the OP CM Tracker.
+                </div>
                 <div className="registration-grid" style={styles.grid}>
+                  <Field label="Official Admission / Enrollment Date" required>
+                    <input
+                      type="date"
+                      max={TODAY}
+                      style={styles.input}
+                      value={form.admissionDate || TODAY}
+                      onChange={(event) => update("admissionDate", event.target.value)}
+                      required
+                    />
+                  </Field>
+                  {!isOPD && (
+                    <Field label="Assigned Case Manager" required>
+                      <select
+                        style={styles.input}
+                        value={form.assignedCaseManagerId || patient?.assigned_case_manager_id || ""}
+                        onChange={(event) => update("assignedCaseManagerId", event.target.value)}
+                        required
+                      >
+                        <option value="">Select Case Manager</option>
+                        {caseManagers.map((cm) => (
+                          <option key={cm.id} value={cm.id}>{cm.full_name}</option>
+                        ))}
+                      </select>
+                    </Field>
+                  )}
                   <Field label="Scheduled Program Orientation (PO) Date" required>
-                    <input type="date" min={TODAY} style={styles.input} value={form.programOrientationDate} onChange={(event) => update("programOrientationDate", event.target.value)} required />
+                    <input
+                      type="date"
+                      min={TODAY}
+                      style={styles.input}
+                      value={form.programOrientationDate}
+                      onChange={(event) => update("programOrientationDate", event.target.value)}
+                      required
+                    />
                   </Field>
                 </div>
               </section>

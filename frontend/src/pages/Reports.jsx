@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { Link } from "react-router-dom";
 import AppShell from "../components/AppShell.jsx";
 import api from "../api/axios.js";
 import * as XLSX from "xlsx";
@@ -228,6 +229,11 @@ export default function Reports() {
 
   return (
     <AppShell title="DOH Reports Automation" description="Generate, print, and export statutory DOH forms.">
+      <p className="no-print" style={{ margin: "0 0 12px", fontSize: 13 }}>
+        <Link to="/reports/op-cm-tracker" style={{ color: "var(--color-primary-dark)", fontWeight: 700 }}>
+          Open OP CM Tracker (Monthly Intervention)
+        </Link>
+      </p>
       <div className="no-print" style={styles.controlBar}>
         <div style={styles.filters}>
           <label style={styles.label}>

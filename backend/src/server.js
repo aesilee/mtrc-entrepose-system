@@ -23,6 +23,7 @@ import referralRoutes from "./routes/referralRoutes.js";
 import intakeRoutes from "./routes/intakeRoutes.js";
 import caseManagementRoutes from "./routes/caseManagementRoutes.js";
 import dohReportRoutes from "./routes/dohReportRoutes.js";
+import opCmTrackerRoutes from "./routes/opCmTrackerRoutes.js";
 
 dotenv.config();
 
@@ -42,6 +43,7 @@ app.use("/api/attendance", attendanceRoutes);
 app.use("/api/dashboard", dashboardRoutes);
 app.use("/api/progress-notes", progressNoteRoutes);
 app.use("/api/follow-ups", followUpRoutes);
+app.use("/api/reports", opCmTrackerRoutes);
 app.use("/api/reports", dohReportRoutes);
 app.use("/api/reports", reportRoutes);
 app.use("/api/analytics", analyticsRoutes);

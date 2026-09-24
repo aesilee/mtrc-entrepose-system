@@ -347,6 +347,8 @@ export async function finalizeEnrollment(req, res) {
   const pledgeOfCommitmentSigned = req.body.pledgeOfCommitmentSigned === true;
   const dataPrivacyConsentSigned = req.body.dataPrivacyConsentSigned === true;
   const generalMedicalConsentSigned = req.body.generalMedicalConsentSigned === true;
+  const admissionDate = req.body.admissionDate || null;
+  const assignedCaseManagerId = req.body.assignedCaseManagerId ? Number(req.body.assignedCaseManagerId) : null;
 
   if (!Number.isInteger(patientId)) return res.status(400).json({ message: "Invalid patient ID." });
 
@@ -372,6 +374,11 @@ export async function finalizeEnrollment(req, res) {
       if (!serviceAgreementSigned || !pledgeOfCommitmentSigned || !dataPrivacyConsentSigned) {
         await connection.rollback();
         return res.status(400).json({ message: "Confirm all three signed consent documents before finalizing enrollment." });
+      }
+      const effectiveCmId = assignedCaseManagerId || patient.assigned_case_manager_id;
+      if (!effectiveCmId) {
+        await connection.rollback();
+        return res.status(400).json({ message: "An assigned Case Manager is required before finalizing enrollment." });
       }
     }
 
@@ -401,6 +408,8 @@ export async function finalizeEnrollment(req, res) {
     }
 
     const year = new Date().getFullYear().toString().slice(-2);
+    const effectiveAdmissionDate = admissionDate || (patient.admission_date ? String(patient.admission_date).slice(0, 10) : new Date().toISOString().slice(0, 10));
+    const effectiveCmId = !isOPD ? (assignedCaseManagerId || patient.assigned_case_manager_id) : null;
 
     if (isOPD) {
       // Generate OPD number (OPD-YY-sequence) if not already set
@@ -411,8 +420,8 @@ export async function finalizeEnrollment(req, res) {
       const opdSeq = String(opdCount + 1).padStart(3, "0");
       const opdNumber = `OPD-${year}-${opdSeq}`;
       await connection.query(
-        "UPDATE patients SET admission_date = COALESCE(admission_date, CURDATE()), enrollment_status = 'active', current_status = 'active', opd_number = COALESCE(opd_number, ?) WHERE id = ?",
-        [opdNumber, patientId]
+        "UPDATE patients SET admission_date = COALESCE(admission_date, ?), enrollment_status = 'active', current_status = 'active', opd_number = COALESCE(opd_number, ?) WHERE id = ?",
+        [effectiveAdmissionDate, opdNumber, patientId]
       );
     } else {
       // Generate PWUD code (OP-LGU-YY-sequence) if not already set
@@ -424,8 +433,8 @@ export async function finalizeEnrollment(req, res) {
       const sequence = String(count + 1).padStart(3, "0");
       const pwudCode = `OP-${lguCode}-${year}-${sequence}`;
       await connection.query(
-        "UPDATE patients SET admission_date = COALESCE(admission_date, CURDATE()), enrollment_status = 'active', current_status = 'active', pwud_code = COALESCE(pwud_code, ?) WHERE id = ?",
-        [pwudCode, patientId]
+        "UPDATE patients SET admission_date = ?, enrollment_status = 'active', current_status = 'active', assigned_case_manager_id = COALESCE(?, assigned_case_manager_id), pwud_code = COALESCE(pwud_code, ?) WHERE id = ?",
+        [effectiveAdmissionDate, effectiveCmId, pwudCode, patientId]
       );
     }
 
@@ -437,6 +446,15 @@ export async function finalizeEnrollment(req, res) {
        ON DUPLICATE KEY UPDATE program_orientation_date = VALUES(program_orientation_date), updated_at = NOW()`,
       [patientId, req.body.programOrientationDate || null]
     );
+
+    if (req.body.programOrientationDate) {
+      await connection.query(
+        `INSERT INTO patient_milestones (patient_id, date_po)
+         VALUES (?, ?)
+         ON DUPLICATE KEY UPDATE date_po = COALESCE(date_po, VALUES(date_po))`,
+        [patientId, req.body.programOrientationDate]
+      ).catch(() => {});
+    }
 
     const certType = isOPD ? "opd_consultation" : "enrollment";
     let [[certificate]] = await connection.query(

@@ -377,6 +377,30 @@ export default function PatientProfile() {
         </div>
       </div>
 
+      {(!patient.admission_date || patient.enrollment_status === "pending") && (
+        <div style={styles.pendingBanner}>
+          <div style={styles.pendingBannerText}>
+            <span style={{ fontWeight: 700, color: "var(--color-warning-dark, #8a5719)" }}>
+              Enrollment Incomplete (Pending Intake Workflow)
+            </span>
+            <span style={{ fontSize: 13, color: "var(--color-text-muted)" }}>
+              This client has not finalized their intake registration. Complete all required intake steps to activate their admission record on the Case Manager caseload and OP CM Tracker.
+            </span>
+          </div>
+          {user.role !== "him_staff" && (
+            <button
+              type="button"
+              style={styles.resumeBtn}
+              onClick={() => {
+                navigate(`/patients/${patient.id}/referral`);
+              }}
+            >
+              Resume Intake Workflow →
+            </button>
+          )}
+        </div>
+      )}
+
       <div style={styles.layout}>
         <div style={styles.sideNav}>
           <div style={styles.sideNavGroupLabel}>Profile</div>
@@ -644,6 +668,7 @@ export default function PatientProfile() {
                       { key: "date_initial_assessment", label: "Date of Initial Assessment (ASI)" },
                       { key: "date_initial_tx_planning", label: "Date of Initial Treatment Planning" },
                       { key: "date_initial_progress_report", label: "Date of Initial Progress Report (Court)" },
+                      { key: "date_referral_outside_mtrc", label: "Date of Referral Outside MTRC" },
                       { key: "date_case_conference", label: "Date of Case Conference" },
                       { key: "date_status_reporting", label: "Date of Status Reporting (Court)" },
                       { key: "date_home_visit", label: "Date of Home Visit" },
@@ -1120,4 +1145,32 @@ const styles = {
   archivedBadge: { fontSize: 12, fontWeight: 700, padding: "6px 12px", borderRadius: 999, background: "#F1F1EE", color: "var(--color-text-muted)" },
   archiveProfileBtn: { background: "none", border: "1px solid var(--color-border)", padding: "10px 16px", borderRadius: "var(--radius-sm)", fontWeight: 600, fontSize: 13, cursor: "pointer" },
   restoreProfileBtn: { background: "var(--color-primary)", color: "#fff", border: "none", padding: "10px 16px", borderRadius: "var(--radius-sm)", fontWeight: 700, fontSize: 13, cursor: "pointer" },
+  pendingBanner: {
+    display: "flex",
+    flexWrap: "wrap",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: 12,
+    background: "#fff9eb",
+    border: "1px solid #f0d59e",
+    borderRadius: "var(--radius-md, 8px)",
+    padding: "12px 18px",
+    marginBottom: 16,
+  },
+  pendingBannerText: {
+    display: "flex",
+    flexDirection: "column",
+    gap: 3,
+  },
+  resumeBtn: {
+    padding: "8px 16px",
+    background: "var(--color-primary-dark, #234f39)",
+    color: "#fff",
+    border: "none",
+    borderRadius: "var(--radius-sm, 6px)",
+    fontWeight: 600,
+    fontSize: 13,
+    cursor: "pointer",
+    whiteSpace: "nowrap",
+  },
 };

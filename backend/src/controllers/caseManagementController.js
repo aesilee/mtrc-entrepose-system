@@ -22,7 +22,7 @@ export async function updateMilestones(req, res) {
     date_po, date_vlts_referral, date_initial_assessment, date_initial_tx_planning,
     date_initial_progress_report, date_case_conference, date_status_reporting,
     date_home_visit, date_followup_assessment, date_acp_planning, date_pdc,
-    date_final_progress_report
+    date_final_progress_report, date_referral_outside_mtrc
   } = req.body;
 
   try {
@@ -31,8 +31,9 @@ export async function updateMilestones(req, res) {
         patient_id, date_po, date_vlts_referral, date_initial_assessment, 
         date_initial_tx_planning, date_initial_progress_report, date_case_conference, 
         date_status_reporting, date_home_visit, date_followup_assessment, 
-        date_acp_planning, date_pdc, date_final_progress_report
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        date_acp_planning, date_pdc, date_final_progress_report,
+        date_referral_outside_mtrc
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON DUPLICATE KEY UPDATE 
         date_po=VALUES(date_po), date_vlts_referral=VALUES(date_vlts_referral),
         date_initial_assessment=VALUES(date_initial_assessment),
@@ -43,13 +44,14 @@ export async function updateMilestones(req, res) {
         date_home_visit=VALUES(date_home_visit),
         date_followup_assessment=VALUES(date_followup_assessment),
         date_acp_planning=VALUES(date_acp_planning), date_pdc=VALUES(date_pdc),
-        date_final_progress_report=VALUES(date_final_progress_report)`,
+        date_final_progress_report=VALUES(date_final_progress_report),
+        date_referral_outside_mtrc=VALUES(date_referral_outside_mtrc)`,
       [
         id, date_po || null, date_vlts_referral || null, date_initial_assessment || null,
         date_initial_tx_planning || null, date_initial_progress_report || null,
         date_case_conference || null, date_status_reporting || null, date_home_visit || null,
         date_followup_assessment || null, date_acp_planning || null, date_pdc || null,
-        date_final_progress_report || null
+        date_final_progress_report || null, date_referral_outside_mtrc || null
       ]
     );
     res.json({ message: "Milestones updated successfully." });

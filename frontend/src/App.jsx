@@ -8,6 +8,7 @@ import Patients from "./pages/Patients.jsx";
 import RegisterPatient from "./pages/RegisterPatient.jsx";
 import PatientProfile from "./pages/PatientProfile.jsx";
 import Reports from "./pages/Reports.jsx";
+import OpCmTracker from "./pages/OpCmTracker.jsx";
 import Certificates from "./pages/Certificates.jsx";
 import Analytics from "./pages/Analytics.jsx";
 import Attendance from "./pages/Attendance.jsx";
@@ -134,6 +135,14 @@ export default function App() {
         element={
           <ProtectedRoute allowedRoles={["him_staff", "ict_admin"]}>
             <Reports />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/reports/op-cm-tracker"
+        element={
+          <ProtectedRoute allowedRoles={["him_staff", "ict_admin", "case_manager"]}>
+            <OpCmTracker />
           </ProtectedRoute>
         }
       />

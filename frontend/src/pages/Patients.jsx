@@ -320,6 +320,7 @@ export default function Patients() {
                       <td style={{ ...styles.td, ...styles.actionsTd }} onClick={(e) => e.stopPropagation()}>
                         <RowMenu
                           patientId={p.id}
+                          isPending={p.enrollment_status === "pending" || !p.admission_date}
                           isOpen={openMenuId === p.id}
                           onToggle={() => setOpenMenuId(openMenuId === p.id ? null : p.id)}
                           onClose={() => setOpenMenuId(null)}
@@ -349,7 +350,7 @@ export default function Patients() {
   );
 }
 
-function RowMenu({ patientId, isOpen, onToggle, onClose, navigate, onArchiveClick }) {
+function RowMenu({ patientId, isPending, isOpen, onToggle, onClose, navigate, onArchiveClick }) {
   const btnRef = useRef(null);
   const [coords, setCoords] = useState({ top: 0, left: 0 });
 
@@ -378,6 +379,15 @@ function RowMenu({ patientId, isOpen, onToggle, onClose, navigate, onArchiveClic
               <button type="button" style={styles.menuItem} onClick={() => { onClose(); navigate(`/patients/${patientId}`); }}>
                 View
               </button>
+              {isPending && (
+                <button
+                  type="button"
+                  style={{ ...styles.menuItem, color: "var(--color-primary-dark, #234f39)", fontWeight: 600 }}
+                  onClick={() => { onClose(); navigate(`/patients/${patientId}/referral`); }}
+                >
+                  Resume Intake
+                </button>
+              )}
               <button type="button" style={styles.menuItem} onClick={() => { onClose(); navigate(`/patients/${patientId}/referral`); }}>
                 Admission history
               </button>

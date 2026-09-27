@@ -138,6 +138,13 @@ export default function Patients() {
       <div style={{ ...styles.wrapper, height: "100%" }}>
         <div style={{ ...styles.toolbar, flexWrap: isMobile ? "wrap" : "nowrap" }}>
           <div style={{ ...styles.leftControls, flexWrap: isMobile ? "wrap" : "nowrap", width: isMobile ? "100%" : "auto" }}>
+            <button
+              type="button"
+              style={styles.dischargedBtn}
+              onClick={() => navigate("/patients/discharges")}
+            >
+              View Discharged Patients
+            </button>
             <div style={{ position: "relative" }}>
               <button
                 type="button"
@@ -487,6 +494,17 @@ const styles = {
     padding: "10px 16px",
     borderRadius: "var(--radius-sm)",
     fontWeight: 700,
+    fontSize: 13,
+    cursor: "pointer",
+    whiteSpace: "nowrap",
+  },
+  dischargedBtn: {
+    background: "var(--color-surface)",
+    color: "var(--color-primary)",
+    border: "1.5px solid var(--color-primary)",
+    padding: "9px 14px",
+    borderRadius: "var(--radius-sm)",
+    fontWeight: 600,
     fontSize: 13,
     cursor: "pointer",
     whiteSpace: "nowrap",

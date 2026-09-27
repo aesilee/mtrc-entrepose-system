@@ -4,6 +4,7 @@ import api from "../api/axios.js";
 export default function DrugTestModal({ patientId, onClose, onSaved }) {
   const [form, setForm] = useState({
     testDate: new Date().toISOString().slice(0, 10),
+    testType: "Random Screening",
     substanceTested: "METH",
     result: "NEGATIVE",
     actionTaken: "",
@@ -54,6 +55,15 @@ export default function DrugTestModal({ patientId, onClose, onSaved }) {
               <select required style={{ ...styles.input, fontWeight: 600, color: form.result === "POSITIVE" ? "#B3261E" : "#2F855A" }} value={form.result} onChange={(e) => update("result", e.target.value)} disabled={saving}>
                 <option value="NEGATIVE">NEGATIVE</option>
                 <option value="POSITIVE">POSITIVE</option>
+              </select>
+            </label>
+            <label style={styles.label}>
+              Test Type
+              <select required style={styles.input} value={form.testType || "Random Screening"} onChange={(e) => update("testType", e.target.value)} disabled={saving}>
+                <option value="Random Screening">Random Screening</option>
+                <option value="Mandatory Court RDT">Mandatory Court RDT</option>
+                <option value="Follow-up Screening">Follow-up Screening</option>
+                <option value="Confirmatory Test">Confirmatory Test</option>
               </select>
             </label>
             <label style={styles.label}>

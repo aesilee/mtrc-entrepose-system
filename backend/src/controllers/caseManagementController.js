@@ -9,7 +9,15 @@ export async function getMilestones(req, res) {
       `SELECT * FROM patient_milestones WHERE patient_id = ?`,
       [id]
     );
-    res.json({ milestones: milestones || null });
+    const [history] = await pool.query(
+      `SELECT h.*, u.full_name AS recorded_by_name
+       FROM patient_milestone_history h
+       LEFT JOIN users u ON u.id = h.recorded_by
+       WHERE h.patient_id = ?
+       ORDER BY h.recorded_at DESC`,
+      [id]
+    );
+    res.json({ milestones: milestones || null, history: history || [] });
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: "Could not fetch milestones." });
@@ -54,6 +62,25 @@ export async function updateMilestones(req, res) {
         date_final_progress_report || null, date_referral_outside_mtrc || null
       ]
     );
+
+    // Record milestone history for audit & historical monthly reporting
+    const milestoneMap = {
+      date_po, date_vlts_referral, date_initial_assessment, date_initial_tx_planning,
+      date_initial_progress_report, date_case_conference, date_status_reporting,
+      date_home_visit, date_followup_assessment, date_acp_planning, date_pdc,
+      date_final_progress_report, date_referral_outside_mtrc
+    };
+
+    for (const [key, val] of Object.entries(milestoneMap)) {
+      if (val) {
+        await pool.query(
+          `INSERT INTO patient_milestone_history (patient_id, milestone_key, milestone_date, recorded_by)
+           VALUES (?, ?, ?, ?)`,
+          [id, key, val, req.user?.id || null]
+        ).catch(() => {});
+      }
+    }
+
     res.json({ message: "Milestones updated successfully." });
   } catch (err) {
     console.error(err);
@@ -202,9 +229,10 @@ export async function getDrugTests(req, res) {
   const { id } = req.params;
   try {
     const [tests] = await pool.query(
-      `SELECT d.*, DATEDIFF(d.test_date, p.admission_date) AS days_from_enrollment
+      `SELECT d.*, u.full_name AS recorded_by_name, DATEDIFF(d.test_date, p.admission_date) AS days_from_enrollment
        FROM drug_test_logs d
        JOIN patients p ON d.patient_id = p.id
+       LEFT JOIN users u ON u.id = d.recorded_by
        WHERE d.patient_id = ?
        ORDER BY d.test_date DESC`,
       [id]
@@ -218,12 +246,21 @@ export async function getDrugTests(req, res) {
 
 export async function addDrugTest(req, res) {
   const { id } = req.params;
-  const { testDate, substanceTested, result, actionTaken, remarks } = req.body;
+  const { testDate, testType, substanceTested, result, actionTaken, remarks } = req.body;
   try {
     await pool.query(
-      `INSERT INTO drug_test_logs (patient_id, test_date, substance_tested, result, action_taken, remarks)
-       VALUES (?, ?, ?, ?, ?, ?)`,
-      [id, testDate, substanceTested, result, actionTaken || null, remarks || null]
+      `INSERT INTO drug_test_logs (patient_id, test_date, test_type, substance_tested, result, action_taken, remarks, recorded_by)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        id, 
+        testDate, 
+        testType || "Random Screening", 
+        substanceTested, 
+        result, 
+        actionTaken || null, 
+        remarks || null,
+        req.user?.id || null
+      ]
     );
 
     // Phase 1.3 & Phase 4 Alert: Positive Drug Test
@@ -341,6 +378,13 @@ export async function dischargePatient(req, res) {
         interventionUponDischarge || null, courtNotified ? 1 : 0, transitionToAftercare ? 1 : 0
       ]
     );
+
+    // Mirror to discharges table so record appears on Discharged Patients page
+    await connection.query(
+      `INSERT INTO discharges (patient_id, program_type, discharge_type, discharge_date, remarks, discharged_by)
+       VALUES (?, 'outpatient', ?, ?, ?, ?)`,
+      [id, status, dischargeDate, reason || interventionUponDischarge || null, req.user?.username || req.user?.full_name || 'Staff']
+    ).catch(() => {});
 
     const enrollmentStatus = status === 'Completer (Graduated)' ? 'completed' : 'dropped';
     const phaseUpdate = transitionToAftercare ? ", treatment_phase = 'Aftercare'" : "";

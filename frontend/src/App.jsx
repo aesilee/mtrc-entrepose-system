@@ -18,6 +18,7 @@ import Profile from "./pages/Profile.jsx";
 import Archives from "./pages/Archives.jsx";
 import ReferralInformation from "./pages/ReferralInformation.jsx";
 import IntakeWorkflow from "./pages/IntakeWorkflow.jsx";
+import Discharges from "./pages/Discharges.jsx";
 
 // Simple declarative route table: [path, title, allowedRoles?]
 // allowedRoles omitted = any authenticated user.
@@ -78,6 +79,14 @@ export default function App() {
         element={
           <ProtectedRoute>
             <Patients />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/patients/discharges"
+        element={
+          <ProtectedRoute allowedRoles={["case_manager", "him_staff", "ict_admin", "admitting"]}>
+            <Discharges />
           </ProtectedRoute>
         }
       />

@@ -108,6 +108,7 @@ export default function PatientProfile() {
   const [dischargeModalOpen, setDischargeModalOpen] = useState(false);
   
   const [milestones, setMilestones] = useState(null);
+  const [milestoneHistory, setMilestoneHistory] = useState([]);
   const [sessionSummary, setSessionSummary] = useState(null);
   const [drugTests, setDrugTests] = useState([]);
   
@@ -207,6 +208,7 @@ export default function PatientProfile() {
       setCaseManagers(cm.data.caseManagers);
       setPrograms(pr.data.programs);
       setMilestones(ms.data.milestones || {});
+      setMilestoneHistory(ms.data.history || []);
       setSessionSummary(ss.data);
       setDrugTests(dt.data.drugTests || []);
     }).finally(() => setLoading(false));
@@ -396,6 +398,28 @@ export default function PatientProfile() {
               }}
             >
               Resume Intake Workflow →
+            </button>
+          )}
+        </div>
+      )}
+
+      {patient.enrollment_status === "active" && sessionSummary?.attendedCore >= 43 && (
+        <div style={{ ...styles.pendingBanner, background: "#f0fff4", borderColor: "#68d391" }}>
+          <div style={styles.pendingBannerText}>
+            <span style={{ fontWeight: 700, color: "#22543d" }}>
+              🎓 Clinical Milestone Alert: Ready for Pre-Discharge Conference (PDC)
+            </span>
+            <span style={{ fontSize: 13, color: "#2f855a" }}>
+              Client has completed {sessionSummary.attendedCore} core CBT & Psycho-Ed sessions. Convene PDC and process formal program discharge.
+            </span>
+          </div>
+          {canManageCase && (
+            <button
+              type="button"
+              style={{ ...styles.resumeBtn, background: "#276749" }}
+              onClick={() => setDischargeModalOpen(true)}
+            >
+              Process Program Discharge →
             </button>
           )}
         </div>
@@ -651,6 +675,7 @@ export default function PatientProfile() {
                         try {
                           await api.put(`/case-management/patients/${id}/milestones`, milestones);
                           setToast("Milestones saved successfully.");
+                          loadAll();
                         } catch(e) {
                           alert("Failed to save milestones.");
                         }
@@ -689,6 +714,21 @@ export default function PatientProfile() {
                       </label>
                     ))}
                   </div>
+
+                  {milestoneHistory && milestoneHistory.length > 0 && (
+                    <div style={{ marginTop: 24, paddingTop: 16, borderTop: "1px solid #E2E8F0" }}>
+                      <h4 style={{ margin: "0 0 12px", fontSize: 14, color: "#4A5568" }}>Milestone Audit Log</h4>
+                      <SimpleTable
+                        columns={["Milestone Event", "Date", "Recorded By", "Logged At"]}
+                        rows={milestoneHistory.map(h => [
+                          h.milestone_key.replace("date_", "").replace(/_/g, " ").toUpperCase(),
+                          fmtDate(h.milestone_date),
+                          h.recorded_by_name || "System / Admin",
+                          fmtDate(h.recorded_at)
+                        ])}
+                      />
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -701,12 +741,14 @@ export default function PatientProfile() {
                   )}
                   {drugTests.length === 0 ? <EmptyState text="No drug test records found." /> : (
                     <SimpleTable 
-                      columns={["Test Date", "Days Enrolled", "Substance Screened", "Result", "Action / Remarks"]} 
+                      columns={["Test Date", "Test Type", "Days Enrolled", "Substance Screened", "Result", "Logged By", "Action / Remarks"]} 
                       rows={drugTests.map((d) => [
                         fmtDate(d.test_date), 
+                        d.test_type || "Random Screening",
                         `${d.days_from_enrollment} days`,
                         d.substance_tested,
                         <span style={{ padding: "2px 8px", borderRadius: 12, fontSize: 12, fontWeight: 600, background: d.result === 'POSITIVE' ? "#FDE2E2" : "#D8F5E9", color: d.result === 'POSITIVE' ? "#B3261E" : "#2F855A" }}>{d.result}</span>,
+                        d.recorded_by_name || "Staff",
                         d.action_taken || d.remarks || "—"
                       ])} 
                     />

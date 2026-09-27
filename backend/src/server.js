@@ -24,6 +24,7 @@ import intakeRoutes from "./routes/intakeRoutes.js";
 import caseManagementRoutes from "./routes/caseManagementRoutes.js";
 import dohReportRoutes from "./routes/dohReportRoutes.js";
 import opCmTrackerRoutes from "./routes/opCmTrackerRoutes.js";
+import dischargeRoutes from "./routes/dischargeRoutes.js";
 
 dotenv.config();
 
@@ -37,6 +38,7 @@ app.get("/api/health", (req, res) => res.json({ status: "ok" }));
 app.use("/api/auth", authRoutes);
 app.use("/api/users", userRoutes);
 app.use("/api/patients", patientRoutes);
+app.use("/api/discharges", dischargeRoutes);
 app.use("/api/programs", programRoutes);
 app.use("/api/sessions", sessionRoutes);
 app.use("/api/attendance", attendanceRoutes);

@@ -13,6 +13,13 @@ export function KpiCard({ label, value, suffix, icon }) {
 }
 
 export function DonutChart({ data, size = 130 }) {
+  if (!data || data.length === 0) {
+    return (
+      <div style={{ height: size, display: "flex", alignItems: "center", justifyContent: "center", color: "var(--color-text-muted)", fontSize: 13 }}>
+        No data available
+      </div>
+    );
+  }
   const total = data.reduce((s, d) => s + d.value, 0) || 1;
   const radius = size / 2 - 14;
   const cx = size / 2, cy = size / 2;
@@ -66,6 +73,13 @@ export function DonutChart({ data, size = 130 }) {
 }
 
 export function LineChart({ data, color = "#7C5CFC", suffix = "" }) {
+  if (!data || data.length === 0) {
+    return (
+      <div style={{ height: 115, display: "flex", alignItems: "center", justifyContent: "center", color: "var(--color-text-muted)", fontSize: 13 }}>
+        No data available
+      </div>
+    );
+  }
   const width = 480, height = 115, padLeft = 32, padRight = 10, padTop = 14, padBottom = 20;
   const chartWidth = width - padLeft - padRight;
   const chartHeight = height - padTop - padBottom;
@@ -108,6 +122,13 @@ export function LineChart({ data, color = "#7C5CFC", suffix = "" }) {
 }
 
 export function BarChart({ data }) {
+  if (!data || data.length === 0) {
+    return (
+      <div style={{ height: 140, display: "flex", alignItems: "center", justifyContent: "center", color: "var(--color-text-muted)", fontSize: 13 }}>
+        No data available
+      </div>
+    );
+  }
   const width = 380, height = 140, padTop = 24, padBottom = 22;
   const max = Math.max(...data.map((d) => d.value), 1);
   const chartHeight = height - padTop - padBottom;

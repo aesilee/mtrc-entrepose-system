@@ -39,6 +39,13 @@ export async function updateProgressNote(req, res) {
   const { sessionDate, sessionType, observation, interventionProvided, patientResponse, recommendations, nextFollowUpDate } = req.body;
 
   try {
+    const [[note]] = await pool.query("SELECT id, case_manager_id FROM progress_notes WHERE id = ?", [id]);
+    if (!note) return res.status(404).json({ message: "Progress note not found." });
+
+    if (req.user.role === "case_manager" && note.case_manager_id && note.case_manager_id !== req.user.id) {
+      return res.status(403).json({ message: "You can only edit progress notes authored by yourself." });
+    }
+
     await pool.query(
       `UPDATE progress_notes SET
         session_date = ?, session_type = ?, observation = ?,

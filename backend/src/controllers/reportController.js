@@ -108,7 +108,13 @@ async function buildMonthlyReport({ dateFrom, dateTo }) {
   const to = dateTo || new Date().toISOString().slice(0, 10);
 
   const [[{ newAdmissions }]] = await pool.query(`SELECT COUNT(*) AS newAdmissions FROM patients WHERE admission_date BETWEEN ? AND ?`, [from, to]);
-  const [[{ graduatedPatients }]] = await pool.query(`SELECT COUNT(*) AS graduatedPatients FROM patients WHERE enrollment_status = 'completed' AND updated_at BETWEEN ? AND ?`, [from, to]);
+  const [[{ graduatedPatients }]] = await pool.query(
+    `SELECT COUNT(DISTINCT d.patient_id) AS graduatedPatients 
+     FROM discharges d 
+     WHERE (d.discharge_type LIKE '%complet%' OR d.discharge_type LIKE '%graduat%') 
+       AND d.discharge_date BETWEEN ? AND ?`, 
+    [from, to]
+  );
   const [attendance] = await pool.query(`SELECT status FROM attendance WHERE session_date BETWEEN ? AND ?`, [from, to]);
   const total = attendance.length;
   const present = attendance.filter((a) => a.status === "present").length;

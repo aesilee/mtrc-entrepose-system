@@ -144,11 +144,11 @@ export default function Discharges() {
                     <td style={{ ...styles.td, fontWeight: 600 }}>{d.full_name}</td>
                     <td style={styles.td}>
                       <span style={styles.programBadge}>
-                        {d.program_type.replace("_", " ")}
+                        {(d.program_type || "Outpatient").replace(/_/g, " ")}
                       </span>
                     </td>
-                    <td style={styles.td}>{d.discharge_type}</td>
-                    <td style={styles.td}>{new Date(d.discharge_date).toLocaleDateString()}</td>
+                    <td style={styles.td}>{d.discharge_type || "—"}</td>
+                    <td style={styles.td}>{d.discharge_date ? new Date(d.discharge_date).toLocaleDateString() : "—"}</td>
                     <td style={styles.td}>{d.discharged_by}</td>
                   </tr>
                 ))}

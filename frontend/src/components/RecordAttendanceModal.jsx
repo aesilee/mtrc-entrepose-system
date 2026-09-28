@@ -27,8 +27,12 @@ export default function RecordAttendanceModal({ onClose, onSaved }) {
   const [remarks, setRemarks] = useState("");
 
   useEffect(() => {
-    api.get("/users/case-managers").then(({ data }) => setCaseManagers(data.caseManagers));
-    api.get("/patients").then(({ data }) => setPatients(data.patients));
+    api.get("/users/case-managers")
+      .then(({ data }) => setCaseManagers(data.caseManagers || []))
+      .catch((err) => console.error("Error loading case managers:", err));
+    api.get("/patients")
+      .then(({ data }) => setPatients(Array.isArray(data) ? data : (data?.patients || [])))
+      .catch((err) => console.error("Error loading patients:", err));
   }, []);
 
   function toggleStatus(patientId, status) {
@@ -45,11 +49,14 @@ export default function RecordAttendanceModal({ onClose, onSaved }) {
     });
   }
 
-  const filteredPatients = patients.filter((p) =>
-    !patientSearch ||
-    p.full_name.toLowerCase().includes(patientSearch.toLowerCase()) ||
-    p.patient_code.toLowerCase().includes(patientSearch.toLowerCase())
-  );
+  const searchLower = (patientSearch || "").toLowerCase();
+  const filteredPatients = patients.filter((p) => {
+    if (!searchLower) return true;
+    const nameMatch = p.full_name ? p.full_name.toLowerCase().includes(searchLower) : false;
+    const codeMatch = p.patient_code ? p.patient_code.toLowerCase().includes(searchLower) : false;
+    const pwudMatch = p.pwud_code ? p.pwud_code.toLowerCase().includes(searchLower) : false;
+    return nameMatch || codeMatch || pwudMatch;
+  });
 
   const selectedCount = Object.values(selections).filter((s) => s.checked).length;
 

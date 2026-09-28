@@ -59,6 +59,20 @@ app.use("/api/referrals", referralRoutes);
 app.use("/api/intakes", intakeRoutes);
 app.use("/api/case-management", caseManagementRoutes);
 
+// 404 Handler for undefined API routes
+app.use("/api", (req, res) => {
+  res.status(404).json({ message: `API route ${req.method} ${req.originalUrl} not found.` });
+});
+
+// Global Express error handler
+app.use((err, req, res, next) => {
+  console.error("Unhandled error:", err);
+  const status = err.status || err.statusCode || 500;
+  res.status(status).json({
+    message: err.message || "An unexpected server error occurred.",
+  });
+});
+
 import pool from "./config/db.js";
 
 const PORT = process.env.PORT || 5000;

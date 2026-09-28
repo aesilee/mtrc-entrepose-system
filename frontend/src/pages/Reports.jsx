@@ -145,7 +145,7 @@ export default function Reports() {
               </tr>
               <tr>
                 <td style={{ fontWeight: 'bold' }}>Quarterly Completion Rate (%)</td>
-                <td style={{ fontWeight: 'bold' }}>{data.rate.toFixed(2)}%</td>
+                <td style={{ fontWeight: 'bold' }}>{Number(data.rate || 0).toFixed(2)}%</td>
               </tr>
             </tbody>
           </table>

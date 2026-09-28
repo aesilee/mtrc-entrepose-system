@@ -25,7 +25,7 @@ function toISO(d) { return d.toISOString().slice(0, 10); }
 export default function Analytics() {
   const { isMobile, isTablet } = useViewport();
   const isCompact = isMobile || isTablet;
-  const kpiCols = isMobile ? 2 : isTablet ? 3 : 5;
+  const kpiCols = isMobile ? 2 : isTablet ? 3 : 6;
   const gridCols = isMobile ? 1 : isTablet ? 2 : 4;
 
   // Must mirror AppShell's <main> padding exactly, or the page's negative-margin
@@ -37,7 +37,10 @@ export default function Analytics() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    api.get("/analytics/overview").then(({ data }) => setOverview(data)).finally(() => setLoading(false));
+    api.get("/analytics/overview")
+      .then(({ data }) => setOverview(data))
+      .catch((err) => console.error("Error loading analytics overview:", err))
+      .finally(() => setLoading(false));
   }, []);
 
   return (
@@ -58,31 +61,44 @@ export default function Analytics() {
           <>
             {/* Row 1: KPI Cards */}
             <div style={{ ...styles.kpiRow, gridTemplateColumns: `repeat(${kpiCols}, 1fr)` }}>
-              <KpiCard label="Completion Rate" value={overview.kpis.completionRate} suffix="%" icon={<svg {...iconProps}><path d="M3 17l6-6 4 4 8-8" /></svg>} />
-              <KpiCard label="Completed Patients" value={overview.kpis.completedPatients} suffix="" icon={<svg {...iconProps}><path d="M9 12l2 2 4-4" /><circle cx="12" cy="12" r="9" /></svg>} />
-              <KpiCard label="Avg. Attendance" value={overview.kpis.avgAttendance} suffix="%" icon={<svg {...iconProps}><rect x="3" y="5" width="18" height="16" rx="2" /><path d="M3 10h18" /></svg>} />
-              <KpiCard label="Avg. Rehab Duration" value={overview.kpis.avgDurationMonths} suffix=" mo" icon={<svg {...iconProps}><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></svg>} />
-              <KpiCard label="Near Completion" value={overview.kpis.nearCompletion} suffix="" icon={<svg {...iconProps}><path d="M12 2l2.6 6.6L22 10l-5 4.5L18.2 22 12 18l-6.2 4 1.2-7.5L2 10l7.4-1.4z" /></svg>} />
+              <KpiCard label="Retention Rate" value={overview.kpis?.completionRate ?? 0} suffix="%" icon={<svg {...iconProps}><path d="M3 17l6-6 4 4 8-8" /></svg>} />
+              <KpiCard label="Active Caseload" value={overview.kpis?.activeCaseload ?? 0} suffix="" icon={<svg {...iconProps}><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M23 21v-2a4 4 0 00-3-3.87" /><path d="M16 3.13a4 4 0 010 7.75" /></svg>} />
+              <KpiCard label="Completed / Graduated" value={overview.kpis?.completedPatients ?? 0} suffix="" icon={<svg {...iconProps}><path d="M9 12l2 2 4-4" /><circle cx="12" cy="12" r="9" /></svg>} />
+              <KpiCard label="Total Discharged" value={overview.kpis?.totalDischarged ?? 0} suffix="" icon={<svg {...iconProps}><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4" /><polyline points="16 17 21 12 16 7" /><line x1="21" y1="12" x2="9" y2="12" /></svg>} />
+              <KpiCard label="Avg. Attendance" value={overview.kpis?.avgAttendance ?? 0} suffix="%" icon={<svg {...iconProps}><rect x="3" y="5" width="18" height="16" rx="2" /><path d="M3 10h18" /></svg>} />
+              <KpiCard label="Avg. Rehab Duration" value={overview.kpis?.avgDurationMonths ?? 0} suffix=" mo" icon={<svg {...iconProps}><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></svg>} />
             </div>
 
-            {/* Row 2: Patient Status, Age Distribution, Monthly Admissions */}
+            {/* Row 2: Monthly Admissions & Monthly Discharges TimeSeries */}
             <div style={{ ...styles.gridRow, gridTemplateColumns: `repeat(${gridCols}, 1fr)` }}>
+              <TimeSeriesCard title="Monthly Admissions" endpoint="/analytics/monthly-admissions" color="#7C5CFC" span={2} maxSpan={gridCols} />
+              <TimeSeriesCard title="Monthly Discharges & Exits" endpoint="/analytics/monthly-discharges" color="#C53030" span={2} maxSpan={gridCols} />
+            </div>
+
+            {/* Row 3: Attendance Trend & Status Distributions */}
+            <div style={{ ...styles.gridRow, gridTemplateColumns: `repeat(${gridCols}, 1fr)` }}>
+              <TimeSeriesCard title="Attendance Trend" endpoint="/analytics/attendance-trend" color="#2FBF8F" suffix="%" span={2} maxSpan={gridCols} />
               <Card title="Patient Status" span={1} maxSpan={gridCols} center>
                 <DonutChart data={overview.patientStatus} size={110} />
               </Card>
+              <Card title="Discharge Types" span={1} maxSpan={gridCols} center>
+                {overview.dischargeDistribution?.length ? (
+                  <DonutChart data={overview.dischargeDistribution} size={110} />
+                ) : (
+                  <div style={styles.emptyText}>No discharge records yet.</div>
+                )}
+              </Card>
+            </div>
+
+            {/* Row 4: Demographics */}
+            <div style={{ ...styles.gridRow, gridTemplateColumns: `repeat(${gridCols}, 1fr)` }}>
               <Card title="Age Distribution" span={1} maxSpan={gridCols} center>
                 <BarChart data={overview.ageDistribution} />
               </Card>
-              <TimeSeriesCard title="Monthly Admissions" endpoint="/analytics/monthly-admissions" color="#7C5CFC" span={2} maxSpan={gridCols} />
-            </div>
-
-            {/* Row 3: Attendance Trend, Gender Distribution, Municipality Distribution */}
-            <div style={{ ...styles.gridRow, gridTemplateColumns: `repeat(${gridCols}, 1fr)` }}>
-              <TimeSeriesCard title="Attendance Trend" endpoint="/analytics/attendance-trend" color="#2FBF8F" suffix="%" span={2} maxSpan={gridCols} />
               <Card title="Gender Distribution" span={1} maxSpan={gridCols} center>
                 <DonutChart data={overview.genderDistribution} size={110} />
               </Card>
-              <Card title="Municipality Distribution" span={1} maxSpan={gridCols}>
+              <Card title="Municipality Distribution" span={2} maxSpan={gridCols}>
                 <BarChart data={overview.municipalityDistribution} />
               </Card>
             </div>
@@ -98,7 +114,7 @@ export default function Analytics() {
               }}
             >
               <Card title="Attendance by Case Manager" span={2} maxSpan={gridCols} isMobile={isCompact}>
-                {overview.attendanceByCaseManager.length === 0 ? (
+                {(overview.attendanceByCaseManager || []).length === 0 ? (
                   <div style={styles.emptyText}>No case manager attendance data yet.</div>
                 ) : (
                   <BarChartV data={overview.attendanceByCaseManager} />
@@ -106,9 +122,9 @@ export default function Analytics() {
               </Card>
               <Card title="Recent Statistics" span={2} maxSpan={gridCols} isMobile={isCompact} noScroll>
                 <div style={{ ...styles.statsRow, padding: "4px 0" }}>
-                  <StatBlock label="Highest Attendance" value={overview.recentStats.highestAttendance} />
-                  <StatBlock label="Most Common Age Group" value={overview.recentStats.mostCommonAge} />
-                  <StatBlock label="Most Active Municipality" value={overview.recentStats.mostActiveMunicipality} />
+                  <StatBlock label="Highest Attendance" value={overview.recentStats?.highestAttendance || "—"} />
+                  <StatBlock label="Most Common Age Group" value={overview.recentStats?.mostCommonAge || "—"} />
+                  <StatBlock label="Most Active Municipality" value={overview.recentStats?.mostActiveMunicipality || "—"} />
                 </div>
               </Card>
             </div>

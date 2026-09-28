@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { useParams } from "react-router-dom";
+import { useParams, useNavigate } from "react-router-dom";
 import AppShell from "../components/AppShell.jsx";
 import api from "../api/axios.js";
 import { useAuth } from "../context/AuthContext.jsx";
@@ -96,6 +96,7 @@ function toInputDate(d) { return d ? String(d).slice(0, 10) : ""; }
 
 export default function PatientProfile() {
   const { id } = useParams();
+  const navigate = useNavigate();
   const { user } = useAuth();
   const canManageCase = ["case_manager", "ict_admin"].includes(user.role);
   const [patient, setPatient] = useState(null);
@@ -127,7 +128,9 @@ export default function PatientProfile() {
 
   async function handleArchiveCertificate(reason) {
     await api.post(`/certificates/${archivingCertificate.id}/archive`, { reason });
-    if (viewingCertificateId === archivingCertificate.id) setViewingCertificateId(null);
+    if (statutoryCertModal && statutoryCertModal.id === archivingCertificate.id) {
+      setStatutoryCertModal(null);
+    }
     setArchivingCertificate(null);
     setToast("Certificate archived.");
     refreshCertificates();
@@ -211,6 +214,8 @@ export default function PatientProfile() {
       setMilestoneHistory(ms.data.history || []);
       setSessionSummary(ss.data);
       setDrugTests(dt.data.drugTests || []);
+    }).catch(err => {
+      console.error("Error loading patient profile data:", err);
     }).finally(() => setLoading(false));
   }
 
@@ -221,6 +226,8 @@ export default function PatientProfile() {
     ]).then(([c, tl]) => {
       setCertificates(c.data.certificates);
       setTimeline(tl.data.timeline);
+    }).catch(err => {
+      console.error("Error refreshing certificates:", err);
     });
   }
 

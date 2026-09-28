@@ -81,6 +81,16 @@ export async function updateMilestones(req, res) {
       }
     }
 
+    const [[pRow]] = await pool.query("SELECT full_name FROM patients WHERE id = ?", [id]);
+    await pool.query(
+      "INSERT INTO audit_log (actor_username, action, table_name, record_id) VALUES (?, ?, 'patients', ?)",
+      [
+        req.user?.username || "Staff",
+        `Updated clinical/legal milestones for patient "${pRow?.full_name || `#${id}`}"`,
+        id
+      ]
+    );
+
     res.json({ message: "Milestones updated successfully." });
   } catch (err) {
     console.error(err);
@@ -263,28 +273,36 @@ export async function addDrugTest(req, res) {
       ]
     );
 
+    const [[patient]] = await pool.query(
+      "SELECT id, full_name, assigned_case_manager_id FROM patients WHERE id = ?",
+      [id]
+    );
+
+    await pool.query(
+      "INSERT INTO audit_log (actor_username, action, table_name, record_id) VALUES (?, ?, 'patients', ?)",
+      [
+        req.user?.username || "Staff",
+        `Logged ${result} drug test (${substanceTested || "Screening"}) for patient "${patient?.full_name || `#${id}`}"`,
+        id
+      ]
+    );
+
     // Phase 1.3 & Phase 4 Alert: Positive Drug Test
-    if (result === "POSITIVE") {
-      const [[patient]] = await pool.query(
-        "SELECT id, full_name, assigned_case_manager_id FROM patients WHERE id = ?",
-        [id]
-      );
-      if (patient) {
-        if (patient.assigned_case_manager_id) {
-          await notifyUser(
-            patient.assigned_case_manager_id,
-            "patients",
-            "positive_drug_test",
-            `Clinical Alert: Patient "${patient.full_name}" tested POSITIVE for ${substanceTested}. Schedule case conference.`
-          );
-        }
-        await notifyRoles(
-          ["ict_admin", "him_staff"],
+    if (result === "POSITIVE" && patient) {
+      if (patient.assigned_case_manager_id) {
+        await notifyUser(
+          patient.assigned_case_manager_id,
           "patients",
           "positive_drug_test",
-          `Clinical Alert: Patient "${patient.full_name}" tested POSITIVE for ${substanceTested}.`
+          `Clinical Alert: Patient "${patient.full_name}" tested POSITIVE for ${substanceTested}. Schedule case conference.`
         );
       }
+      await notifyRoles(
+        ["ict_admin", "him_staff"],
+        "patients",
+        "positive_drug_test",
+        `Clinical Alert: Patient "${patient.full_name}" tested POSITIVE for ${substanceTested}.`
+      );
     }
 
     res.json({ message: "Drug test logged successfully." });
@@ -387,11 +405,21 @@ export async function dischargePatient(req, res) {
     ).catch(() => {});
 
     const enrollmentStatus = status === 'Completer (Graduated)' ? 'completed' : 'dropped';
-    const phaseUpdate = transitionToAftercare ? ", treatment_phase = 'Aftercare'" : "";
+    const phaseUpdate = transitionToAftercare ? ", program_phase = 'Aftercare'" : "";
 
     await connection.query(
       `UPDATE patients SET enrollment_status = ? ${phaseUpdate} WHERE id = ?`,
       [enrollmentStatus, id]
+    );
+
+    const [[pRow]] = await connection.query("SELECT full_name FROM patients WHERE id = ?", [id]);
+    await connection.query(
+      "INSERT INTO audit_log (actor_username, action, table_name, record_id) VALUES (?, ?, 'patients', ?)",
+      [
+        req.user?.username || "Staff",
+        `Formally discharged patient "${pRow?.full_name || `#${id}`}" (${status}${reason ? ` — ${reason}` : ""})`,
+        id
+      ]
     );
 
     await connection.commit();

@@ -18,13 +18,17 @@ export default function Certificates() {
   useEffect(() => {
     // Load active/completed patients for dropdown
     api.get("/patients").then(res => {
-      const opts = res.data.map(p => ({
+      const patientList = Array.isArray(res.data) ? res.data : (res.data?.patients || []);
+      const opts = patientList.map(p => ({
         value: p.id,
-        label: `${p.full_name} (${p.pwud_code || p.opd_number})`,
+        label: `${p.full_name} (${p.pwud_code || p.opd_number || "No Code"})`,
         data: p
       }));
       setPatients(opts);
-    }).catch(err => console.error(err));
+    }).catch(err => {
+      console.error("Failed to load patients for certificates:", err);
+      setError("Failed to load patient options.");
+    });
   }, []);
 
   // Fetch eligibility when patient or type changes

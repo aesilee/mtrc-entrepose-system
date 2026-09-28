@@ -19,6 +19,27 @@ const STATUS_COLORS = {
   transferred: { bg: "#EDEAFB", color: "#5B3EC9" },
 };
 
+const FLAG_STYLES = {
+  blue: {
+    bg: "#E8F1FC",
+    color: "#185ABC",
+    border: "#B9D7F9",
+    dot: "#1A73E8",
+  },
+  amber: {
+    bg: "#FEF7E0",
+    color: "#B06000",
+    border: "#FDE293",
+    dot: "#F9AB00",
+  },
+  red: {
+    bg: "#FCE8E6",
+    color: "#C5221F",
+    border: "#FAD2CF",
+    dot: "#D93025",
+  },
+};
+
 const REFERRAL_STATUS = {
   draft: { label: "Draft", bg: "#EDEAFB", color: "#5B3EC9" },
   ready_for_intake: { label: "Drug history next", bg: "#FFF3D6", color: "#9A6B00" },
@@ -63,14 +84,54 @@ export default function Patients() {
   const [municipalityFilter, setMunicipalityFilter] = useState("");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
+  const [flagFilter, setFlagFilter] = useState("");
 
-  function loadPatients() {
+  // Pagination state
+  const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(10);
+  const [total, setTotal] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
+  const [municipalities, setMunicipalities] = useState([]);
+
+  function loadPatients(targetPage = page, targetLimit = limit) {
     setLoading(true);
-    api.get("/patients").then(({ data }) => setPatients(data.patients)).finally(() => setLoading(false));
+    const params = {
+      page: targetPage,
+      limit: targetLimit,
+    };
+    if (search.trim()) params.search = search.trim();
+    if (statusFilter) params.status = statusFilter;
+    if (genderFilter) params.gender = genderFilter;
+    if (caseManagerFilter) params.caseManagerId = caseManagerFilter;
+    if (municipalityFilter) params.municipality = municipalityFilter;
+    if (dateFrom) params.dateFrom = dateFrom;
+    if (dateTo) params.dateTo = dateTo;
+    if (flagFilter) params.flag = flagFilter;
+
+    api.get("/patients", { params })
+      .then(({ data }) => {
+        setPatients(data.patients || []);
+        if (data.pagination) {
+          setTotal(data.pagination.total);
+          setTotalPages(data.pagination.totalPages);
+          setPage(data.pagination.page);
+        }
+        if (data.municipalities) {
+          setMunicipalities(data.municipalities);
+        }
+      })
+      .finally(() => setLoading(false));
   }
 
   useEffect(() => {
-    loadPatients();
+    const t = setTimeout(() => {
+      setPage(1);
+      loadPatients(1, limit);
+    }, 200);
+    return () => clearTimeout(t);
+  }, [search, statusFilter, genderFilter, caseManagerFilter, municipalityFilter, dateFrom, dateTo, flagFilter, limit]);
+
+  useEffect(() => {
     api.get("/users/case-managers").then(({ data }) => setCaseManagers(data.caseManagers));
   }, []);
 
@@ -87,35 +148,22 @@ export default function Patients() {
     await api.post(`/archives/patients/${archivingPatientId}/archive`, { reason });
     setArchivingPatientId(null);
     setToast("Patient archived.");
-    loadPatients();
+    loadPatients(page, limit);
   }
 
-  const municipalities = useMemo(() => {
-    const set = new Set(patients.map((p) => p.municipality).filter(Boolean));
-    return [...set].sort();
-  }, [patients]);
+  function handlePageChange(newPage) {
+    if (newPage < 1 || newPage > totalPages || newPage === page) return;
+    setPage(newPage);
+    loadPatients(newPage, limit);
+  }
 
-  const filtered = useMemo(() => {
-    return patients.filter((p) => {
-      if (search) {
-        const q = search.toLowerCase();
-        const matches =
-          p.full_name?.toLowerCase().includes(q) ||
-          p.patient_code?.toLowerCase().includes(q) ||
-          p.pwud_code?.toLowerCase().includes(q);
-        if (!matches) return false;
-      }
-      if (statusFilter && p.enrollment_status !== statusFilter) return false;
-      if (genderFilter && p.gender !== genderFilter) return false;
-      if (caseManagerFilter && String(p.case_manager_id) !== caseManagerFilter) return false;
-      if (municipalityFilter && p.municipality !== municipalityFilter) return false;
-      if (dateFrom && (!p.admission_date || p.admission_date < dateFrom)) return false;
-      if (dateTo && (!p.admission_date || p.admission_date > dateTo)) return false;
-      return true;
-    });
-  }, [patients, search, statusFilter, genderFilter, caseManagerFilter, municipalityFilter, dateFrom, dateTo]);
+  function handleLimitChange(newLimit) {
+    setLimit(newLimit);
+    setPage(1);
+    loadPatients(1, newLimit);
+  }
 
-  const activeFilterCount = [statusFilter, genderFilter, caseManagerFilter, municipalityFilter, dateFrom, dateTo].filter(Boolean).length;
+  const activeFilterCount = [statusFilter, genderFilter, caseManagerFilter, municipalityFilter, dateFrom, dateTo, flagFilter].filter(Boolean).length;
 
   function clearFilters() {
     setStatusFilter("");
@@ -124,6 +172,7 @@ export default function Patients() {
     setMunicipalityFilter("");
     setDateFrom("");
     setDateTo("");
+    setFlagFilter("");
   }
 
   return (
@@ -145,7 +194,7 @@ export default function Patients() {
             >
               View Discharged Patients
             </button>
-            <div style={{ position: "relative" }}>
+            <div style={{ position: "relative", zIndex: filtersOpen ? 50 : 2 }}>
               <button
                 type="button"
                 style={styles.filterBtn}
@@ -160,8 +209,8 @@ export default function Patients() {
 
               {filtersOpen && (
                 <>
-                  <div style={styles.menuBackdrop} onClick={() => setFiltersOpen(false)} />
-                  <div style={styles.filterPanel}>
+                  <div style={styles.filterBackdrop} onClick={() => setFiltersOpen(false)} />
+                  <div style={styles.filterPanel} onClick={(e) => e.stopPropagation()}>
                     <div style={styles.filterPanelHeader}>
                       <span>Filters</span>
                       {activeFilterCount > 0 && (
@@ -178,6 +227,17 @@ export default function Patients() {
                         <option value="completed">Completed</option>
                         <option value="dropped">Dropped</option>
                         <option value="transferred">Transferred</option>
+                      </select>
+                    </label>
+
+                    <label style={styles.filterLabel}>
+                      Clinical attention flag
+                      <select style={styles.filterSelect} value={flagFilter} onChange={(e) => setFlagFilter(e.target.value)}>
+                        <option value="">All patients</option>
+                        <option value="any">Has any clinical flag</option>
+                        <option value="pdc_ready">Ready for PDC (43 core sessions)</option>
+                        <option value="at_risk_absent">At Risk: 2 Consecutive Absences</option>
+                        <option value="positive_rdt">Positive Drug Test (Past 30d)</option>
                       </select>
                     </label>
 
@@ -252,14 +312,14 @@ export default function Patients() {
         <div style={{ ...styles.tableCard, flex: 1, minHeight: 0 }}>
           <table style={styles.table}>
             <colgroup>
-              <col style={{ width: 150 }} />
-              <col style={{ width: 220 }} />
+              <col style={{ width: 140 }} />
+              <col style={{ width: 280 }} />
               <col style={{ width: 90 }} />
-              <col style={{ width: 140 }} />
-              <col style={{ width: 140 }} />
+              <col style={{ width: 130 }} />
+              <col style={{ width: 130 }} />
               <col style={{ width: 150 }} />
               <col style={{ width: 100 }} />
-              <col style={{ width: 145 }} />
+              <col style={{ width: 140 }} />
               <col style={{ width: 130 }} />
               <col style={{ width: 90 }} />
             </colgroup>
@@ -280,7 +340,7 @@ export default function Patients() {
             <tbody>
               {loading ? (
                 <tr><td style={styles.emptyCell} colSpan={10}>Loading patients…</td></tr>
-              ) : filtered.length === 0 ? (
+              ) : patients.length === 0 ? (
                 <tr>
                   <td colSpan={10}>
                     <EmptyState
@@ -290,24 +350,56 @@ export default function Patients() {
                         </svg>
                       }
                       title="No patients found"
-                      description={search || statusFilter || genderFilter || caseManagerFilter || municipalityFilter || dateFrom || dateTo
+                      description={search || statusFilter || genderFilter || caseManagerFilter || municipalityFilter || dateFrom || dateTo || flagFilter
                         ? "No patients match your current search or filters. Try adjusting them."
                         : "Once patients are registered, they'll show up here."}
                     />
                   </td>
                 </tr>
               ) : (
-                filtered.map((p) => {
+                patients.map((p) => {
                   const statusStyle = STATUS_COLORS[p.enrollment_status] || STATUS_COLORS.pending;
                   const referralStyle = REFERRAL_STATUS[p.referral_status];
                   return (
                     <tr key={p.id} style={styles.row} onClick={() => navigate(`/patients/${p.id}`)}>
                       <td style={{ ...styles.td, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{p.pwud_code || p.patient_code}</td>
                       <td style={{ ...styles.td, fontWeight: 600 }}>
-                        <span style={styles.nameCell}>
+                        <div style={styles.nameCell}>
                           <RowAvatar name={p.full_name} photoUrl={p.photo_url} />
-                          <span>{p.full_name}</span>
-                        </span>
+                          <div style={{ display: "flex", flexDirection: "column", gap: 4, minWidth: 0, flex: 1 }}>
+                            <span style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{p.full_name}</span>
+                            {p.flags && p.flags.length > 0 && (
+                              <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }} onClick={(e) => e.stopPropagation()}>
+                                {p.flags.map((flag) => {
+                                  const flagStyle = FLAG_STYLES[flag.type] || FLAG_STYLES.blue;
+                                  return (
+                                    <span
+                                      key={flag.key}
+                                      title={flag.title}
+                                      style={{
+                                        display: "inline-flex",
+                                        alignItems: "center",
+                                        gap: 4,
+                                        fontSize: 10,
+                                        fontWeight: 700,
+                                        padding: "2px 6px",
+                                        borderRadius: 4,
+                                        background: flagStyle.bg,
+                                        color: flagStyle.color,
+                                        border: `1px solid ${flagStyle.border}`,
+                                        lineHeight: 1.2,
+                                        whiteSpace: "nowrap",
+                                      }}
+                                    >
+                                      <span style={{ width: 6, height: 6, borderRadius: "50%", background: flagStyle.dot }} />
+                                      {flag.label}
+                                    </span>
+                                  );
+                                })}
+                              </div>
+                            )}
+                          </div>
+                        </div>
                       </td>
                       <td style={{ ...styles.td, textTransform: "capitalize" }}>{p.gender}</td>
                       <td style={styles.td}>{p.municipality || "—"}</td>
@@ -341,6 +433,55 @@ export default function Patients() {
               )}
             </tbody>
           </table>
+        </div>
+
+        {/* Server-Side Pagination Bar */}
+        <div style={styles.paginationBar}>
+          <div style={styles.paginationInfo}>
+            Showing <span style={{ fontWeight: 700 }}>{total === 0 ? 0 : (page - 1) * limit + 1}</span> to{" "}
+            <span style={{ fontWeight: 700 }}>{Math.min(page * limit, total)}</span> of{" "}
+            <span style={{ fontWeight: 700 }}>{total}</span> patients
+          </div>
+
+          <div style={styles.paginationControls}>
+            <div style={styles.limitWrapper}>
+              <span style={styles.limitLabel}>Rows per page:</span>
+              <select
+                style={styles.limitSelect}
+                value={limit}
+                onChange={(e) => handleLimitChange(Number(e.target.value))}
+              >
+                <option value={10}>10</option>
+                <option value={25}>25</option>
+                <option value={50}>50</option>
+                <option value={100}>100</option>
+              </select>
+            </div>
+
+            <div style={styles.pageButtons}>
+              <button
+                type="button"
+                style={{ ...styles.pageBtn, opacity: page <= 1 ? 0.4 : 1, cursor: page <= 1 ? "not-allowed" : "pointer" }}
+                disabled={page <= 1}
+                onClick={() => handlePageChange(page - 1)}
+                title="Previous page"
+              >
+                ← Prev
+              </button>
+              <span style={styles.pageIndicator}>
+                Page <strong>{page}</strong> of <strong>{totalPages}</strong>
+              </span>
+              <button
+                type="button"
+                style={{ ...styles.pageBtn, opacity: page >= totalPages ? 0.4 : 1, cursor: page >= totalPages ? "not-allowed" : "pointer" }}
+                disabled={page >= totalPages}
+                onClick={() => handlePageChange(page + 1)}
+                title="Next page"
+              >
+                Next →
+              </button>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -439,6 +580,7 @@ const styles = {
     borderRadius: 999,
     padding: "1px 7px",
   },
+  filterBackdrop: { position: "fixed", inset: 0, zIndex: 30 },
   filterPanel: {
     position: "absolute",
     top: "calc(100% + 8px)",
@@ -517,6 +659,7 @@ const styles = {
     background: "var(--color-surface)",
     width: "100%",
     boxSizing: "border-box",
+    cursor: "pointer",
   },
   dateRange: { display: "flex", alignItems: "center", gap: 6, width: "100%" },
   dateInput: {
@@ -557,7 +700,7 @@ const styles = {
     borderRadius: "var(--radius-md, 10px)",
     overflow: "auto",
   },
-  table: { width: "100%", minWidth: 1355, tableLayout: "fixed", borderCollapse: "collapse", fontSize: 13 },
+  table: { width: "100%", minWidth: 1380, tableLayout: "fixed", borderCollapse: "collapse", fontSize: 13 },
   th: {
     textAlign: "left",
     padding: "12px 16px",
@@ -581,7 +724,7 @@ const styles = {
   },
   actionsTh: { padding: "12px 8px", textAlign: "center" },
   actionsTd: { padding: "8px", textAlign: "center" },
-  nameCell: { display: "flex", alignItems: "center", gap: 8 },
+  nameCell: { display: "flex", alignItems: "flex-start", gap: 10 },
   rowAvatar: {
     width: 26,
     height: 26,
@@ -594,6 +737,7 @@ const styles = {
     fontSize: 10,
     fontWeight: 800,
     flexShrink: 0,
+    marginTop: 2,
   },
   emptyCell: { padding: 32, textAlign: "center", color: "var(--color-text-muted)" },
   statusBadge: {
@@ -635,5 +779,68 @@ const styles = {
     fontSize: 13,
     borderRadius: "var(--radius-sm)",
     cursor: "pointer",
+  },
+  paginationBar: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    flexWrap: "wrap",
+    gap: 12,
+    padding: "10px 16px",
+    background: "var(--color-surface)",
+    border: "1px solid var(--color-border)",
+    borderRadius: "var(--radius-md, 10px)",
+    fontSize: 13,
+    color: "var(--color-text)",
+  },
+  paginationInfo: {
+    color: "var(--color-text-muted)",
+    fontSize: 13,
+  },
+  paginationControls: {
+    display: "flex",
+    alignItems: "center",
+    gap: 16,
+    flexWrap: "wrap",
+  },
+  limitWrapper: {
+    display: "flex",
+    alignItems: "center",
+    gap: 8,
+    fontSize: 12,
+    color: "var(--color-text-muted)",
+  },
+  limitLabel: {
+    fontWeight: 600,
+  },
+  limitSelect: {
+    padding: "4px 8px",
+    borderRadius: "var(--radius-sm)",
+    border: "1px solid var(--color-border)",
+    fontSize: 12,
+    background: "var(--color-surface)",
+    cursor: "pointer",
+  },
+  pageButtons: {
+    display: "flex",
+    alignItems: "center",
+    gap: 8,
+  },
+  pageBtn: {
+    padding: "5px 12px",
+    borderRadius: "var(--radius-sm)",
+    border: "1px solid var(--color-border)",
+    background: "var(--color-surface)",
+    color: "var(--color-text)",
+    fontSize: 12,
+    fontWeight: 600,
+    cursor: "pointer",
+    display: "flex",
+    alignItems: "center",
+  },
+  pageIndicator: {
+    fontSize: 12,
+    color: "var(--color-text-muted)",
+    padding: "0 4px",
   },
 };

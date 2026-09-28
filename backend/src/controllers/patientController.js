@@ -74,6 +74,112 @@ export async function listPatients(req, res) {
     params.push(req.user.id);
   }
 
+  // Parse pagination params
+  const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+  const limit = Math.max(1, Math.min(100, parseInt(req.query.limit, 10) || 10));
+  const offset = (page - 1) * limit;
+
+  // Search filter
+  const search = cleanText(req.query.search);
+  if (search) {
+    clauses.push("(p.full_name LIKE ? OR p.patient_code LIKE ? OR p.pwud_code LIKE ?)");
+    const pattern = `%${search}%`;
+    params.push(pattern, pattern, pattern);
+  }
+
+  // Status filter
+  const status = cleanText(req.query.status);
+  if (status) {
+    clauses.push("p.enrollment_status = ?");
+    params.push(status);
+  }
+
+  // Gender filter
+  const gender = cleanText(req.query.gender);
+  if (gender) {
+    clauses.push("p.gender = ?");
+    params.push(gender);
+  }
+
+  // Case Manager filter
+  const caseManagerId = req.query.caseManagerId;
+  if (caseManagerId) {
+    clauses.push("p.assigned_case_manager_id = ?");
+    params.push(caseManagerId);
+  }
+
+  // Municipality filter
+  const municipality = cleanText(req.query.municipality);
+  if (municipality) {
+    clauses.push("p.municipality = ?");
+    params.push(municipality);
+  }
+
+  // Admission Date range
+  const dateFrom = cleanText(req.query.dateFrom);
+  if (dateFrom) {
+    clauses.push("p.admission_date >= ?");
+    params.push(dateFrom);
+  }
+  const dateTo = cleanText(req.query.dateTo);
+  if (dateTo) {
+    clauses.push("p.admission_date <= ?");
+    params.push(dateTo);
+  }
+
+  // Clinical Flag filter
+  const flag = cleanText(req.query.flag);
+  if (flag === "pdc_ready") {
+    clauses.push(`(
+      (SELECT COUNT(*) FROM attendance a WHERE a.patient_id = p.id AND a.status = 'present' AND a.session_type IN ('CBT_GROUP', 'PSYCHO_EDUCATION')) >= 43
+      AND NOT EXISTS (SELECT 1 FROM patient_milestones pm WHERE pm.patient_id = p.id AND pm.date_pdc IS NOT NULL)
+    )`);
+  } else if (flag === "positive_rdt") {
+    clauses.push(`EXISTS (
+      SELECT 1 FROM drug_test_logs dt
+      WHERE dt.patient_id = p.id AND dt.result = 'POSITIVE' AND dt.test_date >= DATE_SUB(CURDATE(), INTERVAL 30 DAY)
+    )`);
+  } else if (flag === "at_risk_absent") {
+    clauses.push(`EXISTS (
+      SELECT 1 FROM (
+        SELECT patient_id, status, ROW_NUMBER() OVER (PARTITION BY patient_id ORDER BY session_date DESC, id DESC) as rn
+        FROM attendance
+      ) sub
+      WHERE sub.patient_id = p.id AND sub.rn <= 2
+      GROUP BY sub.patient_id
+      HAVING COUNT(*) = 2 AND SUM(sub.status = 'absent') = 2
+    )`);
+  } else if (flag === "any") {
+    clauses.push(`(
+      (
+        (SELECT COUNT(*) FROM attendance a WHERE a.patient_id = p.id AND a.status = 'present' AND a.session_type IN ('CBT_GROUP', 'PSYCHO_EDUCATION')) >= 43
+        AND NOT EXISTS (SELECT 1 FROM patient_milestones pm WHERE pm.patient_id = p.id AND pm.date_pdc IS NOT NULL)
+      )
+      OR EXISTS (
+        SELECT 1 FROM drug_test_logs dt
+        WHERE dt.patient_id = p.id AND dt.result = 'POSITIVE' AND dt.test_date >= DATE_SUB(CURDATE(), INTERVAL 30 DAY)
+      )
+      OR EXISTS (
+        SELECT 1 FROM (
+          SELECT patient_id, status, ROW_NUMBER() OVER (PARTITION BY patient_id ORDER BY session_date DESC, id DESC) as rn
+          FROM attendance
+        ) sub
+        WHERE sub.patient_id = p.id AND sub.rn <= 2
+        GROUP BY sub.patient_id
+        HAVING COUNT(*) = 2 AND SUM(sub.status = 'absent') = 2
+      )
+    )`);
+  }
+
+  // Count total matching records
+  const [[{ total }]] = await pool.query(
+    `SELECT COUNT(*) as total
+     FROM patients p
+     LEFT JOIN patient_referrals r ON r.patient_id = p.id
+     WHERE ${clauses.join(" AND ")}`,
+    params
+  );
+
   const [rows] = await pool.query(
     `SELECT p.id, p.patient_code, p.pwud_code, p.full_name, p.photo_url, p.gender, p.municipality,
             p.admission_date, p.enrollment_status, p.is_archived,
@@ -84,21 +190,93 @@ export async function listPatients(req, res) {
             r.type_of_patient,
             p.admission_type,
             (SELECT COUNT(*) FROM attendance a WHERE a.patient_id = p.id) AS total_sessions,
-            (SELECT COUNT(*) FROM attendance a WHERE a.patient_id = p.id AND a.status = 'present') AS present_sessions
+            (SELECT COUNT(*) FROM attendance a WHERE a.patient_id = p.id AND a.status = 'present') AS present_sessions,
+            (SELECT COUNT(*) FROM attendance a WHERE a.patient_id = p.id AND a.status = 'present' AND a.session_type IN ('CBT_GROUP', 'PSYCHO_EDUCATION')) AS core_sessions,
+            (SELECT COUNT(*) FROM drug_test_logs dt WHERE dt.patient_id = p.id AND dt.result = 'POSITIVE' AND dt.test_date >= DATE_SUB(CURDATE(), INTERVAL 30 DAY)) AS recent_positive_rdt,
+            (SELECT pm.date_pdc FROM patient_milestones pm WHERE pm.patient_id = p.id LIMIT 1) AS date_pdc
      FROM patients p
      LEFT JOIN users u ON u.id = p.assigned_case_manager_id
      LEFT JOIN patient_referrals r ON r.patient_id = p.id
      WHERE ${clauses.join(" AND ")}
-     ORDER BY p.created_at DESC`,
-    params
+     ORDER BY p.created_at DESC
+     LIMIT ? OFFSET ?`,
+    [...params, limit, offset]
   );
 
-  const patients = rows.map((p) => ({
-    ...p,
-    attendance_rate: p.total_sessions > 0 ? Math.round((p.present_sessions / p.total_sessions) * 100) : null,
-  }));
+  let recentAbsencesMap = {};
+  if (rows.length > 0) {
+    const patientIds = rows.map((r) => r.id);
+    const [recentAtt] = await pool.query(
+      `SELECT patient_id, status FROM (
+         SELECT patient_id, status,
+                ROW_NUMBER() OVER (PARTITION BY patient_id ORDER BY session_date DESC, id DESC) as rn
+         FROM attendance
+         WHERE patient_id IN (?)
+       ) sub WHERE rn <= 2`,
+      [patientIds]
+    );
+    const byPatient = {};
+    for (const row of recentAtt) {
+      if (!byPatient[row.patient_id]) byPatient[row.patient_id] = [];
+      byPatient[row.patient_id].push(row.status);
+    }
+    for (const pid of patientIds) {
+      const statuses = byPatient[pid] || [];
+      if (statuses.length === 2 && statuses[0] === "absent" && statuses[1] === "absent") {
+        recentAbsencesMap[pid] = true;
+      }
+    }
+  }
 
-  res.json({ patients });
+  const patients = rows.map((p) => {
+    const flags = [];
+    if (p.core_sessions >= 43 && !p.date_pdc) {
+      flags.push({
+        key: "pdc_ready",
+        label: "Ready for PDC",
+        type: "blue",
+        title: `Completed ${p.core_sessions} core sessions (>= 43). Ready for Pre-Discharge Conference.`,
+      });
+    }
+    if (recentAbsencesMap[p.id]) {
+      flags.push({
+        key: "at_risk_absent",
+        label: "At Risk: 2 Absences",
+        type: "amber",
+        title: "Patient missed the last 2 consecutive scheduled sessions. Follow-up required.",
+      });
+    }
+    if (p.recent_positive_rdt > 0) {
+      flags.push({
+        key: "positive_rdt",
+        label: "Positive RDT",
+        type: "red",
+        title: "Tested positive on random drug test in the past 30 days. Case conference required.",
+      });
+    }
+
+    return {
+      ...p,
+      attendance_rate: p.total_sessions > 0 ? Math.round((p.present_sessions / p.total_sessions) * 100) : null,
+      flags,
+    };
+  });
+
+  const [muniRows] = await pool.query(
+    "SELECT DISTINCT municipality FROM patients WHERE municipality IS NOT NULL AND municipality != '' ORDER BY municipality"
+  );
+  const municipalities = muniRows.map((m) => m.municipality);
+
+  res.json({
+    patients,
+    municipalities,
+    pagination: {
+      total: Number(total),
+      page: Number(page),
+      limit: Number(limit),
+      totalPages: Math.max(1, Math.ceil(total / limit)),
+    },
+  });
 }
 
 export async function updatePatient(req, res) {
@@ -222,12 +400,55 @@ export async function updatePatient(req, res) {
   try {
     await pool.query(`UPDATE patients SET ${setClauses.join(", ")} WHERE id = ?`, values);
 
-    await pool.query(
-      "INSERT INTO audit_log (actor_username, action, table_name, record_id) VALUES (?, ?, ?, ?)",
-      [req.user.username, statusChangeMessage || `Updated patient record #${id}`, "patients", id]
-    );
-
     const [[updatedPatient]] = await pool.query("SELECT full_name FROM patients WHERE id = ?", [id]);
+    const patientDisplayName = updatedPatient?.full_name || current?.full_name || `#${id}`;
+
+    let auditLogged = false;
+
+    // 1. Audit Case Manager Reassignment
+    if (
+      fields.assignedCaseManagerId !== undefined &&
+      current &&
+      Number(fields.assignedCaseManagerId || 0) !== Number(current.assigned_case_manager_id || 0)
+    ) {
+      let newCmName = "Unassigned";
+      if (fields.assignedCaseManagerId) {
+        const [[cmUser]] = await pool.query("SELECT full_name FROM users WHERE id = ?", [fields.assignedCaseManagerId]);
+        if (cmUser) newCmName = cmUser.full_name;
+      }
+      await pool.query(
+        "INSERT INTO audit_log (actor_username, action, table_name, record_id) VALUES (?, ?, 'patients', ?)",
+        [req.user.username, `Reassigned Case Manager to "${newCmName}" for patient "${patientDisplayName}"`, id]
+      );
+      auditLogged = true;
+    }
+
+    // 2. Audit Admission Date Modification
+    if (
+      fields.admissionDate !== undefined &&
+      current &&
+      String(fields.admissionDate || "").slice(0, 10) !== String(current.admission_date ? new Date(current.admission_date).toISOString().slice(0, 10) : "")
+    ) {
+      await pool.query(
+        "INSERT INTO audit_log (actor_username, action, table_name, record_id) VALUES (?, ?, 'patients', ?)",
+        [req.user.username, `Updated admission date to "${fields.admissionDate || 'None'}" for patient "${patientDisplayName}"`, id]
+      );
+      auditLogged = true;
+    }
+
+    // 3. Audit Status Change or General Record Update
+    if (statusChangeMessage) {
+      await pool.query(
+        "INSERT INTO audit_log (actor_username, action, table_name, record_id) VALUES (?, ?, 'patients', ?)",
+        [req.user.username, `${statusChangeMessage} for patient "${patientDisplayName}"`, id]
+      );
+      auditLogged = true;
+    } else if (!auditLogged) {
+      await pool.query(
+        "INSERT INTO audit_log (actor_username, action, table_name, record_id) VALUES (?, ?, 'patients', ?)",
+        [req.user.username, `Updated patient record for "${patientDisplayName}"`, id]
+      );
+    }
     await notifyRoles(["ict_admin", "him_staff", "admitting"], "patients", "patient_updated", `Patient record updated: "${updatedPatient?.full_name || `#${id}`}" — by ${req.user.username}`);
 
     // Notify newly assigned case manager on reassignment (with self-notification guard)
@@ -252,94 +473,148 @@ export async function updatePatient(req, res) {
   }
 }
 
+async function verifyPatientAccess(patientId, user) {
+  const [[patient]] = await pool.query("SELECT id, assigned_case_manager_id FROM patients WHERE id = ?", [patientId]);
+  if (!patient) return { allowed: false, status: 404, message: "Patient not found." };
+  if (user.role === "case_manager" && patient.assigned_case_manager_id && patient.assigned_case_manager_id !== user.id) {
+    return { allowed: false, status: 403, message: "You do not have access to this patient." };
+  }
+  return { allowed: true, patient };
+}
+
 export async function getPatient(req, res) {
   const { id } = req.params;
-  const [rows] = await pool.query(
-    `SELECT p.*, u.full_name AS case_manager_name, pr.name AS program_name
-     FROM patients p
-     LEFT JOIN users u ON u.id = p.assigned_case_manager_id
-     LEFT JOIN programs pr ON pr.id = p.program_id
-     WHERE p.id = ?`,
-    [id]
-  );
-  if (!rows[0]) return res.status(404).json({ message: "Patient not found." });
-  if (req.user.role === "case_manager" && rows[0].assigned_case_manager_id !== req.user.id) {
-    return res.status(403).json({ message: "You do not have access to this patient." });
+  try {
+    const [rows] = await pool.query(
+      `SELECT p.*, u.full_name AS case_manager_name, pr.name AS program_name
+       FROM patients p
+       LEFT JOIN users u ON u.id = p.assigned_case_manager_id
+       LEFT JOIN programs pr ON pr.id = p.program_id
+       WHERE p.id = ?`,
+      [id]
+    );
+    if (!rows[0]) return res.status(404).json({ message: "Patient not found." });
+    if (req.user.role === "case_manager" && rows[0].assigned_case_manager_id && rows[0].assigned_case_manager_id !== req.user.id) {
+      return res.status(403).json({ message: "You do not have access to this patient." });
+    }
+    res.json({ patient: rows[0] });
+  } catch (err) {
+    console.error("Error in getPatient:", err);
+    res.status(500).json({ message: "Could not retrieve patient." });
   }
-  res.json({ patient: rows[0] });
 }
 
 export async function getPatientAttendance(req, res) {
   const { id } = req.params;
-  const [rows] = await pool.query(
-    `SELECT id, session_date, session_type, status, notes
-     FROM attendance WHERE patient_id = ? ORDER BY session_date DESC`,
-    [id]
-  );
-  res.json({ attendance: rows });
+  try {
+    const access = await verifyPatientAccess(id, req.user);
+    if (!access.allowed) return res.status(access.status).json({ message: access.message });
+
+    const [rows] = await pool.query(
+      `SELECT id, session_date, session_type, status, notes
+       FROM attendance WHERE patient_id = ? ORDER BY session_date DESC`,
+      [id]
+    );
+    res.json({ attendance: rows });
+  } catch (err) {
+    console.error("Error in getPatientAttendance:", err);
+    res.status(500).json({ message: "Could not retrieve patient attendance." });
+  }
 }
 
 export async function getPatientProgressNotes(req, res) {
   const { id } = req.params;
-  const [rows] = await pool.query(
-    `SELECT pn.id, pn.session_date, pn.session_type, pn.observation, pn.intervention_provided,
-            pn.patient_response, pn.recommendations, pn.next_follow_up_date,
-            pn.created_at, pn.updated_at, u.full_name AS case_manager_name
-     FROM progress_notes pn
-     LEFT JOIN users u ON u.id = pn.case_manager_id
-     WHERE pn.patient_id = ? ORDER BY pn.session_date DESC, pn.created_at DESC`,
-    [id]
-  );
-  res.json({ progressNotes: rows });
+  try {
+    const access = await verifyPatientAccess(id, req.user);
+    if (!access.allowed) return res.status(access.status).json({ message: access.message });
+
+    const [rows] = await pool.query(
+      `SELECT pn.id, pn.session_date, pn.session_type, pn.observation, pn.intervention_provided,
+              pn.patient_response, pn.recommendations, pn.next_follow_up_date,
+              pn.created_at, pn.updated_at, u.full_name AS case_manager_name
+       FROM progress_notes pn
+       LEFT JOIN users u ON u.id = pn.case_manager_id
+       WHERE pn.patient_id = ? ORDER BY pn.session_date DESC, pn.created_at DESC`,
+      [id]
+    );
+    res.json({ progressNotes: rows });
+  } catch (err) {
+    console.error("Error in getPatientProgressNotes:", err);
+    res.status(500).json({ message: "Could not retrieve progress notes." });
+  }
 }
 
 export async function getPatientTimeline(req, res) {
   const { id } = req.params;
-  const [rows] = await pool.query(
-    `SELECT 'progress_note' AS event_type,
-            CONCAT('Progress note added', IF(session_type IS NOT NULL, CONCAT(' — ', session_type), '')) AS title,
-            observation AS detail, created_at AS event_date
-     FROM progress_notes WHERE patient_id = ?
-     UNION ALL
-     SELECT 'attendance', CONCAT('Attendance recorded: ', status), session_type, created_at
-     FROM attendance WHERE patient_id = ?
-     UNION ALL
-     SELECT 'follow_up_scheduled', 'Follow-up scheduled', reason, created_at
-     FROM follow_ups WHERE patient_id = ?
-     UNION ALL
-     SELECT 'follow_up_completed', 'Follow-up completed', completed_remarks, resolved_at
-     FROM follow_ups WHERE patient_id = ? AND status = 'completed' AND resolved_at IS NOT NULL
-     UNION ALL
-     SELECT 'certificate', CONCAT(certificate_type, ' certificate issued'), NULL, issued_at
-     FROM certificates WHERE patient_id = ?
-     ORDER BY event_date DESC
-     LIMIT 50`,
-    [id, id, id, id, id]
-  );
-  res.json({ timeline: rows });
+  try {
+    const access = await verifyPatientAccess(id, req.user);
+    if (!access.allowed) return res.status(access.status).json({ message: access.message });
+
+    const [rows] = await pool.query(
+      `SELECT 'progress_note' AS event_type,
+              CONCAT('Progress note added', IF(session_type IS NOT NULL, CONCAT(' — ', session_type), '')) AS title,
+              observation AS detail, created_at AS event_date
+       FROM progress_notes WHERE patient_id = ?
+       UNION ALL
+       SELECT 'attendance', CONCAT('Attendance recorded: ', status), session_type, created_at
+       FROM attendance WHERE patient_id = ?
+       UNION ALL
+       SELECT 'follow_up_scheduled', 'Follow-up scheduled', reason, created_at
+       FROM follow_ups WHERE patient_id = ?
+       UNION ALL
+       SELECT 'follow_up_completed', 'Follow-up completed', completed_remarks, resolved_at
+       FROM follow_ups WHERE patient_id = ? AND status = 'completed' AND resolved_at IS NOT NULL
+       UNION ALL
+       SELECT 'certificate', CONCAT(certificate_type, ' certificate issued'), NULL, issued_at
+       FROM certificates WHERE patient_id = ?
+       ORDER BY event_date DESC
+       LIMIT 50`,
+      [id, id, id, id, id]
+    );
+    res.json({ timeline: rows });
+  } catch (err) {
+    console.error("Error in getPatientTimeline:", err);
+    res.status(500).json({ message: "Could not retrieve patient timeline." });
+  }
 }
 
 export async function getPatientCertificates(req, res) {
   const { id } = req.params;
+  try {
+    const access = await verifyPatientAccess(id, req.user);
+    if (!access.allowed) return res.status(access.status).json({ message: access.message });
+
     const [rows] = await pool.query(
-    `SELECT c.id, c.certificate_type, c.completion_date, c.issued_at, u.full_name AS issued_by_name
-     FROM certificates c
-     LEFT JOIN users u ON u.id = c.issued_by
-     WHERE c.patient_id = ? AND c.is_archived = FALSE ORDER BY c.issued_at DESC`,
-    [id]
-  );
-  res.json({ certificates: rows });
+      `SELECT c.id, c.certificate_type, c.completion_date, c.issued_at, u.full_name AS issued_by_name
+       FROM certificates c
+       LEFT JOIN users u ON u.id = c.issued_by
+       WHERE c.patient_id = ? AND c.is_archived = FALSE ORDER BY c.issued_at DESC`,
+      [id]
+    );
+    res.json({ certificates: rows });
+  } catch (err) {
+    console.error("Error in getPatientCertificates:", err);
+    res.status(500).json({ message: "Could not retrieve patient certificates." });
+  }
 }
 
 export async function getPatientHistory(req, res) {
   const { id } = req.params;
-  const [rows] = await pool.query(
-    `SELECT actor_username, action, created_at
-     FROM audit_log WHERE table_name = 'patients' AND record_id = ?
-     ORDER BY created_at DESC`,
-    [id]
-  );
-  res.json({ history: rows });
+  try {
+    const access = await verifyPatientAccess(id, req.user);
+    if (!access.allowed) return res.status(access.status).json({ message: access.message });
+
+    const [rows] = await pool.query(
+      `SELECT actor_username, action, created_at
+       FROM audit_log WHERE table_name = 'patients' AND record_id = ?
+       ORDER BY created_at DESC`,
+      [id]
+    );
+    res.json({ history: rows });
+  } catch (err) {
+    console.error("Error in getPatientHistory:", err);
+    res.status(500).json({ message: "Could not retrieve patient history." });
+  }
 }
 
 export async function createPatient(req, res) {

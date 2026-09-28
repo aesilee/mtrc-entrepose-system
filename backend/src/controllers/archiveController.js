@@ -86,14 +86,14 @@ export async function restorePatient(req, res) {
 }
 
 export async function archiveCertificate(req, res) {
-  const { id } = req.params;
+  const id = req.params.id || req.params.certId;
   const { reason } = req.body;
 
-  const [[cert]] = await pool.query("SELECT id, patient_name, is_archived FROM certificates WHERE id = ?", [id]);
-  if (!cert) return res.status(404).json({ message: "Certificate not found." });
-  if (cert.is_archived) return res.status(400).json({ message: "This certificate is already archived." });
-
   try {
+    const [[cert]] = await pool.query("SELECT id, patient_name, is_archived FROM certificates WHERE id = ?", [id]);
+    if (!cert) return res.status(404).json({ message: "Certificate not found." });
+    if (cert.is_archived) return res.status(400).json({ message: "This certificate is already archived." });
+
     await pool.query("UPDATE certificates SET is_archived = TRUE, archived_at = NOW(), archived_by = ? WHERE id = ?", [req.user.id, id]);
     await pool.query(
       "INSERT INTO archives (entity_type, entity_id, entity_label, reason, archived_by) VALUES ('certificate', ?, ?, ?, ?)",
@@ -110,12 +110,13 @@ export async function archiveCertificate(req, res) {
 }
 
 export async function restoreCertificate(req, res) {
-  const { id } = req.params;
-  const [[cert]] = await pool.query("SELECT id, patient_name, is_archived FROM certificates WHERE id = ?", [id]);
-  if (!cert) return res.status(404).json({ message: "Certificate not found." });
-  if (!cert.is_archived) return res.status(400).json({ message: "This certificate is not archived." });
+  const id = req.params.id || req.params.certId;
 
   try {
+    const [[cert]] = await pool.query("SELECT id, patient_name, is_archived FROM certificates WHERE id = ?", [id]);
+    if (!cert) return res.status(404).json({ message: "Certificate not found." });
+    if (!cert.is_archived) return res.status(400).json({ message: "This certificate is not archived." });
+
     await pool.query("UPDATE certificates SET is_archived = FALSE, archived_at = NULL, archived_by = NULL WHERE id = ?", [id]);
     await pool.query(
       `UPDATE archives SET restored_at = NOW(), restored_by = ? WHERE entity_type = 'certificate' AND entity_id = ? AND restored_at IS NULL`,

@@ -1,9 +1,19 @@
 import pool from "../config/db.js";
 
+function formatDateYMD(d) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
 // Utility to create start/end date for a month
 function getMonthRange(month, year) {
-  const start = new Date(year, month - 1, 1).toISOString().slice(0, 10);
-  const end = new Date(year, month, 0).toISOString().slice(0, 10);
+  const m = Number(month);
+  const y = Number(year);
+  const start = `${y}-${String(m).padStart(2, "0")}-01`;
+  const lastDay = new Date(y, m, 0).getDate();
+  const end = `${y}-${String(m).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`;
   return { start, end };
 }
 
@@ -122,8 +132,17 @@ export async function getComorbidities(month, year) {
   const matrix = {};
   rows.forEach(r => {
     try {
-      const list = JSON.parse(r.comorbidities);
-      list.forEach(c => { matrix[c] = (matrix[c] || 0) + 1; });
+      if (!r.comorbidities) return;
+      const parsed = typeof r.comorbidities === "string" ? JSON.parse(r.comorbidities) : r.comorbidities;
+      if (Array.isArray(parsed)) {
+        parsed.forEach(c => { if (c) matrix[c] = (matrix[c] || 0) + 1; });
+      } else if (parsed && typeof parsed === "object") {
+        Object.entries(parsed).forEach(([key, status]) => {
+          if (status && status !== "none" && status !== "") {
+            matrix[key] = (matrix[key] || 0) + 1;
+          }
+        });
+      }
     } catch {}
   });
   return matrix;
@@ -143,10 +162,10 @@ export async function getCompletionRates(quarter, year) {
   const cohortStartDate = new Date(year, evalStartMonth - 1 - 7, 1);
   const cohortEndDate = new Date(year, evalEndMonth - 7, 0);
   
-  const startFmt = evalStartDate.toISOString().slice(0, 10);
-  const endFmt = evalEndDate.toISOString().slice(0, 10);
-  const cohortStartFmt = cohortStartDate.toISOString().slice(0, 10);
-  const cohortEndFmt = cohortEndDate.toISOString().slice(0, 10);
+  const startFmt = formatDateYMD(evalStartDate);
+  const endFmt = formatDateYMD(evalEndDate);
+  const cohortStartFmt = formatDateYMD(cohortStartDate);
+  const cohortEndFmt = formatDateYMD(cohortEndDate);
 
   const [[{ cohort_size }]] = await pool.query(
     `SELECT COUNT(*) as cohort_size FROM patients WHERE admission_date BETWEEN ? AND ?`,

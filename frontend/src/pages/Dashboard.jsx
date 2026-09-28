@@ -1437,8 +1437,8 @@ function AdmittingDashboard() {
 
 export default function Dashboard() {
   const { user } = useAuth();
-  const isCaseManager = user.role === "case_manager";
-  const isAdmitting = user.role === "admitting";
+  const isCaseManager = user?.role === "case_manager";
+  const isAdmitting = user?.role === "admitting";
 
   return (
     <AppShell
@@ -1449,9 +1449,9 @@ export default function Dashboard() {
           ? "Patient registrations, record completion, and today's admission activity."
           : "Overview of enrollment, attendance, and program activity."}
     >
-      {user.role === "ict_admin" ? (
+      {user?.role === "ict_admin" ? (
         <IctAdminDashboard />
-      ) : user.role === "him_staff" ? (
+      ) : user?.role === "him_staff" ? (
         <HimStaffDashboard />
       ) : isCaseManager ? (
         <CaseManagerDashboard />

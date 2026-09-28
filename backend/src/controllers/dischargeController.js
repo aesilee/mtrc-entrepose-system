@@ -92,9 +92,11 @@ if (existing) return res.status(409).json({ message: "This patient has already b
     );
 
     // Harmonize patient enrollment_status and mirror to patient_discharges for reporting
+    const isCompleted = /complete|graduat/i.test(dischargeType || "");
+    const enrollmentStatus = isCompleted ? 'completed' : 'dropped';
     await pool.query(
-      "UPDATE patients SET enrollment_status = 'completed' WHERE id = ?",
-      [patientId]
+      "UPDATE patients SET enrollment_status = ? WHERE id = ?",
+      [enrollmentStatus, patientId]
     );
     await pool.query(
       `INSERT INTO patient_discharges (patient_id, discharge_date, status, reason, intervention_upon_discharge)
@@ -105,6 +107,11 @@ if (existing) return res.status(409).json({ message: "This patient has already b
     await pool.query(
       "INSERT INTO audit_log (actor_username, action, table_name, record_id) VALUES (?, ?, ?, ?)",
       [req.user.username, `Discharged patient "${patient.full_name}" (${programType} — ${dischargeType})`, "discharges", result.insertId]
+    );
+
+    await pool.query(
+      "INSERT INTO audit_log (actor_username, action, table_name, record_id) VALUES (?, ?, 'patients', ?)",
+      [req.user.username, `Discharged patient "${patient.full_name}" (${programType} — ${dischargeType})`, patientId]
     );
 
     await notifyRoles(

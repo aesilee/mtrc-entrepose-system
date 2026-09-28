@@ -472,7 +472,7 @@ export default function ReferralInformation() {
                 <option value="Severe Dependence">Severe Dependence (Inpatient Track)</option>
               </select>
             </Field>
-            {form.ddeSeverityDiagnosis === "Severe Dependence" && form.typeOfService.includes("Outpatient") && (
+            {form.ddeSeverityDiagnosis === "Severe Dependence" && (form.typeOfService || "").includes("Outpatient") && (
               <div style={{ ...styles.noticeCard, gridColumn: "1 / -1" }}>
                 <strong>Clinical Advisory: Severe Dependence in Outpatient Setting</strong>
                 <p style={{ margin: "4px 0 0", fontSize: 12 }}>

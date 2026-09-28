@@ -28,7 +28,7 @@ export async function getAnalyticsOverview(req, res) {
 
     const [patients] = await pool.query(
       `SELECT p.id, p.gender, p.municipality, p.birthdate, p.enrollment_status,
-              p.rehab_start_date, p.sessions_required, p.updated_at,
+              p.admission_date, p.rehab_start_date, p.sessions_required, p.updated_at,
               p.assigned_case_manager_id, u.full_name AS case_manager_name,
               (SELECT COUNT(*) FROM attendance a WHERE a.patient_id = p.id) AS total_sessions,
               (SELECT COUNT(*) FROM attendance a WHERE a.patient_id = p.id AND a.status = 'present') AS present_sessions
@@ -40,30 +40,59 @@ export async function getAnalyticsOverview(req, res) {
 
     const total = patients.length;
     const statusCounts = { active: 0, completed: 0, dropped: 0, transferred: 0, pending: 0 };
-    patients.forEach((p) => { statusCounts[p.enrollment_status] = (statusCounts[p.enrollment_status] || 0) + 1; });
+    patients.forEach((p) => {
+      const st = p.enrollment_status || "pending";
+      statusCounts[st] = (statusCounts[st] || 0) + 1;
+    });
 
-    const completionRate = total ? Math.round((statusCounts.completed / total) * 100) : 0;
+    const activeCaseload = statusCounts.active || 0;
+    const completedPatients = statusCounts.completed || 0;
+    const droppedPatients = statusCounts.dropped || 0;
+    const totalDischarged = completedPatients + droppedPatients;
+
+    // Clinical retention / completion rate: completed / (completed + dropped)
+    const completionRate = totalDischarged > 0
+      ? Math.round((completedPatients / totalDischarged) * 100)
+      : (total ? Math.round((completedPatients / total) * 100) : 0);
 
     const withAttendance = patients.filter((p) => p.total_sessions > 0);
     const avgAttendance = withAttendance.length
       ? Math.round(withAttendance.reduce((sum, p) => sum + (p.present_sessions / p.total_sessions) * 100, 0) / withAttendance.length)
       : 0;
 
-    const withRehabStart = patients.filter((p) => p.rehab_start_date);
-    const avgDurationMonths = withRehabStart.length
+    const withStart = patients.filter((p) => p.admission_date || p.rehab_start_date);
+    const avgDurationMonths = withStart.length
       ? Math.round(
-          withRehabStart.reduce((sum, p) => {
-            const start = new Date(p.rehab_start_date);
-            const end = p.enrollment_status === "completed" ? new Date(p.updated_at) : new Date();
+          withStart.reduce((sum, p) => {
+            const start = new Date(p.admission_date || p.rehab_start_date);
+            const end = (p.enrollment_status === "completed" || p.enrollment_status === "dropped") ? new Date(p.updated_at) : new Date();
             return sum + Math.max((end - start) / (1000 * 60 * 60 * 24 * 30), 0);
-          }, 0) / withRehabStart.length
+          }, 0) / withStart.length
         )
       : 0;
 
     const nearCompletion = patients.filter(
-      (p) => p.enrollment_status === "active" && p.sessions_required &&
-        p.present_sessions / p.sessions_required >= 0.8 && p.present_sessions / p.sessions_required < 1
+      (p) => p.enrollment_status === "active" && (p.sessions_required || 43) &&
+        p.present_sessions / (p.sessions_required || 43) >= 0.8 && p.present_sessions / (p.sessions_required || 43) < 1
     ).length;
+
+    // Query discharge breakdown
+    const dischargeClauses = [];
+    const dischargeParams = [];
+    let dischargeJoin = "";
+    if (req.user.role === "case_manager") {
+      dischargeJoin = "JOIN patients p ON p.id = d.patient_id";
+      dischargeClauses.push("p.assigned_case_manager_id = ?");
+      dischargeParams.push(req.user.id);
+    }
+    const [dischargeRows] = await pool.query(
+      `SELECT d.discharge_type, COUNT(*) as count 
+       FROM discharges d ${dischargeJoin}
+       ${dischargeClauses.length ? "WHERE " + dischargeClauses.join(" AND ") : ""}
+       GROUP BY d.discharge_type`,
+      dischargeParams
+    );
+    const dischargeDistribution = dischargeRows.map((r) => ({ label: r.discharge_type, value: r.count }));
 
     const municipalityCounts = {};
     patients.forEach((p) => {
@@ -117,8 +146,17 @@ export async function getAnalyticsOverview(req, res) {
     const mostActiveMunicipality = municipalityDistribution[0];
 
     res.json({
-      kpis: { completionRate, completedPatients: statusCounts.completed, avgAttendance, avgDurationMonths, nearCompletion },
+      kpis: {
+        completionRate,
+        completedPatients,
+        activeCaseload,
+        totalDischarged,
+        avgAttendance,
+        avgDurationMonths,
+        nearCompletion
+      },
       patientStatus: Object.entries(statusCounts).filter(([, v]) => v > 0).map(([label, value]) => ({ label, value })),
+      dischargeDistribution,
       municipalityDistribution,
       genderDistribution: Object.entries(genderCounts).filter(([, v]) => v > 0).map(([label, value]) => ({ label, value })),
       ageDistribution: Object.entries(ageBuckets).map(([label, value]) => ({ label, value })),
@@ -186,6 +224,38 @@ export async function getAttendanceTrend(req, res) {
     data: months.map(({ year, month }) => {
       const key = `${year}-${String(month).padStart(2, "0")}`;
       return { label: monthLabel(year, month), value: map[key] ?? 0 };
+    }),
+  });
+}
+
+export async function getMonthlyDischarges(req, res) {
+  const { dateFrom, dateTo } = req.query;
+  const months = getMonthRange(dateFrom, dateTo);
+  const rangeStart = `${months[0].year}-${String(months[0].month).padStart(2, "0")}-01`;
+
+  const clauses = ["d.discharge_date >= ?"];
+  const params = [rangeStart];
+  let joinPatient = "";
+
+  if (req.user.role === "case_manager") {
+    joinPatient = "JOIN patients p ON p.id = d.patient_id";
+    clauses.push("p.assigned_case_manager_id = ?");
+    params.push(req.user.id);
+  }
+
+  const [rows] = await pool.query(
+    `SELECT DATE_FORMAT(d.discharge_date, '%Y-%m') AS ym, COUNT(*) AS count
+     FROM discharges d ${joinPatient}
+     WHERE ${clauses.join(" AND ")}
+     GROUP BY ym`,
+    params
+  );
+  const map = Object.fromEntries(rows.map((r) => [r.ym, r.count]));
+
+  res.json({
+    data: months.map(({ year, month }) => {
+      const key = `${year}-${String(month).padStart(2, "0")}`;
+      return { label: monthLabel(year, month), value: map[key] || 0 };
     }),
   });
 }

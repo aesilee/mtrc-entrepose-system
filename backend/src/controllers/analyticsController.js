@@ -94,14 +94,39 @@ export async function getAnalyticsOverview(req, res) {
     );
     const dischargeDistribution = dischargeRows.map((r) => ({ label: r.discharge_type, value: r.count }));
 
-    const municipalityCounts = {};
+    function normalizeMunicipality(name) {
+      if (!name || !name.trim()) return "Unspecified";
+      return name.trim()
+        .split(/\s+/)
+        .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+        .join(" ");
+    }
+
+    const municipalityData = {};
     patients.forEach((p) => {
-      const m = p.municipality || "Unspecified";
-      municipalityCounts[m] = (municipalityCounts[m] || 0) + 1;
+      const m = normalizeMunicipality(p.municipality);
+      if (!municipalityData[m]) {
+        municipalityData[m] = { count: 0, totalSessions: 0, presentSessions: 0 };
+      }
+      municipalityData[m].count += 1;
+      municipalityData[m].totalSessions += Number(p.total_sessions || 0);
+      municipalityData[m].presentSessions += Number(p.present_sessions || 0);
     });
-    const municipalityDistribution = Object.entries(municipalityCounts)
-      .sort((a, b) => b[1] - a[1]).slice(0, 8)
-      .map(([label, value]) => ({ label, value }));
+
+    const municipalityDistribution = Object.entries(municipalityData)
+      .sort((a, b) => b[1].count - a[1].count || b[1].totalSessions - a[1].totalSessions)
+      .slice(0, 10)
+      .map(([label, info]) => {
+        const percentage = total > 0 ? Math.round((info.count / total) * 100) : 0;
+        return {
+          label,
+          value: info.count,
+          count: info.count,
+          percentage,
+          sessionCount: info.totalSessions,
+          presentSessions: info.presentSessions,
+        };
+      });
 
     const genderCounts = { male: 0, female: 0, other: 0 };
     patients.forEach((p) => { genderCounts[p.gender] = (genderCounts[p.gender] || 0) + 1; });

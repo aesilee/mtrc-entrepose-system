@@ -184,6 +184,65 @@ export function BarChartV({ data }) {
   );
 }
 
+export function HorizontalBarChart({ data }) {
+  if (!data || data.length === 0) {
+    return (
+      <div style={{ height: 140, width: "100%", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--color-text-muted)", fontSize: 13 }}>
+        No municipality data available
+      </div>
+    );
+  }
+
+  const totalPatients = data.reduce((sum, d) => sum + (d.count || d.value || 0), 0) || 1;
+
+  return (
+    <div style={{ width: "100%", display: "flex", flexDirection: "column", gap: 12, padding: "4px 0" }}>
+      {data.map((d, i) => {
+        const pct = d.percentage != null ? d.percentage : Math.round(((d.count || d.value || 0) / totalPatients) * 100);
+        const sessionCount = d.sessionCount ?? 0;
+        const patientCount = d.count || d.value || 0;
+        const barColor = COLORS[i % COLORS.length];
+
+        return (
+          <div key={d.label} style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 12 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
+                <span style={{ width: 8, height: 8, borderRadius: "50%", background: barColor, flexShrink: 0 }} />
+                <span style={{ fontWeight: 600, color: "var(--color-text)" }}>{d.label}</span>
+                <span style={{ fontSize: 11, color: "var(--color-text-muted)" }}>
+                  ({patientCount} {patientCount === 1 ? "patient" : "patients"})
+                </span>
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <span style={{ fontWeight: 700, fontSize: 13, color: "var(--color-text)" }}>
+                  {pct}%
+                </span>
+                <span style={{ color: "#D1D5DB" }}>•</span>
+                <span style={{ fontSize: 11, fontWeight: 500, color: "var(--color-text-muted)" }}>
+                  {sessionCount} {sessionCount === 1 ? "session" : "sessions"}
+                </span>
+              </div>
+            </div>
+
+            {/* Horizontal Track & Bar */}
+            <div style={{ width: "100%", height: 10, background: "#F0EEFA", borderRadius: 999, overflow: "hidden", position: "relative" }}>
+              <div
+                style={{
+                  height: "100%",
+                  width: `${Math.min(Math.max(pct, 2), 100)}%`,
+                  background: barColor,
+                  borderRadius: 999,
+                  transition: "width 0.5s ease-in-out",
+                }}
+              />
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 export function GaugeRing({ value, size = 140 }) {
   const radius = size / 2 - 14;
   const cx = size / 2, cy = size / 2;

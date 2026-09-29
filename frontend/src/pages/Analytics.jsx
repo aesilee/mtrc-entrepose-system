@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import AppShell from "../components/AppShell.jsx";
 import api from "../api/axios.js";
-import { KpiCard, DonutChart, LineChart, BarChart, BarChartV } from "../components/AnalyticsCharts.jsx";
+import { KpiCard, DonutChart, LineChart, BarChart, BarChartV, HorizontalBarChart } from "../components/AnalyticsCharts.jsx";
 import useViewport from "../hooks/useViewport.js";
 
 const iconProps = { viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 2, strokeLinecap: "round", strokeLinejoin: "round", width: 20, height: 20 };
@@ -99,7 +99,7 @@ export default function Analytics() {
                 <DonutChart data={overview.genderDistribution} size={110} />
               </Card>
               <Card title="Municipality Distribution" span={2} maxSpan={gridCols}>
-                <BarChart data={overview.municipalityDistribution} />
+                <HorizontalBarChart data={overview.municipalityDistribution} />
               </Card>
             </div>
 

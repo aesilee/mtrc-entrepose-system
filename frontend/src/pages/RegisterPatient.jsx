@@ -196,8 +196,51 @@ export default function RegisterPatient() {
   const guardianRequired = age !== null && age < 18;
   const showGuardian = guardianRequired || form.hasGuardian;
 
-  function update(field, value) {
-    setForm((previous) => ({ ...previous, [field]: value }));
+  function handleAutoFillSample() {
+    const sampleCm = caseManagers[0]?.id ? String(caseManagers[0].id) : "";
+    setForm((prev) => ({
+      ...prev,
+      caseType: "substance_use",
+      assignedCaseManagerId: sampleCm || prev.assignedCaseManagerId,
+      firstName: "Juan",
+      middleName: "Mendoza",
+      lastName: "Dela Cruz",
+      suffix: "",
+      preferredName: "Johnny",
+      gender: "male",
+      birthdate: "1998-05-15",
+      civilStatus: "single",
+      nationality: "Filipino",
+      employmentStatus: "Employed",
+      occupation: "Construction Worker",
+      educationalAttainment: "High school graduate",
+      religion: "Roman Catholic",
+      livingArrangement: "With Parents",
+      estimatedFamilyMonthlyIncome: "15000",
+      numberOfSiblings: "3",
+      ordinalPosition: "1",
+      fatherName: "Pedro Dela Cruz",
+      fatherOccupation: "Farmer",
+      motherName: "Maria Mendoza Dela Cruz",
+      motherOccupation: "Housewife",
+      spouseName: "",
+      spouseOccupation: "",
+      contactNumber: "09171234567",
+      email: "juan.delacruz@example.com",
+      region: "Region V (Bicol Region)",
+      province: "Albay",
+      municipality: "Malinao",
+      barangay: "Comun",
+      streetAddress: "Purok 4",
+      postalCode: "4512",
+      emergencyContactName: "Maria Mendoza Dela Cruz",
+      emergencyContactRelationship: "Mother",
+      emergencyContactNumber: "09187654321",
+      emergencyContactEmail: "",
+      emergencyContactAddress: "Purok 4, Comun, Malinao, Albay",
+      emergencyContactMethod: "phone",
+      hasGuardian: false,
+    }));
   }
 
   async function handleSubmit(event) {
@@ -270,12 +313,35 @@ export default function RegisterPatient() {
         {error && <div role="alert" style={styles.error}>{error}</div>}
 
         {/* Program Identity — Scope Locked to ENTREPOSE SUD */}
-        <section style={{ background: "var(--color-primary-tint)", border: "1.5px solid var(--color-primary)", borderRadius: "var(--radius-lg)", padding: "14px 20px", display: "flex", alignItems: "center", gap: 12 }}>
-          <div style={{ fontSize: 18 }}>🏥</div>
-          <div>
-            <div style={{ fontWeight: 700, fontSize: 13, color: "var(--color-primary-dark)" }}>ENTREPOSE Outpatient Program — Substance Use Disorder (PWUD)</div>
-            <div style={{ fontSize: 12, color: "var(--color-text-muted)", marginTop: 2 }}>All registrations are enrolled under the MTRC ENTREPOSE SUD pathway. A PWUD tracking code (OP-LGU-YY-NNN) will be assigned automatically.</div>
+        <section style={{ background: "var(--color-primary-tint)", border: "1.5px solid var(--color-primary)", borderRadius: "var(--radius-lg)", padding: "14px 20px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <div>
+              <div style={{ fontWeight: 700, fontSize: 13, color: "var(--color-primary-dark)" }}>ENTREPOSE Outpatient Program — Substance Use Disorder (PWUD)</div>
+              <div style={{ fontSize: 12, color: "var(--color-text-muted)", marginTop: 2 }}>All registrations are enrolled under the MTRC ENTREPOSE SUD pathway. A PWUD tracking code (OP-LGU-YY-NNN) will be assigned automatically.</div>
+            </div>
           </div>
+          {!id && (
+            <button
+              type="button"
+              onClick={handleAutoFillSample}
+              style={{
+                background: "var(--color-surface, #ffffff)",
+                border: "1px solid var(--color-primary)",
+                color: "var(--color-primary-dark)",
+                padding: "6px 12px",
+                borderRadius: "var(--radius-sm, 6px)",
+                fontSize: 12,
+                fontWeight: 700,
+                cursor: "pointer",
+                whiteSpace: "nowrap",
+                display: "flex",
+                alignItems: "center",
+              }}
+              title="Quickly fill valid sample demographic data for testing"
+            >
+              Auto-fill Sample Demographics
+            </button>
+          )}
         </section>
 
         <Section

@@ -22,15 +22,25 @@ export async function getCensusMetrics(month, year) {
   const { start, end } = getMonthRange(month, year);
   const [rows] = await pool.query(
     `SELECT 
-        gender,
-        CASE WHEN case_type = 'general_outpatient' THEN 'court_mandated' ELSE 'voluntary' END as court_status,
-        CASE WHEN current_status = 'aftercare' THEN 'aftercare' ELSE 'outpatient' END as modality,
-        SUM(CASE WHEN admission_date BETWEEN ? AND ? THEN 1 ELSE 0 END) as new_admissions,
-        SUM(CASE WHEN prior_rehab_admissions > 0 AND admission_date BETWEEN ? AND ? THEN 1 ELSE 0 END) as readmissions,
-        SUM(CASE WHEN enrollment_status = 'active' THEN 1 ELSE 0 END) as active_cases
-     FROM patients
-     WHERE is_archived = FALSE
-     GROUP BY gender, court_status, modality`,
+        p.gender,
+        CASE 
+          WHEN r.admission_type = 'court_mandated' 
+            OR r.nature_of_confinement LIKE '%Court%' 
+            OR r.nature_of_confinement LIKE '%Plea Bargaining%' 
+            OR r.nature_of_confinement LIKE '%Compulsory%'
+            OR p.referral_source = 'Court-Mandated'
+            OR p.referral_source = 'court_mandated'
+          THEN 'court_mandated' 
+          ELSE 'voluntary' 
+        END as court_status,
+        CASE WHEN p.current_status = 'aftercare' OR p.program_phase = 'Aftercare' THEN 'aftercare' ELSE 'outpatient' END as modality,
+        SUM(CASE WHEN p.admission_date BETWEEN ? AND ? THEN 1 ELSE 0 END) as new_admissions,
+        SUM(CASE WHEN (p.prior_rehab_admissions > 0 OR r.prior_rehab_admissions > 0) AND p.admission_date BETWEEN ? AND ? THEN 1 ELSE 0 END) as readmissions,
+        SUM(CASE WHEN p.enrollment_status = 'active' THEN 1 ELSE 0 END) as active_cases
+     FROM patients p
+     LEFT JOIN patient_referrals r ON r.patient_id = p.id
+     WHERE p.is_archived = FALSE
+     GROUP BY p.gender, court_status, modality`,
     [start, end, start, end]
   );
   return rows;
@@ -214,11 +224,13 @@ export async function getDrugTestSurveillance(month, year) {
   };
   
   rows.forEach(r => {
+    // Only count post-admission surveillance tests (Day 1 onwards); omit pre-admission baseline tests
+    if (!r.days_elapsed || r.days_elapsed < 1) return;
     const key = r.result === 'POSITIVE' ? 'positive' : 'negative';
     if (r.days_elapsed <= 60) matrix.window1[key]++;
     else if (r.days_elapsed <= 120) matrix.window2[key]++;
     else if (r.days_elapsed <= 180) matrix.window3[key]++;
-    else matrix.window4[key]++; // Month 7 falls here
+    else matrix.window4[key]++; // Beyond 180 days
   });
   
   return matrix;

@@ -87,8 +87,18 @@ async function start() {
     process.exit(1);
   }
 
-  app.listen(PORT, () => {
+  const server = app.listen(PORT, () => {
     console.log(`MTRC ENTREPOSE API running on http://localhost:${PORT}`);
+  });
+
+  server.on("error", (err) => {
+    if (err.code === "EADDRINUSE") {
+      console.error(`❌ Port ${PORT} is already in use by another process.`);
+      console.error("💡 Another instance of node is already running on this port. Stop it first or wait a few seconds before restarting.");
+      process.exit(1);
+    } else {
+      console.error("❌ Server error:", err);
+    }
   });
 }
 

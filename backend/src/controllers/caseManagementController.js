@@ -404,6 +404,16 @@ export async function dischargePatient(req, res) {
       [id, status, dischargeDate, reason || interventionUponDischarge || null, req.user?.username || req.user?.full_name || 'Staff']
     ).catch(() => {});
 
+    // Automatically stamp date_pdc and optional date_acp_planning in patient_milestones
+    await connection.query(
+      `INSERT INTO patient_milestones (patient_id, date_pdc, date_acp_planning)
+       VALUES (?, ?, ?)
+       ON DUPLICATE KEY UPDATE 
+         date_pdc = COALESCE(date_pdc, VALUES(date_pdc)),
+         date_acp_planning = CASE WHEN ? = 1 THEN COALESCE(date_acp_planning, VALUES(date_acp_planning)) ELSE date_acp_planning END`,
+      [id, dischargeDate, transitionToAftercare ? dischargeDate : null, transitionToAftercare ? 1 : 0]
+    ).catch(() => {});
+
     const enrollmentStatus = status === 'Completer (Graduated)' ? 'completed' : 'dropped';
     const phaseUpdate = transitionToAftercare ? ", program_phase = 'Aftercare'" : "";
 

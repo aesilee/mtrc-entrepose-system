@@ -1,5 +1,6 @@
 import pool from "../config/db.js";
 import { notifyRoles, notifyUser } from "../utils/notify.js";
+import { generatePwudCode } from "./patientController.js";
 
 // Official 3-letter LGU codes for Albay/Bicol municipalities
 const LGU_CODE_MAP = {
@@ -35,9 +36,74 @@ const VALID_LENGTHS = new Set([
   "7 Years – 8 Years & 11 Months",
   "9 Years – 10 Years & 11 Months",
   "11 Years and Above",
+  "under_2_years",
+  "2_to_4_years",
+  "4_to_6_years",
+  "6_years_or_more",
 ]);
-const VALID_FREQUENCIES = new Set(["Daily", "2 to 5 times a week", "Weekly", "Monthly", "Occasionally"]);
+const VALID_FREQUENCIES = new Set([
+  "Daily",
+  "2 to 5 times a week",
+  "Weekly",
+  "Monthly",
+  "Occasionally",
+  "daily",
+  "2_to_5_weekly",
+  "weekly",
+  "monthly",
+  "occasionally",
+]);
 const VALID_CLASSIFICATIONS = new Set(["full_pay", "c1", "c2", "c3"]);
+
+const DB_LENGTH_MAP = {
+  "Less than 1 year": "under_2_years",
+  "1 Year – 2 Years & 11 Months": "under_2_years",
+  "3 Years – 4 Years & 11 Months": "2_to_4_years",
+  "5 Years – 6 Years & 11 Months": "4_to_6_years",
+  "7 Years – 8 Years & 11 Months": "6_years_or_more",
+  "9 Years – 10 Years & 11 Months": "6_years_or_more",
+  "11 Years and Above": "6_years_or_more",
+  "under_2_years": "under_2_years",
+  "2_to_4_years": "2_to_4_years",
+  "4_to_6_years": "4_to_6_years",
+  "6_years_or_more": "6_years_or_more",
+};
+
+const DB_FREQUENCY_MAP = {
+  "Daily": "daily",
+  "daily": "daily",
+  "2 to 5 times a week": "2_to_5_weekly",
+  "2_to_5_weekly": "2_to_5_weekly",
+  "Weekly": "weekly",
+  "weekly": "weekly",
+  "Monthly": "monthly",
+  "monthly": "monthly",
+  "Occasionally": "occasionally",
+  "occasionally": "occasionally",
+};
+
+function toDbLengthOfUse(val) {
+  if (!val) return null;
+  if (DB_LENGTH_MAP[val]) return DB_LENGTH_MAP[val];
+  const s = String(val).toLowerCase();
+  if (s.includes("less than 1") || s.includes("under") || s.includes("<") || s.includes("1 year")) return "under_2_years";
+  if (s.includes("3 year") || s.includes("2_to_4") || s.includes("2 to 4") || s.includes("2 year")) return "2_to_4_years";
+  if (s.includes("5 year") || s.includes("4_to_6") || s.includes("4 to 6") || s.includes("4 year")) return "4_to_6_years";
+  if (s.includes("7 year") || s.includes("9 year") || s.includes("11") || s.includes("6_years") || s.includes("6 or more") || s.includes("6 year")) return "6_years_or_more";
+  return "under_2_years";
+}
+
+function toDbFrequencyOfUse(val) {
+  if (!val) return null;
+  if (DB_FREQUENCY_MAP[val]) return DB_FREQUENCY_MAP[val];
+  const s = String(val).toLowerCase();
+  if (s === "daily") return "daily";
+  if (s.includes("2 to 5") || s.includes("2_to_5") || s.includes("2x")) return "2_to_5_weekly";
+  if (s === "weekly") return "weekly";
+  if (s === "monthly") return "monthly";
+  if (s === "occasionally" || s.includes("occas")) return "occasionally";
+  return "daily";
+}
 const IDADIN_DRUGS = new Set([
   "Opium", "Morphine", "Heroin", "Hydrocodone", "Codeine", "Methadone", "Demerol",
   "Nalbuphine Hydrochloride (Nubain)", "Ketamine", "Cannabis (Marijuana)", "Brownies/Cake",
@@ -76,10 +142,11 @@ function shapeIntake(intake) {
 
 async function getPatient(connection, patientId, { lock = false } = {}) {
   const [[patient]] = await connection.query(
-    `SELECT id, patient_code, pwud_code, opd_number, case_type, full_name, photo_url,
-            admission_date, enrollment_status, municipality,
-            program_id, is_archived, assigned_case_manager_id
-     FROM patients WHERE id = ?${lock ? " FOR UPDATE" : ""}`,
+    `SELECT p.*, u.full_name AS case_manager_name, pr.name AS program_name
+     FROM patients p
+     LEFT JOIN users u ON u.id = p.assigned_case_manager_id
+     LEFT JOIN programs pr ON pr.id = p.program_id
+     WHERE p.id = ?${lock ? " FOR UPDATE" : ""}`,
     [patientId]
   );
   return patient || null;
@@ -87,9 +154,20 @@ async function getPatient(connection, patientId, { lock = false } = {}) {
 
 async function getReferral(connection, patientId) {
   const [[referral]] = await connection.query(
-    "SELECT id, status FROM patient_referrals WHERE patient_id = ?",
+    `SELECT r.*, rp.name AS recommended_program_name
+     FROM patient_referrals r
+     LEFT JOIN programs rp ON rp.id = r.recommended_program_id
+     WHERE r.patient_id = ?`,
     [patientId]
   );
+  if (referral) {
+    const [hospitalizations] = await connection.query(
+      `SELECT hospital_name AS hospitalName, date_admitted AS dateAdmitted
+       FROM patient_hospitalizations WHERE patient_id = ? ORDER BY date_admitted DESC`,
+      [patientId]
+    );
+    referral.hospitalizations = hospitalizations;
+  }
   return referral || null;
 }
 
@@ -128,7 +206,16 @@ export async function getPatientIntake(req, res) {
     const patient = await getPatient(pool, patientId);
     if (!patient) return res.status(404).json({ message: "Patient not found." });
     if (!canAccessPatient(req.user, patient)) return res.status(403).json({ message: "You do not have access to this patient." });
-    const [referral, intake] = await Promise.all([getReferral(pool, patientId), getIntake(pool, patientId)]);
+    const [referral, intake, [cmRows]] = await Promise.all([
+      getReferral(pool, patientId),
+      getIntake(pool, patientId),
+      pool.query("SELECT program_orientation_date FROM patient_case_management WHERE patient_id = ?", [patientId]),
+    ]);
+
+    const programOrientationDate = cmRows?.[0]?.program_orientation_date || null;
+    if (intake) {
+      intake.program_orientation_date = programOrientationDate;
+    }
 
     // Look up the appropriate certificate based on case type
     const isOPD = patient.case_type === "general_outpatient";
@@ -201,6 +288,8 @@ export async function saveDrugUseHistory(req, res) {
     }
 
     const nextWorkflowStep = isDraft ? 3 : 4;
+    const dbLengthOfUse = toDbLengthOfUse(lengthOfUse);
+    const dbFrequencyOfUse = toDbFrequencyOfUse(frequencyOfUse);
 
     await connection.query(
       `INSERT INTO patient_intakes
@@ -215,7 +304,7 @@ export async function saveDrugUseHistory(req, res) {
          province_of_drug_source = VALUES(province_of_drug_source), city_of_drug_source = VALUES(city_of_drug_source),
          estimated_daily_drug_expense = VALUES(estimated_daily_drug_expense),
          workflow_step = GREATEST(workflow_step, ?), updated_by = VALUES(updated_by)`,
-      [patientId, ageAtFirstUse || null, lastDrugUseDate || null, lengthOfUse, frequencyOfUse, primaryReason, drugSource, meansToSupport, areaOfDrugUse, provinceOfDrugSource, cityOfDrugSource, estimatedDailyDrugExpense, nextWorkflowStep, req.user.id, req.user.id, nextWorkflowStep]
+      [patientId, ageAtFirstUse || null, lastDrugUseDate || null, dbLengthOfUse, dbFrequencyOfUse, primaryReason, drugSource, meansToSupport, areaOfDrugUse, provinceOfDrugSource, cityOfDrugSource, estimatedDailyDrugExpense, nextWorkflowStep, req.user.id, req.user.id, nextWorkflowStep]
     );
 
     await connection.query("DELETE FROM patient_substances WHERE patient_id = ?", [patientId]);
@@ -245,8 +334,8 @@ export async function saveDrugUseHistory(req, res) {
     res.json({ message: "Drug use history saved.", intake: await getIntake(pool, patientId) });
   } catch (error) {
     await connection.rollback();
-    console.error(error);
-    res.status(500).json({ message: "Could not save the drug use history." });
+    console.error("Error in saveDrugUseHistory:", error);
+    res.status(500).json({ message: error.message || "Could not save the drug use history." });
   } finally {
     connection.release();
   }
@@ -413,25 +502,28 @@ export async function finalizeEnrollment(req, res) {
 
     if (isOPD) {
       // Generate OPD number (OPD-YY-sequence) if not already set
-      const [[{ opdCount }]] = await connection.query(
-        `SELECT COUNT(*) as opdCount FROM patients WHERE opd_number LIKE ?`,
-        [`OPD-${year}-%`]
+      const prefix = `OPD-${year}-`;
+      const [rows] = await connection.query(
+        `SELECT opd_number FROM patients WHERE opd_number LIKE ?`,
+        [`${prefix}%`]
       );
-      const opdSeq = String(opdCount + 1).padStart(3, "0");
-      const opdNumber = `OPD-${year}-${opdSeq}`;
+      let opdNumber = patient.opd_number;
+      if (!opdNumber) {
+        let maxSeq = 0;
+        for (const row of rows) {
+          const parts = (row.opd_number || "").split("-");
+          const num = parseInt(parts[parts.length - 1], 10);
+          if (!isNaN(num) && num > maxSeq) maxSeq = num;
+        }
+        opdNumber = `${prefix}${String(maxSeq + 1).padStart(3, "0")}`;
+      }
       await connection.query(
         "UPDATE patients SET admission_date = COALESCE(admission_date, ?), enrollment_status = 'active', current_status = 'active', opd_number = COALESCE(opd_number, ?) WHERE id = ?",
         [effectiveAdmissionDate, opdNumber, patientId]
       );
     } else {
-      // Generate PWUD code (OP-LGU-YY-sequence) if not already set
-      const lguCode = getLguCode(patient.municipality);
-      const [[{ count }]] = await connection.query(
-        `SELECT COUNT(*) as count FROM patients WHERE pwud_code LIKE ?`,
-        [`OP-${lguCode}-${year}-%`]
-      );
-      const sequence = String(count + 1).padStart(3, "0");
-      const pwudCode = `OP-${lguCode}-${year}-${sequence}`;
+      // Reuse existing PWUD code or generate new one
+      const pwudCode = patient.pwud_code || (await generatePwudCode(patient.municipality, connection));
       await connection.query(
         "UPDATE patients SET admission_date = ?, enrollment_status = 'active', current_status = 'active', assigned_case_manager_id = COALESCE(?, assigned_case_manager_id), pwud_code = COALESCE(pwud_code, ?) WHERE id = ?",
         [effectiveAdmissionDate, effectiveCmId, pwudCode, patientId]
@@ -488,24 +580,26 @@ export async function finalizeEnrollment(req, res) {
       [req.user.username, `Finalized enrollment for \"${patient.full_name}\" (${patient.patient_code})`, patientId]
     );
     await connection.commit();
+
     const noticeMsg = isOPD
       ? `OPD registration finalized: "${patient.full_name}" (${patient.patient_code})`
       : `Patient enrollment finalized: "${patient.full_name}" (${patient.patient_code})`;
-    await notifyRoles(["ict_admin", "him_staff", "admitting"], "patients", "patient_enrolled", noticeMsg);
+    await notifyRoles(["ict_admin", "him_staff", "admitting"], "patients", "patient_enrolled", noticeMsg).catch((err) => console.error("Notification error:", err));
 
-    if (patient.assigned_case_manager_id) {
+    const finalCmId = effectiveCmId || patient.assigned_case_manager_id;
+    if (finalCmId) {
       await notifyUser(
-        patient.assigned_case_manager_id,
+        finalCmId,
         "patients",
         "case_assigned",
         `New Intake: "${patient.full_name}" (${patient.pwud_code || patient.patient_code}) has been enrolled and added to your caseload.`
-      );
+      ).catch((err) => console.error("Notification error:", err));
     }
     res.json({ message: isOPD ? "OPD registration finalized and Outpatient Consultation Slip generated." : "Enrollment finalized and Certificate of Enrollment generated.", certificateId: certificate.id });
   } catch (error) {
-    await connection.rollback();
-    console.error(error);
-    res.status(500).json({ message: "Could not finalize the enrollment." });
+    await connection.rollback().catch(() => {});
+    console.error("Error in finalizeEnrollment:", error);
+    res.status(500).json({ message: error.message || "Could not finalize the enrollment." });
   } finally {
     connection.release();
   }

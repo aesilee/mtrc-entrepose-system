@@ -1,16 +1,25 @@
 import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
 
-// Renders a DOM element to a canvas, then slices it across as many A4 pages
-// as needed and triggers a real file download (via the browser's normal
-// save/download flow — the exact behavior depends on the user's browser
-// download settings, same as any other file download on the web).
+// Renders a single DOM element (e.g. Letterhead / Transmittal Sheet / Certificate)
+// to a high-resolution PDF and triggers browser download.
 export async function downloadElementAsPdf(element, filename) {
   if (!element) return;
 
-  const canvas = await html2canvas(element, { scale: 2, backgroundColor: "#ffffff", useCORS: true });
-  const imgData = canvas.toDataURL("image/png");
+  const canvas = await html2canvas(element, {
+    scale: 2,
+    backgroundColor: "#ffffff",
+    useCORS: true,
+    logging: false,
+    scrollX: 0,
+    scrollY: 0,
+    onclone: (clonedDoc, clonedEl) => {
+      clonedEl.style.transform = "none";
+      clonedEl.style.margin = "0 auto";
+    },
+  });
 
+  const imgData = canvas.toDataURL("image/png");
   const pdf = new jsPDF({ orientation: "portrait", unit: "pt", format: "a4" });
   const pageWidth = pdf.internal.pageSize.getWidth();
   const pageHeight = pdf.internal.pageSize.getHeight();
@@ -23,7 +32,7 @@ export async function downloadElementAsPdf(element, filename) {
   pdf.addImage(imgData, "PNG", 0, position, imgWidth, imgHeight);
   heightLeft -= pageHeight;
 
-  while (heightLeft > 0) {
+  while (heightLeft > 5) {
     position = heightLeft - imgHeight;
     pdf.addPage();
     pdf.addImage(imgData, "PNG", 0, position, imgWidth, imgHeight);

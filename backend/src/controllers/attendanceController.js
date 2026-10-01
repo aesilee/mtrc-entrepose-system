@@ -10,22 +10,56 @@ export async function recordAttendanceBulk(req, res) {
 
   const connection = await pool.getConnection();
   try {
-    const [[session]] = await connection.query(
-      `SELECT session_name, session_type, session_date FROM sessions WHERE id = ?`,
-      [sessionId]
-    );
+    const [sessCols] = await connection.query("SHOW COLUMNS FROM sessions LIKE 'topic_id'");
+    const hasSessTopic = sessCols.length > 0;
+
+    let sessSql = "SELECT session_name, session_type, session_date";
+    if (hasSessTopic) {
+      sessSql += ", topic_id, topic_name, facilitator_name";
+    }
+    sessSql += " FROM sessions WHERE id = ?";
+
+    const [[session]] = await connection.query(sessSql, [sessionId]);
     if (!session) {
       connection.release();
       return res.status(404).json({ message: "Session not found." });
     }
 
+    const SINGLE_PATIENT_TYPES = ["INDIVIDUAL_COUNSELING", "CONJOINT_FAMILY"];
+    if (SINGLE_PATIENT_TYPES.includes(session.session_type) && records.length > 1) {
+      connection.release();
+      return res.status(400).json({ message: "Individual counseling and conjoint/family sessions can only be recorded for 1 client at a time." });
+    }
+
+    const [attCols] = await connection.query("SHOW COLUMNS FROM attendance LIKE 'topic_id'");
+    const hasAttTopic = attCols.length > 0;
+
     await connection.beginTransaction();
     for (const r of records) {
-      await connection.query(
-        `INSERT INTO attendance (patient_id, session_id, session_date, session_type, status, notes, recorded_by)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`,
-        [r.patientId, sessionId, session.session_date, session.session_type || session.session_name, r.status, r.remarks || null, req.user.id]
-      );
+      if (hasAttTopic) {
+        await connection.query(
+          `INSERT INTO attendance (patient_id, session_id, session_date, session_type, topic_id, topic_name, facilitator_name, status, notes, recorded_by)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [
+            r.patientId,
+            sessionId,
+            session.session_date,
+            session.session_type || session.session_name,
+            session.topic_id || null,
+            session.topic_name || null,
+            session.facilitator_name || null,
+            r.status,
+            r.remarks || null,
+            req.user.id
+          ]
+        );
+      } else {
+        await connection.query(
+          `INSERT INTO attendance (patient_id, session_id, session_date, session_type, status, notes, recorded_by)
+           VALUES (?, ?, ?, ?, ?, ?, ?)`,
+          [r.patientId, sessionId, session.session_date, session.session_type || session.session_name, r.status, r.remarks || null, req.user.id]
+        );
+      }
     }
     await connection.commit();
 

@@ -9,6 +9,7 @@ router.use(verifyToken);
 router.get("/:id/eligibility", certController.checkEligibility);
 router.post("/:id/generate", certController.generateCertificate);
 router.get("/:id/history", certController.getCertificateHistory);
+router.get("/:id", certController.getCertificateById);
 
 // (Legacy routes preserved if needed for archive/restore mechanisms)
 import { archiveCertificate, restoreCertificate } from "../controllers/archiveController.js";

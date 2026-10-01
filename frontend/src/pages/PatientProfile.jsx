@@ -4,12 +4,14 @@ import AppShell from "../components/AppShell.jsx";
 import api from "../api/axios.js";
 import { useAuth } from "../context/AuthContext.jsx";
 import ProgressNoteModal from "../components/ProgressNoteModal.jsx";
+import RecordAttendanceModal from "../components/RecordAttendanceModal.jsx";
 import FollowUpModal from "../components/FollowUpModal.jsx";
 import CompleteFollowUpModal from "../components/CompleteFollowUpModal.jsx";
 import SharedEmptyState from "../components/EmptyState.jsx";
 import StatutoryCertificateModal from "../components/StatutoryCertificateModal.jsx";
 import DrugTestModal from "../components/DrugTestModal.jsx";
 import DischargeModal from "../components/DischargeModal.jsx";
+import TransmittalNoticeModal from "../components/TransmittalNoticeModal.jsx";
 import CardActionMenu from "../components/CardActionMenu.jsx";
 import ArchiveConfirmModal from "../components/ArchiveConfirmModal.jsx";
 import ConfirmModal from "../components/ConfirmModal.jsx";
@@ -107,6 +109,7 @@ export default function PatientProfile() {
   const [followUpModalOpen, setFollowUpModalOpen] = useState(false);
   const [drugTestModalOpen, setDrugTestModalOpen] = useState(false);
   const [dischargeModalOpen, setDischargeModalOpen] = useState(false);
+  const [attendanceModalOpen, setAttendanceModalOpen] = useState(false);
   
   const [milestones, setMilestones] = useState(null);
   const [milestoneHistory, setMilestoneHistory] = useState([]);
@@ -114,6 +117,7 @@ export default function PatientProfile() {
   const [drugTests, setDrugTests] = useState([]);
   
   const [statutoryCertModal, setStatutoryCertModal] = useState(null);
+  const [showTransmittalModal, setShowTransmittalModal] = useState(false);
 
   const [archivingCertificate, setArchivingCertificate] = useState(null);
   const [archivingPatient, setArchivingPatient] = useState(false);
@@ -581,7 +585,14 @@ export default function PatientProfile() {
             </div>
           ) : activeSection === "attendance" ? (
             <div>
-              <SectionHeader icon={NAV_ICONS.attendance} title="Attendance" />
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+                <SectionHeader icon={NAV_ICONS.attendance} title="Attendance" />
+                {canManageCase && (
+                  <button type="button" style={styles.generateBtn} onClick={() => setAttendanceModalOpen(true)}>
+                    + Record Attendance
+                  </button>
+                )}
+              </div>
               <div style={styles.statsRow}>
                 <StatChip label="Sessions completed" value={presentCount} />
                 <StatChip label="Missed sessions" value={missedCount} />
@@ -620,7 +631,10 @@ export default function PatientProfile() {
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
                       <h3 style={{ margin: 0, fontSize: 16, color: "#2D3748" }}>Progress Toward 43 Core Sessions</h3>
                       {canManageCase && (
-                        <button type="button" style={styles.generateBtn} onClick={() => setNoteModal({})}>+ Log Session & SOAP Note</button>
+                        <div style={{ display: "flex", gap: 8 }}>
+                          <button type="button" style={styles.generateBtn} onClick={() => setAttendanceModalOpen(true)}>+ Record CBT / Attendance</button>
+                          <button type="button" style={{ ...styles.generateBtn, background: "#4A5568" }} onClick={() => setNoteModal({})}>+ Log Progress Note</button>
+                        </div>
                       )}
                     </div>
                     
@@ -861,6 +875,13 @@ export default function PatientProfile() {
                 >
                   + Issue Certificate of Completion
                 </button>
+                <button
+                  type="button"
+                  style={{ ...styles.generateBtn, background: "#166534" }}
+                  onClick={() => setShowTransmittalModal(true)}
+                >
+                  📨 Notice of Admission (Transmittal)
+                </button>
               </div>
 
               {certificates.length === 0 ? (
@@ -930,6 +951,16 @@ export default function PatientProfile() {
           onSaved={() => { setNoteModal(null); loadAll(); }}
         />
       )}
+      {attendanceModalOpen && (
+        <RecordAttendanceModal
+          initialPatientId={id}
+          onClose={() => setAttendanceModalOpen(false)}
+          onSaved={() => {
+            setAttendanceModalOpen(false);
+            loadAll();
+          }}
+        />
+      )}
       {followUpModalOpen && (
         <FollowUpModal
           patientId={id}
@@ -996,6 +1027,16 @@ export default function PatientProfile() {
           admissionDate={patient?.admission_date}
           onClose={() => setDischargeModalOpen(false)} 
           onSaved={() => { setDischargeModalOpen(false); loadAll(); setToast("Patient formally discharged."); }} 
+        />
+      )}
+
+
+
+      {showTransmittalModal && (
+        <TransmittalNoticeModal
+          patientId={id}
+          initialPatient={patient}
+          onClose={() => setShowTransmittalModal(false)}
         />
       )}
 

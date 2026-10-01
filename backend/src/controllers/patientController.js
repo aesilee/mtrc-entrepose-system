@@ -49,34 +49,102 @@ const LGU_CODE_MAP = {
   "casiguran":     "CAS",
 };
 
-function getLguCode(municipality) {
+export function getLguCode(municipality) {
   if (!municipality) return "OTH";
   const key = String(municipality).trim().toLowerCase();
   return LGU_CODE_MAP[key] || "OTH";
 }
 
-async function generatePatientCode() {
+export async function generatePatientCode(connection = pool) {
   const year = new Date().getFullYear();
-  const [[{ count }]] = await pool.query(
-    `SELECT COUNT(*) as count FROM patients WHERE patient_code LIKE ?`,
-    [`MTRC-${year}-%`]
+  const prefix = `MTRC-${year}-`;
+  const [rows] = await connection.query(
+    `SELECT patient_code FROM patients WHERE patient_code LIKE ?`,
+    [`${prefix}%`]
   );
-  const sequence = String(count + 1).padStart(4, "0");
-  return `MTRC-${year}-${sequence}`;
+  let maxSeq = 0;
+  for (const row of rows) {
+    const parts = (row.patient_code || "").split("-");
+    const num = parseInt(parts[parts.length - 1], 10);
+    if (!isNaN(num) && num > maxSeq) {
+      maxSeq = num;
+    }
+  }
+
+  let candidateSeq = maxSeq + 1;
+  while (true) {
+    const candidateCode = `${prefix}${String(candidateSeq).padStart(4, "0")}`;
+    const [[existing]] = await connection.query(
+      `SELECT id FROM patients WHERE patient_code = ? LIMIT 1`,
+      [candidateCode]
+    );
+    if (!existing) return candidateCode;
+    candidateSeq++;
+  }
+}
+
+export async function generatePwudCode(municipality, connection = pool) {
+  const lguCode = getLguCode(municipality);
+  const year = new Date().getFullYear().toString().slice(-2);
+  const prefix = `OP-${lguCode}-${year}-`;
+  const [rows] = await connection.query(
+    `SELECT pwud_code FROM patients WHERE pwud_code LIKE ?`,
+    [`${prefix}%`]
+  );
+  let maxSeq = 0;
+  for (const row of rows) {
+    const parts = (row.pwud_code || "").split("-");
+    const num = parseInt(parts[parts.length - 1], 10);
+    if (!isNaN(num) && num > maxSeq) {
+      maxSeq = num;
+    }
+  }
+
+  let candidateSeq = maxSeq + 1;
+  while (true) {
+    const candidateCode = `${prefix}${String(candidateSeq).padStart(3, "0")}`;
+    const [[existing]] = await connection.query(
+      `SELECT id FROM patients WHERE pwud_code = ? LIMIT 1`,
+      [candidateCode]
+    );
+    if (!existing) return candidateCode;
+    candidateSeq++;
+  }
 }
 
 export async function listPatients(req, res) {
-  const clauses = ["p.is_archived = FALSE", "NOT EXISTS (SELECT 1 FROM discharges d WHERE d.patient_id = p.id)"];
+  const clauses = ["p.is_archived = FALSE"];
   const params = [];
 
-  if (req.user.role === "case_manager") {
+  const status = cleanText(req.query.status);
+  const forAttendance = req.query.forAttendance === "true" || req.query.scope === "attendance";
+
+  // Attendance roster must only include currently active, non-discharged clients
+  if (forAttendance) {
+    clauses.push("p.enrollment_status = 'active'");
+    clauses.push("NOT EXISTS (SELECT 1 FROM discharges d WHERE d.patient_id = p.id)");
+  } else if (status === "active" || (!status && req.query.includeDischarged !== "true")) {
+    // By default on main active list, omit discharged patients
+    clauses.push("NOT EXISTS (SELECT 1 FROM discharges d WHERE d.patient_id = p.id)");
+  }
+
+  // Case Manager scoping:
+  // For group attendance, any facilitator can take attendance for all active outpatients.
+  // For regular patient list, show assigned patients plus unassigned patients needing attention.
+  const caseManagerId = req.query.caseManagerId;
+  if (caseManagerId) {
     clauses.push("p.assigned_case_manager_id = ?");
+    params.push(caseManagerId);
+  } else if (req.user.role === "case_manager" && !forAttendance && req.query.showAll !== "true") {
+    clauses.push("(p.assigned_case_manager_id = ? OR p.assigned_case_manager_id IS NULL)");
     params.push(req.user.id);
   }
 
-  // Parse pagination params
+  // Parse pagination params (attendance rosters can load full active cohort up to 500)
+  const maxLimit = forAttendance ? 500 : 100;
+  const defaultLimit = forAttendance ? 300 : 10;
   const page = Math.max(1, parseInt(req.query.page, 10) || 1);
-  const limit = Math.max(1, Math.min(100, parseInt(req.query.limit, 10) || 10));
+  const limit = Math.max(1, Math.min(maxLimit, parseInt(req.query.limit, 10) || defaultLimit));
   const offset = (page - 1) * limit;
 
   // Search filter
@@ -87,8 +155,7 @@ export async function listPatients(req, res) {
     params.push(pattern, pattern, pattern);
   }
 
-  // Status filter
-  const status = cleanText(req.query.status);
+  // Status filter (when specified explicitly)
   if (status) {
     clauses.push("p.enrollment_status = ?");
     params.push(status);
@@ -99,13 +166,6 @@ export async function listPatients(req, res) {
   if (gender) {
     clauses.push("p.gender = ?");
     params.push(gender);
-  }
-
-  // Case Manager filter
-  const caseManagerId = req.query.caseManagerId;
-  if (caseManagerId) {
-    clauses.push("p.assigned_case_manager_id = ?");
-    params.push(caseManagerId);
   }
 
   // Municipality filter
@@ -511,8 +571,13 @@ export async function getPatientAttendance(req, res) {
     if (!access.allowed) return res.status(access.status).json({ message: access.message });
 
     const [rows] = await pool.query(
-      `SELECT id, session_date, session_type, status, notes
-       FROM attendance WHERE patient_id = ? ORDER BY session_date DESC`,
+      `SELECT a.id, a.session_date,
+              COALESCE(s.session_name, a.session_type) AS session_type,
+              a.status, a.notes
+       FROM attendance a
+       LEFT JOIN sessions s ON s.id = a.session_id
+       WHERE a.patient_id = ?
+       ORDER BY a.session_date DESC, a.id DESC`,
       [id]
     );
     res.json({ attendance: rows });
@@ -784,13 +849,7 @@ export async function createPatient(req, res) {
 
     let pwudCode = null;
     if (resolvedCaseType === "substance_use") {
-      const lguCode = getLguCode(normalized.municipality);
-      const year = new Date().getFullYear().toString().slice(-2);
-      const [[{ count: pwudCount }]] = await pool.query(
-        `SELECT COUNT(*) as count FROM patients WHERE pwud_code LIKE ?`,
-        [`OP-${lguCode}-${year}-%`]
-      );
-      pwudCode = `OP-${lguCode}-${year}-${String(pwudCount + 1).padStart(3, "0")}`;
+      pwudCode = await generatePwudCode(normalized.municipality);
     }
 
     const record = {
@@ -856,11 +915,21 @@ export async function createPatient(req, res) {
       registered_by: req.user.id,
     };
 
-    const columns = Object.keys(record);
+    const [tableCols] = await pool.query("SHOW COLUMNS FROM patients");
+    const existingColNames = new Set(tableCols.map((c) => c.Field));
+
+    const finalRecord = {};
+    for (const [col, val] of Object.entries(record)) {
+      if (existingColNames.has(col)) {
+        finalRecord[col] = val;
+      }
+    }
+
+    const columns = Object.keys(finalRecord);
     const placeholders = columns.map(() => "?").join(", ");
     const [result] = await pool.query(
       `INSERT INTO patients (${columns.join(", ")}) VALUES (${placeholders})`,
-      Object.values(record)
+      Object.values(finalRecord)
     );
 
     await pool.query(
@@ -881,10 +950,13 @@ export async function createPatient(req, res) {
 
     res.status(201).json({ id: result.insertId, patientCode, pwudCode, message: "Patient registered." });
   } catch (err) {
-    console.error(err);
+    console.error("Error in createPatient:", err);
     if (err.code === "ER_BAD_FIELD_ERROR") {
       return res.status(500).json({ message: "The patient-registration database migration has not been applied." });
     }
-    res.status(500).json({ message: "Could not register the patient." });
+    if (err.code === "ER_DUP_ENTRY") {
+      return res.status(409).json({ message: "A duplicate patient record or code was detected. Please try saving again." });
+    }
+    res.status(500).json({ message: err.message || "Could not register the patient." });
   }
 }

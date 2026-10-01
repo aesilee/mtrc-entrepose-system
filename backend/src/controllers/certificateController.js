@@ -169,3 +169,43 @@ export async function getCertificateHistory(req, res) {
     res.status(500).json({ message: "Failed to fetch certificate history." });
   }
 }
+
+// 4. Certificate Record By ID (for viewing / printing enrollment or completion certificates)
+export async function getCertificateById(req, res) {
+  const certId = req.params.id;
+  try {
+    const [[cert]] = await pool.query(
+      `SELECT c.*,
+              p.full_name AS patient_fallback_name,
+              p.patient_code AS patient_fallback_code,
+              p.admission_date AS patient_fallback_admission_date,
+              pr.name AS program_fallback_name,
+              u.full_name AS issuer_name
+       FROM certificates c
+       LEFT JOIN patients p ON p.id = c.patient_id
+       LEFT JOIN programs pr ON pr.id = p.program_id
+       LEFT JOIN users u ON u.id = c.issued_by
+       WHERE c.id = ?`,
+      [certId]
+    );
+
+    if (!cert) return res.status(404).json({ message: "Certificate not found." });
+
+    res.json({
+      id: cert.id,
+      patientId: cert.patient_id,
+      certificateType: cert.certificate_type,
+      patientName: cert.patient_name || cert.patient_fallback_name || "Patient",
+      patientCode: cert.patient_code || cert.patient_fallback_code || "—",
+      program: cert.program_name || cert.program_fallback_name || "Outpatient Rehabilitation (ENTREPOSE)",
+      admissionDate: cert.admission_date || cert.patient_fallback_admission_date,
+      completionDate: cert.completion_date,
+      remarks: cert.remarks,
+      preparedBy: cert.prepared_by_name || cert.issuer_name || "Center Staff",
+      issuedAt: cert.issued_at,
+    });
+  } catch (error) {
+    console.error("Certificate fetch error:", error);
+    res.status(500).json({ message: "Failed to fetch certificate." });
+  }
+}

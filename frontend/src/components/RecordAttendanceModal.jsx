@@ -11,7 +11,7 @@ const SESSION_TYPE_OPTIONS = [
   { value: "CONJOINT_FAMILY",       label: "Conjoint / Family Session" },
 ];
 
-export default function RecordAttendanceModal({ onClose, onSaved }) {
+export default function RecordAttendanceModal({ initialPatientId, onClose, onSaved }) {
   const [step, setStep] = useState(1);
   const [caseManagers, setCaseManagers] = useState([]);
   const [patients, setPatients] = useState([]);
@@ -19,21 +19,62 @@ export default function RecordAttendanceModal({ onClose, onSaved }) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
+  const [topics, setTopics] = useState([]);
   const [session, setSession] = useState({
-    sessionType: "", caseManagerId: "",
-    sessionDate: new Date().toISOString().slice(0, 10), sessionTime: "",
+    sessionType: "",
+    topicId: "",
+    topicName: "",
+    facilitatorName: "",
+    caseManagerId: "",
+    sessionDate: new Date().toISOString().slice(0, 10),
+    sessionTime: "",
   });
-  const [selections, setSelections] = useState({});
+  const [selections, setSelections] = useState(() => (
+    initialPatientId ? { [initialPatientId]: { checked: true, status: "present" } } : {}
+  ));
   const [remarks, setRemarks] = useState("");
+
+  useEffect(() => {
+    if (initialPatientId) {
+      setSelections((prev) => ({
+        ...prev,
+        [initialPatientId]: { checked: true, status: "present" },
+      }));
+    }
+  }, [initialPatientId]);
 
   useEffect(() => {
     api.get("/users/case-managers")
       .then(({ data }) => setCaseManagers(data.caseManagers || []))
       .catch((err) => console.error("Error loading case managers:", err));
-    api.get("/patients")
+    api.get("/patients?forAttendance=true&limit=300")
       .then(({ data }) => setPatients(Array.isArray(data) ? data : (data?.patients || [])))
       .catch((err) => console.error("Error loading patients:", err));
+    api.get("/sessions/topics")
+      .then(({ data }) => setTopics(data.topics || []))
+      .catch((err) => console.error("Error loading session topics:", err));
   }, []);
+
+  const isSinglePatientSession = session.sessionType === "INDIVIDUAL_COUNSELING" || session.sessionType === "CONJOINT_FAMILY";
+
+  const availableTopics = (topics || []).filter(
+    (t) => !session.sessionType || t.modality_type === session.sessionType
+  );
+
+  function handleSessionTypeChange(newType) {
+    const isSingle = newType === "INDIVIDUAL_COUNSELING" || newType === "CONJOINT_FAMILY";
+    setSession((prev) => ({ ...prev, sessionType: newType, topicId: "", topicName: "" }));
+    if (isSingle) {
+      setSelections((prev) => {
+        const checkedEntries = Object.entries(prev).filter(([, v]) => v.checked);
+        if (checkedEntries.length > 1) {
+          const [firstId, firstVal] = checkedEntries[0];
+          return { [firstId]: firstVal };
+        }
+        return prev;
+      });
+    }
+  }
 
   function toggleStatus(patientId, status) {
     setSelections((prev) => ({ ...prev, [patientId]: { checked: true, status } }));
@@ -42,8 +83,12 @@ export default function RecordAttendanceModal({ onClose, onSaved }) {
   function toggleChecked(patientId) {
     setSelections((prev) => {
       if (prev[patientId]?.checked) {
+        if (isSinglePatientSession) return {};
         const { [patientId]: _, ...rest } = prev;
         return rest;
+      }
+      if (isSinglePatientSession) {
+        return { [patientId]: { checked: true, status: "present" } };
       }
       return { ...prev, [patientId]: { checked: true, status: "present" } };
     });
@@ -106,7 +151,7 @@ export default function RecordAttendanceModal({ onClose, onSaved }) {
                 <select
                   style={styles.input}
                   value={session.sessionType}
-                  onChange={(e) => setSession({ ...session, sessionType: e.target.value })}
+                  onChange={(e) => handleSessionTypeChange(e.target.value)}
                   required
                 >
                   <option value="">— Select a session type —</option>
@@ -114,6 +159,42 @@ export default function RecordAttendanceModal({ onClose, onSaved }) {
                     <option key={o.value} value={o.value}>{o.label}</option>
                   ))}
                 </select>
+              </label>
+
+              {session.sessionType && availableTopics.length > 0 && (
+                <label style={{ ...styles.label, gridColumn: "1 / -1" }}>
+                  Session Topic (Annex 1 Attendance Register)
+                  <select
+                    style={styles.input}
+                    value={session.topicId || ""}
+                    onChange={(e) => {
+                      const t = availableTopics.find((item) => String(item.id) === e.target.value);
+                      setSession({
+                        ...session,
+                        topicId: e.target.value || null,
+                        topicName: t ? t.title_tagalog : "",
+                      });
+                    }}
+                  >
+                    <option value="">-- Select Specific Topic (or General Session) --</option>
+                    {availableTopics.map((t) => (
+                      <option key={t.id} value={t.id}>
+                        {t.title_tagalog}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              )}
+
+              <label style={styles.label}>
+                Facilitator / TRC Staff
+                <input
+                  type="text"
+                  style={styles.input}
+                  placeholder="Facilitator name"
+                  value={session.facilitatorName || ""}
+                  onChange={(e) => setSession({ ...session, facilitatorName: e.target.value })}
+                />
               </label>
               <label style={styles.label}>
                 Case manager
@@ -135,6 +216,15 @@ export default function RecordAttendanceModal({ onClose, onSaved }) {
 
           {step === 2 && (
             <div>
+              {isSinglePatientSession ? (
+                <div style={{ background: "#EBF8FF", border: "1px solid #BEE3F8", color: "#2B6CB0", padding: "8px 12px", borderRadius: "var(--radius-sm, 6px)", fontSize: 13, marginBottom: 12, fontWeight: 600, display: "flex", alignItems: "center", gap: 8 }}>
+                  <span>👤</span> <span><strong>1-on-1 Session:</strong> Please select exactly 1 patient for this session.</span>
+                </div>
+              ) : (
+                <div style={{ background: "#F0FFF4", border: "1px solid #C6F6D5", color: "#276749", padding: "8px 12px", borderRadius: "var(--radius-sm, 6px)", fontSize: 13, marginBottom: 12, fontWeight: 600, display: "flex", alignItems: "center", gap: 8 }}>
+                  <span>👥</span> <span><strong>Group Session:</strong> Select all participating clients in this cohort.</span>
+                </div>
+              )}
               <input
                 style={{ ...styles.input, marginBottom: 12 }}
                 placeholder="Search patient…"
@@ -147,8 +237,13 @@ export default function RecordAttendanceModal({ onClose, onSaved }) {
                   return (
                     <div key={p.id} style={styles.checklistRow}>
                       <label style={styles.checklistLabel}>
-                        <input type="checkbox" checked={!!sel?.checked} onChange={() => toggleChecked(p.id)} />
-                        {p.full_name} <span style={styles.mutedText}>({p.patient_code})</span>
+                        <input
+                          type={isSinglePatientSession ? "radio" : "checkbox"}
+                          name={isSinglePatientSession ? "attendancePatientRadio" : undefined}
+                          checked={!!sel?.checked}
+                          onChange={() => toggleChecked(p.id)}
+                        />
+                        {p.full_name} <span style={styles.mutedText}>({p.patient_code}{p.case_manager_name ? ` · CM: ${p.case_manager_name}` : ""})</span>
                       </label>
                       {sel?.checked && (
                         <select style={styles.statusSelect} value={sel.status} onChange={(e) => toggleStatus(p.id, e.target.value)}>
@@ -159,7 +254,11 @@ export default function RecordAttendanceModal({ onClose, onSaved }) {
                   );
                 })}
               </div>
-              <div style={styles.mutedText}>{selectedCount} patient(s) selected</div>
+              <div style={styles.mutedText}>
+                {isSinglePatientSession
+                  ? (selectedCount === 1 ? "1 of 1 patient selected (1-on-1 limit reached)" : "0 of 1 patient selected")
+                  : `${selectedCount} patient(s) selected`}
+              </div>
             </div>
           )}
 
@@ -175,7 +274,12 @@ export default function RecordAttendanceModal({ onClose, onSaved }) {
           {step > 1 && <button type="button" style={styles.secondaryBtn} onClick={() => setStep(step - 1)}>Back</button>}
           <div style={{ flex: 1 }} />
           {step < 3 ? (
-            <button type="button" style={styles.primaryBtn} onClick={() => setStep(step + 1)} disabled={(step === 1 && !canProceedStep1) || (step === 2 && selectedCount === 0)}>
+            <button
+              type="button"
+              style={styles.primaryBtn}
+              onClick={() => setStep(step + 1)}
+              disabled={(step === 1 && !canProceedStep1) || (step === 2 && (selectedCount === 0 || (isSinglePatientSession && selectedCount !== 1)))}
+            >
               Next
             </button>
           ) : (

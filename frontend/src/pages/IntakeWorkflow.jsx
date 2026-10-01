@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import AppShell from "../components/AppShell.jsx";
 import CertificateViewModal from "../components/CertificateViewModal.jsx";
+import TransmittalNoticeModal from "../components/TransmittalNoticeModal.jsx";
 import PatientWorkflowProgress from "../components/PatientWorkflowProgress.jsx";
 import api from "../api/axios.js";
 
@@ -77,6 +78,25 @@ const EMPTY_FORM = {
   assignedCaseManagerId: "",
 };
 
+function mapLengthForUi(val) {
+  if (!val) return "";
+  if (val === "under_2_years") return "Less than 1 year";
+  if (val === "2_to_4_years") return "3 Years – 4 Years & 11 Months";
+  if (val === "4_to_6_years") return "5 Years – 6 Years & 11 Months";
+  if (val === "6_years_or_more") return "7 Years – 8 Years & 11 Months";
+  return val;
+}
+
+function mapFrequencyForUi(val) {
+  if (!val) return "";
+  if (val === "daily") return "Daily";
+  if (val === "2_to_5_weekly") return "2 to 5 times a week";
+  if (val === "weekly") return "Weekly";
+  if (val === "monthly") return "Monthly";
+  if (val === "occasionally") return "Occasionally";
+  return val;
+}
+
 function toForm(intake, patientData) {
   if (!intake) {
     return {
@@ -95,8 +115,8 @@ function toForm(intake, patientData) {
   return {
     ageAtFirstUse: intake.age_at_first_drug_use ?? "",
     lastDrugUseDate: intake.last_drug_use_date ? String(intake.last_drug_use_date).slice(0, 10) : "",
-    lengthOfUse: intake.length_of_use || "",
-    frequencyOfUse: intake.frequency_of_use || "",
+    lengthOfUse: mapLengthForUi(intake.length_of_use),
+    frequencyOfUse: mapFrequencyForUi(intake.frequency_of_use),
     primaryReason: intake.primary_reason_for_using || "",
     drugSource: intake.drug_source || "",
     provinceOfDrugSource: intake.province_of_drug_source || "",
@@ -122,7 +142,7 @@ function toForm(intake, patientData) {
     pledgeOfCommitmentSigned: Boolean(intake.pledge_of_commitment_signed),
     dataPrivacyConsentSigned: Boolean(intake.data_privacy_consent_signed),
     generalMedicalConsentSigned: Boolean(intake.general_medical_consent_signed),
-    programOrientationDate: "",
+    programOrientationDate: intake.program_orientation_date ? String(intake.program_orientation_date).slice(0, 10) : "",
     admissionDate: patientData?.admission_date ? String(patientData.admission_date).slice(0, 10) : TODAY,
     assignedCaseManagerId: patientData?.assigned_case_manager_id || "",
   };
@@ -143,6 +163,7 @@ export default function IntakeWorkflow() {
   const [message, setMessage] = useState("");
   const [certificateId, setCertificateId] = useState(null);
   const [certificateAction, setCertificateAction] = useState(null);
+  const [showTransmittalModal, setShowTransmittalModal] = useState(false);
   const [caseManagers, setCaseManagers] = useState([]);
 
   useEffect(() => {
@@ -162,6 +183,9 @@ export default function IntakeWorkflow() {
         setIntake(data.intake);
         setForm(toForm(data.intake, data.patient));
         setCertificateId(data.enrollmentCertificateId || null);
+        if (data.intake?.workflow_step >= 6) {
+          setError("");
+        }
       })
       .catch((requestError) => active && setError(requestError.response?.data?.message || "Could not load the intake workflow."))
       .finally(() => active && setLoading(false));
@@ -450,102 +474,187 @@ export default function IntakeWorkflow() {
           </form>
         ) : (
           <>
-            {finalized && (
-              <section style={styles.completeCard}>
-                <div style={styles.completeIcon}>✓</div>
-                <h2 style={styles.completeTitle}>{isOPD ? "OPD Registration finalized" : "Enrollment finalized"}</h2>
-                <p style={styles.completeText}>
-                  {isOPD
-                    ? "The patient record is active and the Outpatient Consultation Slip is ready to print."
-                    : "The patient profile is active and the Certificate of Enrollment is ready to print."}
-                </p>
-                <div style={styles.actions}>
-                  <button type="button" style={styles.secondaryButton} onClick={() => navigate(`/patients/${id}`)}>View Patient Profile</button>
-                  {certificateId && (
-                    <button type="button" style={styles.primaryButton} onClick={() => setCertificateAction("print")}>
-                      {isOPD ? "Print Outpatient Consultation Slip" : "Print Certificate of Enrollment"}
+            {finalized ? (
+              <>
+                <section style={styles.completeCard}>
+                  <div style={styles.completeIcon}>✓</div>
+                  <h2 style={styles.completeTitle}>{isOPD ? "OPD Registration finalized" : "Enrollment finalized"}</h2>
+                  <p style={styles.completeText}>
+                    {isOPD
+                      ? "The patient record is active and the Outpatient Consultation Slip is ready to print."
+                      : "The patient profile is active and the Certificate of Enrollment is ready to print."}
+                  </p>
+                  <div style={styles.actions}>
+                    <button type="button" style={styles.secondaryButton} onClick={() => navigate(`/patients/${id}`)}>
+                      View Patient Profile
                     </button>
-                  )}
-                  <button type="button" style={styles.secondaryButton} onClick={() => alert("Transmittal notice template generation is under development.")}>
-                    Print Transmittal Notice
+                    {certificateId && (
+                      <button type="button" style={styles.primaryButton} onClick={() => setCertificateAction("print")}>
+                        {isOPD ? "Print Outpatient Consultation Slip" : "Print Certificate of Enrollment"}
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      style={styles.secondaryButton}
+                      onClick={() => setShowTransmittalModal(true)}
+                    >
+                      Print Transmittal Notice
+                    </button>
+                  </div>
+                </section>
+
+                {/* Confirmed Admission & Caseload Activation Summary */}
+                <section style={styles.section}>
+                  <div style={styles.sectionTitle}>Confirmed Admission & Caseload Details</div>
+                  <div style={styles.sectionDescription}>
+                    This client has completed the registration and enrollment process. The patient is active and tracked on the Case Manager's caseload and the Outpatient Tracker.
+                  </div>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 16, marginTop: 12 }}>
+                    <div style={styles.summaryItem}>
+                      <span style={styles.summaryLabel}>Official Admission Date</span>
+                      <span style={styles.summaryVal}>
+                        {form.admissionDate ? new Date(form.admissionDate).toLocaleDateString("en-PH", { year: "numeric", month: "long", day: "numeric" }) : "—"}
+                      </span>
+                    </div>
+                    {!isOPD && (
+                      <div style={styles.summaryItem}>
+                        <span style={styles.summaryLabel}>Assigned Case Manager</span>
+                        <span style={styles.summaryVal}>
+                          {caseManagers.find((cm) => String(cm.id) === String(form.assignedCaseManagerId || patient?.assigned_case_manager_id))?.full_name || patient?.case_manager_name || "Assigned"}
+                        </span>
+                      </div>
+                    )}
+                    <div style={styles.summaryItem}>
+                      <span style={styles.summaryLabel}>Program Orientation Date</span>
+                      <span style={styles.summaryVal}>
+                        {form.programOrientationDate ? new Date(form.programOrientationDate).toLocaleDateString("en-PH", { year: "numeric", month: "long", day: "numeric" }) : "Scheduled upon admission"}
+                      </span>
+                    </div>
+                    <div style={styles.summaryItem}>
+                      <span style={styles.summaryLabel}>Program Classification</span>
+                      <span style={styles.summaryVal}>
+                        {patient?.program_name || (isOPD ? "General Outpatient Consultation" : "Outpatient Rehabilitation (ENTREPOSE)")}
+                      </span>
+                    </div>
+                  </div>
+                </section>
+
+                <section style={styles.section}>
+                  <div style={styles.sectionTitle}>Signed Documents Verified</div>
+                  <div style={styles.sectionDescription}>All statutory consents and legal agreements have been signed and verified in the patient file.</div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 10 }}>
+                    {isOPD ? (
+                      <>
+                        <div style={styles.verifiedConsent}>✓ General Medical / Psychiatric Consent signed & verified</div>
+                        <div style={styles.verifiedConsent}>✓ Data Privacy Consent signed & verified</div>
+                      </>
+                    ) : (
+                      <>
+                        <div style={styles.verifiedConsent}>✓ Service Agreement signed & verified</div>
+                        <div style={styles.verifiedConsent}>✓ Pledge of Commitment signed & verified</div>
+                        <div style={styles.verifiedConsent}>✓ Data Privacy Consent signed & verified</div>
+                      </>
+                    )}
+                  </div>
+                </section>
+
+                <div style={styles.actions}>
+                  <button type="button" style={styles.secondaryButton} onClick={() => navigate(`/patients/${id}/intake/clinical-triage`)}>
+                    Back to Clinical Triage
+                  </button>
+                  <button type="button" style={styles.primaryButton} onClick={() => navigate(`/patients/${id}`)}>
+                    Go to Patient Profile →
                   </button>
                 </div>
-              </section>
-            )}
-            <form onSubmit={finalize} style={styles.form}>
-              <section style={styles.section}>
-                <div style={styles.sectionTitle}>Admission & Caseload Activation</div>
-                <div style={styles.sectionDescription}>
-                  Confirm the official admission date and assigned Case Manager. Once finalized, this client will become an active enrollee and appear on the Case Manager's caseload and the OP CM Tracker.
-                </div>
-                <div className="registration-grid" style={styles.grid}>
-                  <Field label="Official Admission / Enrollment Date" required>
-                    <input
-                      type="date"
-                      max={TODAY}
-                      style={styles.input}
-                      value={form.admissionDate || TODAY}
-                      onChange={(event) => update("admissionDate", event.target.value)}
-                      required
-                    />
-                  </Field>
-                  {!isOPD && (
-                    <Field label="Assigned Case Manager" required>
-                      <select
+              </>
+            ) : (
+              <form onSubmit={finalize} style={styles.form}>
+                <section style={styles.section}>
+                  <div style={styles.sectionTitle}>Admission & Caseload Activation</div>
+                  <div style={styles.sectionDescription}>
+                    Confirm the official admission date and assigned Case Manager. Once finalized, this client will become an active enrollee and appear on the Case Manager's caseload and the OP CM Tracker.
+                  </div>
+                  <div className="registration-grid" style={styles.grid}>
+                    <Field label="Official Admission / Enrollment Date" required>
+                      <input
+                        type="date"
+                        max={TODAY}
                         style={styles.input}
-                        value={form.assignedCaseManagerId || patient?.assigned_case_manager_id || ""}
-                        onChange={(event) => update("assignedCaseManagerId", event.target.value)}
+                        value={form.admissionDate || TODAY}
+                        onChange={(event) => update("admissionDate", event.target.value)}
                         required
-                      >
-                        <option value="">Select Case Manager</option>
-                        {caseManagers.map((cm) => (
-                          <option key={cm.id} value={cm.id}>{cm.full_name}</option>
-                        ))}
-                      </select>
+                      />
                     </Field>
-                  )}
-                  <Field label="Scheduled Program Orientation (PO) Date" required>
-                    <input
-                      type="date"
-                      min={TODAY}
-                      style={styles.input}
-                      value={form.programOrientationDate}
-                      onChange={(event) => update("programOrientationDate", event.target.value)}
-                      required
-                    />
-                  </Field>
-                </div>
-              </section>
+                    {!isOPD && (
+                      <Field label="Assigned Case Manager" required>
+                        <select
+                          style={styles.input}
+                          value={form.assignedCaseManagerId || patient?.assigned_case_manager_id || ""}
+                          onChange={(event) => update("assignedCaseManagerId", event.target.value)}
+                          required
+                        >
+                          <option value="">Select Case Manager</option>
+                          {caseManagers.map((cm) => (
+                            <option key={cm.id} value={cm.id}>{cm.full_name}</option>
+                          ))}
+                        </select>
+                      </Field>
+                    )}
+                    <Field label="Scheduled Program Orientation (PO) Date" required>
+                      <input
+                        type="date"
+                        min={TODAY}
+                        style={styles.input}
+                        value={form.programOrientationDate}
+                        onChange={(event) => update("programOrientationDate", event.target.value)}
+                        required
+                      />
+                    </Field>
+                  </div>
+                </section>
 
-              <section style={styles.section}>
-                <div style={styles.sectionTitle}>Signed Documents</div>
-                <div style={styles.sectionDescription}>Confirm each signed document is present in the patient's admission record.</div>
-                {isOPD ? (
-                  <>
-                    <ConsentCheck id="general-medical-consent" label="General Medical / Psychiatric Consent signed" checked={form.generalMedicalConsentSigned} onChange={(checked) => update("generalMedicalConsentSigned", checked)} />
-                    <ConsentCheck id="privacy-consent" label="Data Privacy Consent signed" checked={form.dataPrivacyConsentSigned} onChange={(checked) => update("dataPrivacyConsentSigned", checked)} />
-                  </>
-                ) : (
-                  <>
-                    <ConsentCheck id="service-agreement" label="Service Agreement signed" checked={form.serviceAgreementSigned} onChange={(checked) => update("serviceAgreementSigned", checked)} />
-                    <ConsentCheck id="pledge-commitment" label="Pledge of Commitment signed" checked={form.pledgeOfCommitmentSigned} onChange={(checked) => update("pledgeOfCommitmentSigned", checked)} />
-                    <ConsentCheck id="privacy-consent" label="Data Privacy Consent signed" checked={form.dataPrivacyConsentSigned} onChange={(checked) => update("dataPrivacyConsentSigned", checked)} />
-                  </>
-                )}
-              </section>
-              <div style={styles.finalNotice}>
-                {isOPD
-                  ? "Finalizing activates the patient record and creates a printable Outpatient Consultation Slip."
-                  : "Finalizing activates the patient record and creates a printable Certificate of Enrollment."}
-              </div>
-              <Actions back={() => navigate(`/patients/${id}/intake/clinical-triage`)} saving={saving} label={finalized ? "Save Consents" : isOPD ? "Finalize OPD Registration" : "Finalize & Enroll"} />
-            </form>
+                <section style={styles.section}>
+                  <div style={styles.sectionTitle}>Signed Documents</div>
+                  <div style={styles.sectionDescription}>Confirm each signed document is present in the patient's admission record.</div>
+                  {isOPD ? (
+                    <>
+                      <ConsentCheck id="general-medical-consent" label="General Medical / Psychiatric Consent signed" checked={form.generalMedicalConsentSigned} onChange={(checked) => update("generalMedicalConsentSigned", checked)} />
+                      <ConsentCheck id="privacy-consent" label="Data Privacy Consent signed" checked={form.dataPrivacyConsentSigned} onChange={(checked) => update("dataPrivacyConsentSigned", checked)} />
+                    </>
+                  ) : (
+                    <>
+                      <ConsentCheck id="service-agreement" label="Service Agreement signed" checked={form.serviceAgreementSigned} onChange={(checked) => update("serviceAgreementSigned", checked)} />
+                      <ConsentCheck id="pledge-commitment" label="Pledge of Commitment signed" checked={form.pledgeOfCommitmentSigned} onChange={(checked) => update("pledgeOfCommitmentSigned", checked)} />
+                      <ConsentCheck id="privacy-consent" label="Data Privacy Consent signed" checked={form.dataPrivacyConsentSigned} onChange={(checked) => update("dataPrivacyConsentSigned", checked)} />
+                    </>
+                  )}
+                </section>
+                <div style={styles.finalNotice}>
+                  {isOPD
+                    ? "Finalizing activates the patient record and creates a printable Outpatient Consultation Slip."
+                    : "Finalizing activates the patient record and creates a printable Certificate of Enrollment."}
+                </div>
+                <Actions back={() => navigate(`/patients/${id}/intake/clinical-triage`)} saving={saving} label={isOPD ? "Finalize OPD Registration" : "Finalize & Enroll"} />
+              </form>
+            )}
           </>
         )}
       </div>
 
       {certificateId && certificateAction && (
         <CertificateViewModal certificateId={certificateId} autoAction={certificateAction} onClose={() => setCertificateAction(null)} />
+      )}
+
+
+
+      {showTransmittalModal && (
+        <TransmittalNoticeModal
+          patientId={id}
+          initialPatient={patient}
+          initialReferral={referral}
+          initialIntake={intake}
+          onClose={() => setShowTransmittalModal(false)}
+        />
       )}
     </AppShell>
   );
@@ -870,4 +979,8 @@ const styles = {
   tdAction: { width: 40, padding: "8px 0", borderBottom: "1px solid var(--color-border)", textAlign: "center" },
   removeBtn: { border: "none", background: "none", color: "var(--color-danger)", fontSize: 20, cursor: "pointer", padding: 0 },
   addBtn: { border: "1px dashed var(--color-primary)", background: "var(--color-primary-tint)", color: "var(--color-primary-dark)", padding: "8px 14px", borderRadius: "var(--radius-sm)", fontSize: 13, fontWeight: 700, cursor: "pointer" },
+  summaryItem: { display: "flex", flexDirection: "column", gap: 4, padding: "12px 14px", background: "var(--color-background, #f8fafc)", borderRadius: "var(--radius-sm, 6px)", border: "1px solid var(--color-border, #e2e8f0)" },
+  summaryLabel: { fontSize: 11, fontWeight: 700, textTransform: "uppercase", color: "var(--color-text-muted, #64748b)", letterSpacing: "0.5px" },
+  summaryVal: { fontSize: 13.5, fontWeight: 700, color: "var(--color-text, #0f172a)" },
+  verifiedConsent: { display: "flex", alignItems: "center", gap: 8, padding: "10px 14px", background: "#f0fdf4", color: "#166534", borderRadius: "var(--radius-sm, 6px)", border: "1px solid #bbf7d0", fontSize: 13, fontWeight: 600 },
 };

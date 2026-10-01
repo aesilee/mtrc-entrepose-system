@@ -64,6 +64,58 @@ export async function getCaseManagerStats(req, res) {
       [cmId]
     );
 
+    // Caseload Adherence Rate Calculation
+    const [[attStat]] = await pool.query(
+      `SELECT 
+         COALESCE(SUM(CASE WHEN a.status = 'present' THEN 1 ELSE 0 END), 0) AS presentCount,
+         COUNT(*) AS totalCount
+       FROM attendance a
+       JOIN patients p ON p.id = a.patient_id
+       WHERE p.assigned_case_manager_id = ?
+         AND p.is_archived = FALSE
+         AND p.enrollment_status = 'active'`,
+      [cmId]
+    );
+    const totalAttCount = Number(attStat?.totalCount || 0);
+    const presentAttCount = Number(attStat?.presentCount || 0);
+    const attendanceRate = totalAttCount > 0 ? Math.round((presentAttCount / totalAttCount) * 100) : 100;
+
+    // 43 Core Sessions Cohort Curriculum Progression
+    const [coreRows] = await pool.query(
+      `SELECT 
+         p.id,
+         (SELECT COUNT(*) FROM attendance a 
+          WHERE a.patient_id = p.id 
+            AND a.status = 'present' 
+            AND a.session_type IN ('CBT_GROUP', 'PSYCHO_EDUCATION')) AS coreSessions
+       FROM patients p
+       WHERE p.assigned_case_manager_id = ?
+         AND p.is_archived = FALSE
+         AND p.enrollment_status = 'active'`,
+      [cmId]
+    );
+
+    let phase1Count = 0;
+    let phase2Count = 0;
+    let phase3Count = 0;
+    let pdcReadyCount = 0;
+
+    for (const r of coreRows) {
+      const s = Number(r.coreSessions || 0);
+      if (s >= 43) pdcReadyCount++;
+      else if (s >= 29) phase3Count++;
+      else if (s >= 15) phase2Count++;
+      else phase1Count++;
+    }
+
+    const curriculumPhases = {
+      phase1: phase1Count,
+      phase2: phase2Count,
+      phase3: phase3Count,
+      pdcReady: pdcReadyCount,
+      totalActive: coreRows.length,
+    };
+
     const [patientsNeedingAttention] = await pool.query(
       `SELECT patient_id, full_name, photo_url, issue, issue_date FROM (
          SELECT p.id AS patient_id, p.full_name, p.photo_url,
@@ -96,10 +148,20 @@ export async function getCaseManagerStats(req, res) {
              WHERE pn2.patient_id = p.id
              ORDER BY pn2.created_at DESC LIMIT 1
            )
+         UNION
+         SELECT p.id, p.full_name, p.photo_url,
+                'Initial Court Report Due (>30d)' AS issue, p.admission_date AS issue_date
+         FROM patients p
+         LEFT JOIN patient_milestones pm ON pm.patient_id = p.id
+         WHERE p.assigned_case_manager_id = ?
+           AND p.is_archived = FALSE
+           AND p.enrollment_status = 'active'
+           AND p.admission_date <= DATE_SUB(CURDATE(), INTERVAL 30 DAY)
+           AND (pm.date_initial_progress_report IS NULL)
        ) AS attention
        ORDER BY issue_date DESC
        LIMIT 10`,
-      [cmId, cmId, cmId]
+      [cmId, cmId, cmId, cmId]
     );
 
     const [todaysSchedule] = await pool.query(
@@ -216,6 +278,8 @@ export async function getCaseManagerStats(req, res) {
       todaysSessions,
       missedSessions,
       followUpsNeeded,
+      attendanceRate,
+      curriculumPhases,
       patientsNeedingAttention,
       todaysSchedule,
       recentPatients,

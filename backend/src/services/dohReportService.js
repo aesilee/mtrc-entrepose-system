@@ -24,14 +24,19 @@ export async function getCensusMetrics(month, year) {
     `SELECT 
         p.gender,
         CASE 
-          WHEN r.admission_type = 'court_mandated' 
-            OR r.nature_of_confinement LIKE '%Court%' 
-            OR r.nature_of_confinement LIKE '%Plea Bargaining%' 
+          WHEN r.nature_of_confinement LIKE '%Plea Bargaining%'
+            OR r.nature_of_confinement LIKE '%Court%'
             OR r.nature_of_confinement LIKE '%Compulsory%'
-            OR p.referral_source = 'Court-Mandated'
-            OR p.referral_source = 'court_mandated'
-          THEN 'court_mandated' 
-          ELSE 'voluntary' 
+            OR r.nature_of_confinement LIKE '%Arrested%'
+            OR r.nature_of_confinement LIKE '%Suspended Sentence%'
+            OR COALESCE(r.referral_source, p.referral_source) IN ('Court-Mandated', 'court_mandated')
+          THEN 'court_mandated'
+          WHEN r.nature_of_confinement LIKE '%without Court Order%'
+            OR r.nature_of_confinement LIKE '%Self-Referral%'
+            OR (COALESCE(r.referral_source, p.referral_source) = 'Voluntary' 
+                AND (r.nature_of_confinement IS NULL OR r.nature_of_confinement NOT LIKE '%Court%'))
+          THEN 'voluntary'
+          ELSE 'court_mandated'
         END as court_status,
         CASE WHEN p.current_status = 'aftercare' OR p.program_phase = 'Aftercare' THEN 'aftercare' ELSE 'outpatient' END as modality,
         SUM(CASE WHEN p.admission_date BETWEEN ? AND ? THEN 1 ELSE 0 END) as new_admissions,

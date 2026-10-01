@@ -424,25 +424,31 @@ export default function IntakeWorkflow() {
           </form>
         ) : currentStep === 4 ? (
           <form onSubmit={saveTriage} style={styles.form}>
-            <Section title="Vital Signs" description="Enter the measurements logged by the triage nurse.">
-              <Field label="Blood pressure" required hint="Use systolic/diastolic format, such as 120/80.">
+            <Section 
+              title="Baseline Triage Vital Signs (Admission Medical Clearance)" 
+              description="Baseline physiological parameters recorded upon initial triage. Used for initial medical clearance and as a clinical benchmark for longitudinal recovery tracking."
+            >
+              <Field label="Blood pressure" required hint="Systolic/diastolic (e.g. 120/80 mmHg). Normal: < 120/80">
                 <input inputMode="numeric" pattern="[0-9]{2,3}/[0-9]{2,3}" style={styles.input} value={form.bloodPressure} onChange={(event) => update("bloodPressure", event.target.value)} placeholder="120/80" required />
               </Field>
-              <Field label="Pulse rate (bpm)" required>
+              <Field label="Pulse rate (bpm)" required hint="Normal resting: 60–100 bpm">
                 <input type="number" min="20" max="250" step="1" style={styles.input} value={form.pulseRate} onChange={(event) => update("pulseRate", event.target.value)} required />
               </Field>
-              <Field label="Respiratory rate (cpm)" required>
+              <Field label="Respiratory rate (cpm)" required hint="Normal adult: 12–20 cpm">
                 <input type="number" min="10" max="60" step="1" style={styles.input} value={form.respiratoryRate} onChange={(event) => update("respiratoryRate", event.target.value)} required />
               </Field>
-              <Field label="Temperature (°C)" required>
+              <Field label="Temperature (°C)" required hint="Normal afebrile: 36.5–37.5 °C">
                 <input type="number" min="30" max="45" step="0.1" style={styles.input} value={form.temperature} onChange={(event) => update("temperature", event.target.value)} required />
               </Field>
-              <Field label="Weight (kg)" required>
+              <Field label="Weight (kg)" required hint="Admission baseline weight in kg">
                 <input type="number" min="1" max="500" step="0.01" style={styles.input} value={form.weight} onChange={(event) => update("weight", event.target.value)} required />
               </Field>
-              <Field label="Mental Status Examination Remarks" wide>
+              <Field label="Mental Status Examination Remarks" wide hint="Baseline cognitive, mood, and behavioural observation at triage">
                 <textarea rows={3} style={styles.textarea} value={form.mseRemarks} onChange={(event) => update("mseRemarks", event.target.value)} />
               </Field>
+              <div style={styles.clinicalNotice}>
+                <strong>Clinical Note:</strong> These parameters establish the patient's admission baseline for medical clearance. Routine session-by-session physiological changes or acute clinical observations during treatment are documented in the Case Manager's SOAP Progress Notes.
+              </div>
             </Section>
             <Section title="Clinical Comorbidities & Disposition" description="Record any known medical or psychiatric comorbid conditions. Select management status for each.">
               <ComorbidityTable comorbidities={form.comorbidities} onChange={(updated) => update("comorbidities", updated)} />
@@ -983,4 +989,5 @@ const styles = {
   summaryLabel: { fontSize: 11, fontWeight: 700, textTransform: "uppercase", color: "var(--color-text-muted, #64748b)", letterSpacing: "0.5px" },
   summaryVal: { fontSize: 13.5, fontWeight: 700, color: "var(--color-text, #0f172a)" },
   verifiedConsent: { display: "flex", alignItems: "center", gap: 8, padding: "10px 14px", background: "#f0fdf4", color: "#166534", borderRadius: "var(--radius-sm, 6px)", border: "1px solid #bbf7d0", fontSize: 13, fontWeight: 600 },
+  clinicalNotice: { gridColumn: "1 / -1", padding: "12px 14px", borderRadius: "var(--radius-sm, 6px)", color: "var(--color-primary-dark, #166534)", background: "var(--color-primary-tint, #f0fdf4)", border: "1px solid #bbf7d0", fontSize: 12, lineHeight: 1.5, marginTop: 4 },
 };

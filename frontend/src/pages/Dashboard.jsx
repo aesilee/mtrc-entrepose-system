@@ -617,7 +617,7 @@ function CaseManagerDashboard() {
   const navigate = useNavigate();
   const { isMobile, isTablet } = useViewport();
   const isCompact = isMobile || isTablet;
-  const kpiCols = isCompact ? 2 : 4;
+  const kpiCols = isCompact ? 2 : 5;
   const primaryPanelHeight = isMobile ? 280 : 300;
   const patientsPanelHeight = isMobile ? 520 : 440;
   const overviewPanelHeight = isMobile ? 310 : 300;
@@ -671,6 +671,42 @@ function CaseManagerDashboard() {
   ];
   const statusTotal = statusOverview.reduce((total, item) => total + Number(item.value), 0);
 
+  const activeCohortTotal = stats?.curriculumPhases?.totalActive || 0;
+  const curriculumPhasesList = [
+    {
+      key: "phase1",
+      name: "Phase 1: Early Stabilization",
+      range: "Sessions 1–14",
+      count: stats?.curriculumPhases?.phase1 || 0,
+      color: "#2563EB",
+      tint: "#DBEAFE",
+    },
+    {
+      key: "phase2",
+      name: "Phase 2: Core CBT & Psychoeducation",
+      range: "Sessions 15–28",
+      count: stats?.curriculumPhases?.phase2 || 0,
+      color: "#7C3AED",
+      tint: "#EDE9FE",
+    },
+    {
+      key: "phase3",
+      name: "Phase 3: Relapse Prevention & Reintegration",
+      range: "Sessions 29–42",
+      count: stats?.curriculumPhases?.phase3 || 0,
+      color: "#D97706",
+      tint: "#FEF3C7",
+    },
+    {
+      key: "pdcReady",
+      name: "PDC Ready (Graduation Track)",
+      range: "43+ Sessions",
+      count: stats?.curriculumPhases?.pdcReady || 0,
+      color: "#059669",
+      tint: "#D1FAE5",
+    },
+  ];
+
   const quickActions = [
     {
       key: "attendance",
@@ -685,6 +721,18 @@ function CaseManagerDashboard() {
       description: "Document a patient's session and progress.",
       icon: <svg {...iconProps} width={18} height={18}><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><path d="M14 2v6h6M12 12v6M9 15h6" /></svg>,
       onClick: () => setNoteModalOpen(true),
+    },
+    {
+      key: "cm-tracker",
+      label: "Monthly CM Tracker",
+      description: "Monitor client 43-session milestones & DOH census.",
+      icon: (
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" width={18} height={18}>
+          <rect x="3" y="3" width="18" height="18" rx="2" />
+          <path d="M3 9h18M9 21V9" />
+        </svg>
+      ),
+      onClick: () => navigate("/op-cm-tracker"),
     },
     {
       key: "continue-registration",
@@ -748,6 +796,12 @@ function CaseManagerDashboard() {
         <CmKpiCard label="Today's Sessions" value={stats?.todaysSessions ?? "—"} icon={HIM_KPI_ICONS.online} />
         <CmKpiCard label="Missed Sessions" value={stats?.missedSessions ?? "—"} icon={HIM_KPI_ICONS.auditLogs} />
         <CmKpiCard label="Follow-ups Needed" value={stats?.followUpsNeeded ?? "—"} icon={HIM_KPI_ICONS.reports} />
+        <CmKpiCard 
+          label="Attendance Rate" 
+          value={`${stats?.attendanceRate ?? 100}%`} 
+          subtitle="DOH Target: ≥80%" 
+          icon={HIM_KPI_ICONS.online} 
+        />
       </div>
 
       <QuickActionsCard actions={quickActions} navigate={navigate} />
@@ -952,7 +1006,42 @@ function CaseManagerDashboard() {
         </CmCard>
       </div>
 
-      <div style={{ ...cmStyles.gridRow, gridTemplateColumns: isCompact ? "1fr" : "0.85fr 1.15fr" }}>
+      <div style={{ ...cmStyles.gridRow, gridTemplateColumns: isCompact ? "1fr" : "1fr 1fr" }}>
+        <CmCard
+          title="43-Session Curriculum Progression"
+          height={overviewPanelHeight}
+          headerAction={<button type="button" style={cmStyles.viewAllBtn} onClick={() => navigate("/op-cm-tracker")}>View matrix →</button>}
+        >
+          <div style={{ ...cmStyles.statusOverview, ...cmStyles.scrollArea, ...cmStyles.boxList }}>
+            <div style={cmStyles.statusTotalRow}>
+              <span style={cmStyles.statusTotalValue}>{activeCohortTotal}</span>
+              <span style={cmStyles.statusTotalLabel}>Active caseload in curriculum</span>
+            </div>
+            <div style={cmStyles.statusBars}>
+              {curriculumPhasesList.map((item) => {
+                const percentage = activeCohortTotal ? Math.round((Number(item.count) / activeCohortTotal) * 100) : 0;
+                return (
+                  <div key={item.key} style={cmStyles.statusBarRow}>
+                    <div style={cmStyles.statusBarHeader}>
+                      <span style={cmStyles.statusBarLabel}>
+                        <span style={{ ...cmStyles.statusDot, background: item.color }} />
+                        {item.name}
+                        <span style={{ fontSize: 10, padding: "1px 6px", borderRadius: 4, background: item.tint, color: item.color, fontWeight: 700, marginLeft: 4 }}>
+                          {item.range}
+                        </span>
+                      </span>
+                      <span style={cmStyles.statusCount}>{item.count} · {percentage}%</span>
+                    </div>
+                    <div style={{ ...cmStyles.statusTrack, background: item.tint }}>
+                      <div style={{ ...cmStyles.statusFill, width: `${percentage}%`, background: item.color }} />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </CmCard>
+
         <CmCard title="Case Status Overview" height={overviewPanelHeight}>
           <div style={{ ...cmStyles.statusOverview, ...cmStyles.scrollArea, ...cmStyles.boxList }}>
             <div style={cmStyles.statusTotalRow}>
@@ -980,8 +1069,10 @@ function CaseManagerDashboard() {
             </div>
           </div>
         </CmCard>
+      </div>
 
-        <CmCard title="Recent Case Activity" height={overviewPanelHeight}>
+      <div style={{ ...cmStyles.gridRow, gridTemplateColumns: "1fr" }}>
+        <CmCard title="Recent Case Activity" height={250}>
           {!stats?.recentCaseActivity?.length ? (
             <DashboardEmptyState loading={loading} emptyText="No recent case activity yet." />
           ) : (
@@ -1047,13 +1138,14 @@ function CmCard({ title, span = 1, maxSpan, center, height, highlight, headerAct
   );
 }
 
-function CmKpiCard({ label, value, icon }) {
+function CmKpiCard({ label, value, icon, subtitle }) {
   return (
     <div style={cmStyles.kpiCard}>
       <div style={cmStyles.kpiIcon}>{icon}</div>
       <div>
         <div style={cmStyles.kpiValue}>{value}</div>
         <div style={cmStyles.kpiLabel}>{label}</div>
+        {subtitle && <div style={{ fontSize: 11, color: "var(--color-text-muted, #6B7280)", marginTop: 2, fontWeight: 600 }}>{subtitle}</div>}
       </div>
     </div>
   );

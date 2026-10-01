@@ -10,6 +10,7 @@ import CompleteFollowUpModal from "../components/CompleteFollowUpModal.jsx";
 import SharedEmptyState from "../components/EmptyState.jsx";
 import StatutoryCertificateModal from "../components/StatutoryCertificateModal.jsx";
 import DrugTestModal from "../components/DrugTestModal.jsx";
+import TreatmentPlanModal from "../components/TreatmentPlanModal.jsx";
 import DischargeModal from "../components/DischargeModal.jsx";
 import TransmittalNoticeModal from "../components/TransmittalNoticeModal.jsx";
 import CardActionMenu from "../components/CardActionMenu.jsx";
@@ -110,6 +111,8 @@ export default function PatientProfile() {
   const [drugTestModalOpen, setDrugTestModalOpen] = useState(false);
   const [dischargeModalOpen, setDischargeModalOpen] = useState(false);
   const [attendanceModalOpen, setAttendanceModalOpen] = useState(false);
+  const [treatmentPlanModalOpen, setTreatmentPlanModalOpen] = useState(false);
+  const [treatmentPlan, setTreatmentPlan] = useState(null);
   
   const [milestones, setMilestones] = useState(null);
   const [milestoneHistory, setMilestoneHistory] = useState([]);
@@ -203,7 +206,8 @@ export default function PatientProfile() {
       api.get(`/case-management/patients/${id}/milestones`),
       api.get(`/case-management/patients/${id}/sessions/summary`),
       api.get(`/case-management/patients/${id}/drug-tests`),
-    ]).then(([p, a, pn, c, h, fu, tl, cm, pr, ms, ss, dt]) => {
+      api.get(`/case-management/patients/${id}/treatment-plan`).catch(() => ({ data: { treatmentPlan: null } })),
+    ]).then(([p, a, pn, c, h, fu, tl, cm, pr, ms, ss, dt, tp]) => {
       setPatient(p.data.patient);
       setForm(toFormState(p.data.patient));
       setAttendance(a.data.attendance);
@@ -218,6 +222,7 @@ export default function PatientProfile() {
       setMilestoneHistory(ms.data.history || []);
       setSessionSummary(ss.data);
       setDrugTests(dt.data.drugTests || []);
+      setTreatmentPlan(tp?.data?.treatmentPlan || null);
     }).catch(err => {
       console.error("Error loading patient profile data:", err);
     }).finally(() => setLoading(false));
@@ -233,6 +238,127 @@ export default function PatientProfile() {
     }).catch(err => {
       console.error("Error refreshing certificates:", err);
     });
+  }
+
+  function handlePrintTreatmentPlan() {
+    if (!treatmentPlan) return;
+    const printWindow = window.open("", "_blank");
+    if (!printWindow) {
+      alert("Please allow popups to print the Treatment Plan.");
+      return;
+    }
+
+    const domainLabels = {
+      SUBSTANCE_DEPENDENCE: "Substance Dependence & Craving Management",
+      LEGAL_RTC: "Legal / RTC Plea Bargaining Compliance",
+      FAMILY_INTERPERSONAL: "Family Conflict & Social Environment",
+      VOCATIONAL_EMPLOYMENT: "Vocational & Economic Stability",
+      HEALTH_COMORBIDITIES: "Physical Health & Co-occurring Conditions",
+    };
+
+    const modalityLabels = {
+      CBT_GROUP: "CBT Group Counseling (28 Sessions)",
+      PSYCHO_EDUCATION: "Psycho-Education Meetings (12 Sessions)",
+      CBT_E: "CBT Evaluations (3 Sessions)",
+      CONJOINT_FAMILY: "Conjoint / Family Sessions",
+      INDIVIDUAL_COUNSELING: "Individual Counseling",
+      DRUG_TESTING: "Surveillance Urine Drug Screening",
+      SHGM: "Self-Help Group Meetings (SHGM)",
+    };
+
+    const htmlContent = `<!DOCTYPE html>
+<html>
+<head>
+  <title>Individualized Treatment Plan - ${patient?.full_name || "Patient"}</title>
+  <style>
+    @page { size: portrait; margin: 15mm; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; font-size: 11pt; color: #111; line-height: 1.45; padding: 10px; }
+    .header { text-align: center; border-bottom: 2px solid #222; padding-bottom: 12px; margin-bottom: 16px; }
+    .header h4 { margin: 0; font-size: 9.5pt; font-weight: normal; text-transform: uppercase; color: #555; }
+    .header h3 { margin: 2px 0; font-size: 11.5pt; font-weight: bold; }
+    .header h2 { margin: 6px 0 2px; font-size: 13.5pt; font-weight: 800; color: #0d4a2b; letter-spacing: 0.5px; }
+    .header p { margin: 0; font-size: 9pt; color: #666; }
+    .meta-table { width: 100%; border-collapse: collapse; margin-bottom: 16px; }
+    .meta-table td { padding: 6px 8px; border: 1px solid #ccc; font-size: 10pt; }
+    .meta-label { font-weight: bold; background: #f7fafc; width: 22%; color: #4a5568; }
+    .section-title { font-size: 10.5pt; font-weight: bold; background: #edf2f7; padding: 6px 10px; margin: 14px 0 8px; border-left: 4px solid #1A7F4B; text-transform: uppercase; letter-spacing: 0.3px; }
+    .content-box { padding: 8px 12px; border: 1px solid #e2e8f0; min-height: 40px; font-size: 10pt; white-space: pre-wrap; line-height: 1.5; background: #fafafa; border-radius: 4px; }
+    .badges { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0; }
+    .badge { display: inline-block; padding: 3px 8px; background: #edf2f7; border: 1px solid #cbd5e0; border-radius: 4px; font-size: 9pt; font-weight: 600; margin-right: 4px; margin-bottom: 4px; }
+    .sig-row { display: flex; justify-content: space-between; margin-top: 48px; padding-top: 10px; }
+    .sig-block { width: 44%; text-align: center; }
+    .sig-line { border-top: 1px solid #000; margin-top: 45px; padding-top: 4px; font-weight: bold; font-size: 10pt; }
+    .sig-title { font-size: 8.5pt; color: #555; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h4>Republic of the Philippines · Department of Health</h4>
+    <h3>MALINAO TREATMENT AND REHABILITATION CENTER</h3>
+    <h2>INDIVIDUALIZED TREATMENT PLAN (ITP)</h2>
+    <p>ENTREPOSE Outpatient Rehabilitation & Aftercare Program</p>
+  </div>
+
+  <table class="meta-table">
+    <tr>
+      <td class="meta-label">Patient Name:</td>
+      <td><strong>${patient?.full_name || "—"}</strong></td>
+      <td class="meta-label">PWUD Code:</td>
+      <td><strong>${patient?.patient_code || "—"}</strong></td>
+    </tr>
+    <tr>
+      <td class="meta-label">Admission Date:</td>
+      <td>${fmtDate(patient?.admission_date)}</td>
+      <td class="meta-label">Plan Formulation Date:</td>
+      <td>${fmtDate(treatmentPlan.plan_date)}</td>
+    </tr>
+    <tr>
+      <td class="meta-label">Handling Case Manager:</td>
+      <td>${treatmentPlan.case_manager_name || user?.full_name || "—"}</td>
+      <td class="meta-label">Target Completion:</td>
+      <td>${fmtDate(treatmentPlan.target_completion_date)}</td>
+    </tr>
+    <tr>
+      <td class="meta-label">Legal Status:</td>
+      <td colspan="3">${patient?.nature_of_confinement === "court_mandated" ? `Court-Mandated (Plea Bargaining) · RTC Branch ${patient?.court_branch || "—"}` : "Voluntary Admission"}</td>
+    </tr>
+  </table>
+
+  <div class="section-title">1. Identified Clinical & Psychosocial Problem Domains</div>
+  <div>
+    ${(treatmentPlan.problem_domains || []).map(d => `<span class="badge">✓ ${domainLabels[d] || d.replace(/_/g, " ")}</span>`).join(" ")}
+  </div>
+
+  <div class="section-title">2. Measurable Treatment Goals & Curriculum Objectives</div>
+  <div class="content-box">${treatmentPlan.primary_goals || "—"}</div>
+
+  <div class="section-title">3. Prescribed Rehabilitation Interventions</div>
+  <div>
+    ${(treatmentPlan.intervention_modalities || []).map(m => `<span class="badge">✓ ${modalityLabels[m] || m.replace(/_/g, " ")}</span>`).join(" ")}
+  </div>
+
+  <div class="section-title">4. Relapse Prevention & Coping Protocol</div>
+  <div class="content-box">${treatmentPlan.relapse_prevention_plan || "—"}</div>
+
+  <div class="sig-row">
+    <div class="sig-block">
+      <div class="sig-line">${patient?.full_name || "Client Signature"}</div>
+      <div class="sig-title">Client Signature / Commitment</div>
+    </div>
+    <div class="sig-block">
+      <div class="sig-line">${treatmentPlan.case_manager_name || user?.full_name || "Case Manager"}</div>
+      <div class="sig-title">Registered Case Manager / Clinician</div>
+    </div>
+  </div>
+  <script>
+    window.onload = function() { window.print(); }
+  </script>
+</body>
+</html>`;
+
+    printWindow.document.open();
+    printWindow.document.write(htmlContent);
+    printWindow.document.close();
   }
 
   useEffect(loadAll, [id]);
@@ -608,6 +734,7 @@ export default function PatientProfile() {
 
               <div style={styles.subTabBar}>
                 {[
+                  { key: "treatment-plan", label: "Treatment Plan (ITP)" },
                   { key: "summary", label: "Progress & Summary" },
                   { key: "milestones", label: "Milestones" },
                   { key: "drug-tests", label: "Drug Tests" },
@@ -624,6 +751,132 @@ export default function PatientProfile() {
                   </button>
                 ))}
               </div>
+
+              {caseSubTab === "treatment-plan" && (
+                <div>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+                    <div>
+                      <h3 style={{ margin: 0, fontSize: 16, color: "#2D3748" }}>Individualized Treatment Plan (ITP)</h3>
+                      <p style={{ margin: "2px 0 0", fontSize: 12.5, color: "#718096" }}>
+                        Clinical care plan establishing goals, modalities, and statutory milestones.
+                      </p>
+                    </div>
+                    {canManageCase && (
+                      <div style={{ display: "flex", gap: 8 }}>
+                        {treatmentPlan && (
+                          <button
+                            type="button"
+                            style={{ ...styles.generateBtn, background: "#4A5568" }}
+                            onClick={handlePrintTreatmentPlan}
+                          >
+                            🖨️ Print Treatment Plan
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          style={styles.generateBtn}
+                          onClick={() => setTreatmentPlanModalOpen(true)}
+                        >
+                          {treatmentPlan ? "✎ Edit Treatment Plan" : "+ Formulate Treatment Plan"}
+                        </button>
+                      </div>
+                    )}
+                  </div>
+
+                  {!treatmentPlan ? (
+                    <div style={{ ...styles.card, padding: 32, textAlign: "center", border: "1px dashed #CBD5E0", borderRadius: 8 }}>
+                      <div style={{ fontSize: 36, marginBottom: 10 }}>📋</div>
+                      <h3 style={{ margin: "0 0 8px", fontSize: 16, color: "#2D3748" }}>No Treatment Plan Formulated Yet</h3>
+                      <p style={{ margin: "0 auto 18px", fontSize: 13, color: "#718096", maxWidth: 520, lineHeight: 1.5 }}>
+                        Under DOH Outpatient SOP, an Individualized Treatment Plan (ITP) must be established within the first 14–30 days of admission to guide the client's 43-session curriculum and legal progress reporting.
+                      </p>
+                      {canManageCase && (
+                        <button type="button" style={styles.generateBtn} onClick={() => setTreatmentPlanModalOpen(true)}>
+                          + Formulate Treatment Plan
+                        </button>
+                      )}
+                    </div>
+                  ) : (
+                    <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+                      <div style={{ ...styles.card, padding: 20, border: "1px solid #E2E8F0", borderRadius: 8, background: "#fff" }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16, borderBottom: "1px solid #EDF2F7", paddingBottom: 12 }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                            <span style={{ fontSize: 14, fontWeight: 700, color: "#2D3748" }}>Plan Status</span>
+                            <span style={{
+                              padding: "3px 10px", borderRadius: 999, fontSize: 11, fontWeight: 700,
+                              background: treatmentPlan.status === "active" ? "#D8F5E9" : "#E2E8F0",
+                              color: treatmentPlan.status === "active" ? "#1A7F4B" : "#4A5568",
+                              textTransform: "uppercase"
+                            }}>
+                              {treatmentPlan.status}
+                            </span>
+                          </div>
+                          <div style={{ fontSize: 12.5, color: "#718096" }}>
+                            Formulated: <strong>{fmtDate(treatmentPlan.plan_date)}</strong> · Target Completion: <strong>{fmtDate(treatmentPlan.target_completion_date)}</strong>
+                          </div>
+                        </div>
+
+                        <div style={{ marginBottom: 18 }}>
+                          <div style={{ fontSize: 12, fontWeight: 700, textTransform: "uppercase", color: "#718096", marginBottom: 8, letterSpacing: 0.5 }}>
+                            1. Identified Problem Domains
+                          </div>
+                          <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                            {(treatmentPlan.problem_domains || []).map((d) => (
+                              <span key={d} style={{ ...styles.sessionPill, background: "#EBF8FF", color: "#2B6CB0", borderColor: "#BEE3F8" }}>
+                                ✓ {d.replace(/_/g, " ")}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+
+                        <div style={{ marginBottom: 18 }}>
+                          <div style={{ fontSize: 12, fontWeight: 700, textTransform: "uppercase", color: "#718096", marginBottom: 8, letterSpacing: 0.5 }}>
+                            2. Measurable Target Goals & Objectives
+                          </div>
+                          <div style={{ background: "#F7FAFC", border: "1px solid #E2E8F0", borderRadius: 6, padding: "12px 14px", fontSize: 13, lineHeight: 1.6, color: "#2D3748", whiteSpace: "pre-wrap" }}>
+                            {treatmentPlan.primary_goals}
+                          </div>
+                        </div>
+
+                        <div style={{ marginBottom: 18 }}>
+                          <div style={{ fontSize: 12, fontWeight: 700, textTransform: "uppercase", color: "#718096", marginBottom: 8, letterSpacing: 0.5 }}>
+                            3. Prescribed Intervention Modalities
+                          </div>
+                          <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                            {(treatmentPlan.intervention_modalities || []).map((m) => (
+                              <span key={m} style={{ ...styles.sessionPill, background: "#F0FFF4", color: "#22543D", borderColor: "#C6F6D5" }}>
+                                ✓ {m.replace(/_/g, " ")}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+
+                        {treatmentPlan.relapse_prevention_plan && (
+                          <div style={{ marginBottom: 18 }}>
+                            <div style={{ fontSize: 12, fontWeight: 700, textTransform: "uppercase", color: "#718096", marginBottom: 8, letterSpacing: 0.5 }}>
+                              4. Relapse Prevention Protocol
+                            </div>
+                            <div style={{ background: "#FFFDF5", border: "1px solid #FEEBC8", borderRadius: 6, padding: "12px 14px", fontSize: 13, lineHeight: 1.6, color: "#744210", whiteSpace: "pre-wrap" }}>
+                              {treatmentPlan.relapse_prevention_plan}
+                            </div>
+                          </div>
+                        )}
+
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", paddingTop: 14, borderTop: "1px solid #EDF2F7", fontSize: 12.5, color: "#718096" }}>
+                          <div>
+                            Managing Clinician: <strong>{treatmentPlan.case_manager_name || user?.full_name || "Staff"}</strong>
+                          </div>
+                          <div>
+                            Client Consent: <strong style={{ color: treatmentPlan.client_agreed ? "#2F855A" : "#C53030" }}>
+                              {treatmentPlan.client_agreed ? "✓ Committed & Signed" : "Pending Consent"}
+                            </strong>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
 
               {caseSubTab === "summary" && (
                 <div>
@@ -1027,6 +1280,19 @@ export default function PatientProfile() {
           admissionDate={patient?.admission_date}
           onClose={() => setDischargeModalOpen(false)} 
           onSaved={() => { setDischargeModalOpen(false); loadAll(); setToast("Patient formally discharged."); }} 
+        />
+      )}
+
+      {treatmentPlanModalOpen && (
+        <TreatmentPlanModal
+          patientId={id}
+          existingPlan={treatmentPlan}
+          onClose={() => setTreatmentPlanModalOpen(false)}
+          onSaved={() => {
+            setTreatmentPlanModalOpen(false);
+            loadAll();
+            setToast("Treatment Plan saved and synchronized with milestones.");
+          }}
         />
       )}
 

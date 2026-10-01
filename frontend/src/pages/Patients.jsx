@@ -19,6 +19,14 @@ const STATUS_COLORS = {
   transferred: { bg: "#EDEAFB", color: "#5B3EC9" },
 };
 
+const STATUS_TABS = [
+  { key: "", label: "All" },
+  { key: "active", label: "Active" },
+  { key: "completed", label: "Completed" },
+  { key: "dropped", label: "Dropped" },
+  { key: "pending", label: "Pending" },
+];
+
 const FLAG_STYLES = {
   blue: {
     bg: "#E8F1FC",
@@ -309,6 +317,30 @@ export default function Patients() {
           )}
         </div>
 
+        <div style={styles.tabBar}>
+          <div style={styles.statusTabs}>
+            {STATUS_TABS.map((tab) => {
+              const isSelected = statusFilter === tab.key;
+              return (
+                <button
+                  key={tab.key}
+                  type="button"
+                  style={{
+                    ...styles.statusTabBtn,
+                    ...(isSelected ? styles.statusTabBtnActive : {}),
+                  }}
+                  onClick={() => setStatusFilter(tab.key)}
+                >
+                  {tab.label}
+                  {isSelected && total > 0 && (
+                    <span style={styles.tabBadge}>{total}</span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
         <div style={{ ...styles.tableCard, flex: 1, minHeight: 0 }}>
           <table style={styles.table}>
             <colgroup>
@@ -406,9 +438,19 @@ export default function Patients() {
                       <td style={styles.td}>{p.admission_date ? p.admission_date.slice(0, 10) : "—"}</td>
                       <td style={styles.td}>{p.case_manager_name || "Unassigned"}</td>
                       <td style={styles.td}>
-                        <span style={{ ...styles.statusBadge, background: statusStyle.bg, color: statusStyle.color }}>
-                          {p.enrollment_status}
-                        </span>
+                        <div style={{ display: "flex", flexDirection: "column", gap: 3, alignItems: "flex-start" }}>
+                          <span style={{ ...styles.statusBadge, background: statusStyle.bg, color: statusStyle.color }}>
+                            {p.enrollment_status}
+                          </span>
+                          {p.discharge_date && (
+                            <span
+                              style={styles.dischargeSubtext}
+                              title={`Discharged on ${p.discharge_date ? p.discharge_date.slice(0, 10) : ''}${p.discharge_type ? ` — ${p.discharge_type}` : ''}`}
+                            >
+                              {p.discharge_type || p.discharge_date.slice(0, 10)}
+                            </span>
+                          )}
+                        </div>
                       </td>
                       <td style={styles.td}>
                         {p.type_of_patient || "—"}
@@ -557,6 +599,56 @@ function RowMenu({ patientId, isPending, isOpen, onToggle, onClose, navigate, on
 const styles = {
   wrapper: { display: "flex", flexDirection: "column", gap: 16 },
   toolbar: { display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 },
+  tabBar: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    borderBottom: "1px solid var(--color-border)",
+    paddingBottom: 8,
+    gap: 8,
+  },
+  statusTabs: {
+    display: "flex",
+    gap: 6,
+    overflowX: "auto",
+  },
+  statusTabBtn: {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 6,
+    background: "transparent",
+    border: "1px solid transparent",
+    borderRadius: "var(--radius-sm, 6px)",
+    padding: "6px 12px",
+    fontSize: 13,
+    fontWeight: 600,
+    color: "var(--color-text-muted)",
+    cursor: "pointer",
+    transition: "all 0.15s ease",
+  },
+  statusTabBtnActive: {
+    background: "var(--color-surface)",
+    border: "1px solid var(--color-border)",
+    color: "var(--color-primary)",
+    boxShadow: "0 1px 3px rgba(0,0,0,0.06)",
+  },
+  tabBadge: {
+    background: "var(--color-primary-tint, #e6f4ea)",
+    color: "var(--color-primary-dark, #137333)",
+    fontSize: 11,
+    fontWeight: 700,
+    borderRadius: 999,
+    padding: "1px 6px",
+    lineHeight: 1.2,
+  },
+  dischargeSubtext: {
+    fontSize: 11,
+    color: "var(--color-text-muted)",
+    maxWidth: 130,
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+  },
   leftControls: { display: "flex", alignItems: "center", gap: 10, flex: 1 },
   filterBtn: {
     display: "flex",

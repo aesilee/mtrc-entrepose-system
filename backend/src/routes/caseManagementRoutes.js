@@ -8,7 +8,9 @@ import {
   getDrugTests,
   addDrugTest,
   getAttentionFlags,
-  dischargePatient
+  dischargePatient,
+  getTreatmentPlan,
+  saveTreatmentPlan,
 } from "../controllers/caseManagementController.js";
 
 const router = express.Router();
@@ -18,6 +20,10 @@ router.use(verifyToken);
 
 // CM Dashboard Flags
 router.get("/attention", requireRole("case_manager", "ict_admin"), getAttentionFlags);
+
+// Individualized Treatment Plan (ITP)
+router.get("/patients/:id/treatment-plan", getTreatmentPlan);
+router.post("/patients/:id/treatment-plan", requireRole("case_manager", "ict_admin"), saveTreatmentPlan);
 
 // Milestones
 router.get("/patients/:id/milestones", getMilestones);

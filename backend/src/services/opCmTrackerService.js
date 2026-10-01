@@ -34,14 +34,46 @@ export function caseManagerKey(fullName) {
   return String(fullName).trim();
 }
 
-function mapCategory(admissionType, referralType) {
-  const type = (admissionType || "").toLowerCase();
-  if (type === "court_mandated") return "Court-Mandated";
-  if (type === "lgu_referred") return "LGU-Referred";
-  if (type === "voluntary") return "Voluntary";
-  const ref = (referralType || "").toLowerCase();
-  if (ref.includes("workplace")) return "Workplace-Referred";
-  return admissionType ? admissionType.replace(/_/g, " ") : "—";
+function mapCategory(admissionType, referralType, natureOfConfinement, referralSource) {
+  const nature = (natureOfConfinement || "").toLowerCase();
+  const source = (referralSource || referralType || "").toLowerCase();
+  const admType = (admissionType || "").toLowerCase();
+
+  // 1. Explicit Court-Mandated indicators
+  if (
+    nature.includes("court") ||
+    nature.includes("plea bargaining") ||
+    nature.includes("compulsory") ||
+    nature.includes("arrested") ||
+    nature.includes("suspended sentence") ||
+    source.includes("court") ||
+    admType.includes("court")
+  ) {
+    return "Court-Mandated";
+  }
+
+  // 2. LGU-Referred (CADAC / MADAC / BADAC)
+  if (source.includes("lgu")) {
+    return "LGU-Referred";
+  }
+
+  // 3. Workplace
+  if (source.includes("workplace") || (referralType || "").toLowerCase().includes("workplace")) {
+    return "Workplace-Referred";
+  }
+
+  // 4. Explicit Voluntary self-referral
+  if (
+    nature.includes("without court order") ||
+    nature.includes("self-referral") ||
+    source === "voluntary" ||
+    admType === "voluntary"
+  ) {
+    return "Voluntary";
+  }
+
+  // Institutional default for ENTREPOSE Outpatient Program clients
+  return "Court-Mandated";
 }
 
 function sexCode(gender) {
@@ -145,10 +177,10 @@ function buildCensusMatrix(patients, categoryField, cmUsers = []) {
     }
     const cat = p[categoryField];
     const gender = censusGenderKey(p.gender);
-    let bucket = "Voluntary";
+    let bucket = "Court-mandated";
     if (cat === "Court-Mandated") bucket = "Court-mandated";
     else if (cat === "LGU-Referred") bucket = "LGU-Referred";
-    else if (cat === "Workplace-Referred") bucket = "Voluntary";
+    else if (cat === "Voluntary" || cat === "Workplace-Referred") bucket = "Voluntary";
 
     matrix[cmName][bucket][gender] += 1;
     matrix[cmName].total += 1;
@@ -292,6 +324,8 @@ export async function getOpCmTrackerReport(month, year, caseManagerId = null) {
     `SELECT p.id, p.pwud_code, p.full_name, p.gender, p.municipality, p.admission_date,
             COALESCE(p.admission_type, r.admission_type) AS admission_type,
             r.type_of_patient,
+            COALESCE(r.referral_source, p.referral_source) AS referral_source,
+            r.nature_of_confinement,
             u.full_name AS case_manager_name,
             m.date_po, m.date_vlts_referral, m.date_initial_assessment, m.date_initial_tx_planning,
             m.date_initial_progress_report, m.date_case_conference, m.date_status_reporting,
@@ -388,7 +422,7 @@ export async function getOpCmTrackerReport(month, year, caseManagerId = null) {
       + attendedShgm + individualSessions + conjointSessions;
 
     const comorb = parseComorbidities(p.comorbidities);
-    const category = mapCategory(p.admission_type, p.type_of_patient);
+    const category = mapCategory(p.admission_type, p.type_of_patient, p.nature_of_confinement, p.referral_source);
     const newEnrollee = p.admission_date >= start && p.admission_date <= end ? 1 : 0;
 
     return {
@@ -439,6 +473,8 @@ export async function getOpCmTrackerReport(month, year, caseManagerId = null) {
     `SELECT p.gender, p.admission_date,
             COALESCE(p.admission_type, r.admission_type) AS admission_type,
             r.type_of_patient,
+            COALESCE(r.referral_source, p.referral_source) AS referral_source,
+            r.nature_of_confinement,
             u.full_name AS case_manager_name
      FROM patients p
      LEFT JOIN patient_referrals r ON r.patient_id = p.id
@@ -456,7 +492,7 @@ export async function getOpCmTrackerReport(month, year, caseManagerId = null) {
   );
   const activeForCensus = activePatients.map((p) => ({
     ...p,
-    category: mapCategory(p.admission_type, p.type_of_patient),
+    category: mapCategory(p.admission_type, p.type_of_patient, p.nature_of_confinement, p.referral_source),
   }));
 
   const enrollmentParams = [start, end];
@@ -465,6 +501,8 @@ export async function getOpCmTrackerReport(month, year, caseManagerId = null) {
     `SELECT p.gender,
             COALESCE(p.admission_type, r.admission_type) AS admission_type,
             r.type_of_patient,
+            COALESCE(r.referral_source, p.referral_source) AS referral_source,
+            r.nature_of_confinement,
             u.full_name AS case_manager_name
      FROM patients p
      LEFT JOIN patient_referrals r ON r.patient_id = p.id
@@ -477,7 +515,7 @@ export async function getOpCmTrackerReport(month, year, caseManagerId = null) {
   );
   const enrollForCensus = enrollmentPatients.map((p) => ({
     ...p,
-    category: mapCategory(p.admission_type, p.type_of_patient),
+    category: mapCategory(p.admission_type, p.type_of_patient, p.nature_of_confinement, p.referral_source),
   }));
 
   const dischargeParams = [start, end];

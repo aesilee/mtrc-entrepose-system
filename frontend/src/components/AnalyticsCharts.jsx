@@ -1,12 +1,13 @@
 const COLORS = ["#7C5CFC", "#FF8A5C", "#2FBF8F", "#FFC24B", "#4EA1FF", "#FF5C7C", "#9A6BFF"];
 
-export function KpiCard({ label, value, suffix, icon }) {
+export function KpiCard({ label, value, suffix, icon, subtitle, style }) {
   return (
-    <div style={styles.kpiCard}>
+    <div style={{ ...styles.kpiCard, ...style }}>
       <div style={styles.kpiIcon}>{icon}</div>
-      <div>
+      <div style={{ minWidth: 0, flex: 1, overflow: "hidden" }}>
         <div style={styles.kpiValue}>{value}{suffix}</div>
-        <div style={styles.kpiLabel}>{label}</div>
+        <div style={styles.kpiLabel} title={label}>{label}</div>
+        {subtitle && <div style={{ fontSize: 10, color: "var(--color-text-muted)", marginTop: 2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{subtitle}</div>}
       </div>
     </div>
   );
@@ -260,8 +261,8 @@ export function GaugeRing({ value, size = 140 }) {
 }
 
 const styles = {
-  kpiCard: { display: "flex", alignItems: "center", gap: 12, background: "#fff", borderRadius: 18, padding: "16px 18px", boxShadow: "0 2px 10px rgba(20,20,40,0.05)" },
-  kpiIcon: { width: 40, height: 40, borderRadius: 12, background: "#F1EEFF", color: "#7C5CFC", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 },
-  kpiValue: { fontSize: 20, fontWeight: 800, color: "var(--color-text)" },
-  kpiLabel: { fontSize: 11, color: "var(--color-text-muted)", marginTop: 2 },
+  kpiCard: { display: "flex", alignItems: "center", gap: 10, background: "#fff", borderRadius: 18, padding: "14px 14px", boxShadow: "0 2px 10px rgba(20,20,40,0.05)", minWidth: 0, boxSizing: "border-box" },
+  kpiIcon: { width: 36, height: 36, borderRadius: 10, background: "#F1EEFF", color: "#7C5CFC", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 },
+  kpiValue: { fontSize: 18, fontWeight: 800, color: "var(--color-text)", lineHeight: 1.2 },
+  kpiLabel: { fontSize: 11, color: "var(--color-text-muted)", marginTop: 2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" },
 };

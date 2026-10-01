@@ -123,9 +123,17 @@ export async function listPatients(req, res) {
   if (forAttendance) {
     clauses.push("p.enrollment_status = 'active'");
     clauses.push("NOT EXISTS (SELECT 1 FROM discharges d WHERE d.patient_id = p.id)");
-  } else if (status === "active" || (!status && req.query.includeDischarged !== "true")) {
-    // By default on main active list, omit discharged patients
+  } else if (status === "active") {
+    // Only exclude discharged patients when specifically filtering for active clients
+    clauses.push("p.enrollment_status = 'active'");
     clauses.push("NOT EXISTS (SELECT 1 FROM discharges d WHERE d.patient_id = p.id)");
+  } else if (status === "completed") {
+    clauses.push("(p.enrollment_status = 'completed' OR EXISTS (SELECT 1 FROM discharges d WHERE d.patient_id = p.id AND d.discharge_type REGEXP 'complete|graduat'))");
+  } else if (status === "dropped") {
+    clauses.push("(p.enrollment_status = 'dropped' OR EXISTS (SELECT 1 FROM discharges d WHERE d.patient_id = p.id AND d.discharge_type NOT REGEXP 'complete|graduat'))");
+  } else if (status) {
+    clauses.push("p.enrollment_status = ?");
+    params.push(status);
   }
 
   // Case Manager scoping:
@@ -153,12 +161,6 @@ export async function listPatients(req, res) {
     clauses.push("(p.full_name LIKE ? OR p.patient_code LIKE ? OR p.pwud_code LIKE ?)");
     const pattern = `%${search}%`;
     params.push(pattern, pattern, pattern);
-  }
-
-  // Status filter (when specified explicitly)
-  if (status) {
-    clauses.push("p.enrollment_status = ?");
-    params.push(status);
   }
 
   // Gender filter
@@ -249,6 +251,8 @@ export async function listPatients(req, res) {
             r.referral_priority,
             r.type_of_patient,
             p.admission_type,
+            d.discharge_type,
+            d.discharge_date,
             (SELECT COUNT(*) FROM attendance a WHERE a.patient_id = p.id) AS total_sessions,
             (SELECT COUNT(*) FROM attendance a WHERE a.patient_id = p.id AND a.status = 'present') AS present_sessions,
             (SELECT COUNT(*) FROM attendance a WHERE a.patient_id = p.id AND a.status = 'present' AND a.session_type IN ('CBT_GROUP', 'PSYCHO_EDUCATION')) AS core_sessions,
@@ -257,6 +261,9 @@ export async function listPatients(req, res) {
      FROM patients p
      LEFT JOIN users u ON u.id = p.assigned_case_manager_id
      LEFT JOIN patient_referrals r ON r.patient_id = p.id
+     LEFT JOIN discharges d ON d.id = (
+       SELECT d2.id FROM discharges d2 WHERE d2.patient_id = p.id ORDER BY d2.discharge_date DESC, d2.id DESC LIMIT 1
+     )
      WHERE ${clauses.join(" AND ")}
      ORDER BY p.created_at DESC
      LIMIT ? OFFSET ?`,
@@ -315,8 +322,19 @@ export async function listPatients(req, res) {
       });
     }
 
+    const isCompleted = p.discharge_type ? /complete|graduat/i.test(p.discharge_type) : false;
+    let resolvedStatus = p.enrollment_status;
+    if (p.discharge_date) {
+      if (resolvedStatus === "active" || !resolvedStatus) {
+        resolvedStatus = isCompleted ? "completed" : "dropped";
+      }
+    }
+
     return {
       ...p,
+      enrollment_status: resolvedStatus,
+      discharge_type: p.discharge_type || null,
+      discharge_date: p.discharge_date || null,
       attendance_rate: p.total_sessions > 0 ? Math.round((p.present_sessions / p.total_sessions) * 100) : null,
       flags,
     };
@@ -546,10 +564,14 @@ export async function getPatient(req, res) {
   const { id } = req.params;
   try {
     const [rows] = await pool.query(
-      `SELECT p.*, u.full_name AS case_manager_name, pr.name AS program_name
+      `SELECT p.*, u.full_name AS case_manager_name, pr.name AS program_name,
+              d.discharge_type, d.discharge_date, d.remarks AS discharge_remarks, d.discharged_by
        FROM patients p
        LEFT JOIN users u ON u.id = p.assigned_case_manager_id
        LEFT JOIN programs pr ON pr.id = p.program_id
+       LEFT JOIN discharges d ON d.id = (
+         SELECT d2.id FROM discharges d2 WHERE d2.patient_id = p.id ORDER BY d2.discharge_date DESC, d2.id DESC LIMIT 1
+       )
        WHERE p.id = ?`,
       [id]
     );
@@ -557,7 +579,13 @@ export async function getPatient(req, res) {
     if (req.user.role === "case_manager" && rows[0].assigned_case_manager_id && rows[0].assigned_case_manager_id !== req.user.id) {
       return res.status(403).json({ message: "You do not have access to this patient." });
     }
-    res.json({ patient: rows[0] });
+
+    const patient = rows[0];
+    if (patient.discharge_date && (patient.enrollment_status === "active" || !patient.enrollment_status)) {
+      patient.enrollment_status = /complete|graduat/i.test(patient.discharge_type || "") ? "completed" : "dropped";
+    }
+
+    res.json({ patient });
   } catch (err) {
     console.error("Error in getPatient:", err);
     res.status(500).json({ message: "Could not retrieve patient." });

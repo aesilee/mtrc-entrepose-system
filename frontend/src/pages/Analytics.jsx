@@ -3,6 +3,7 @@ import AppShell from "../components/AppShell.jsx";
 import api from "../api/axios.js";
 import { KpiCard, DonutChart, LineChart, BarChart, BarChartV, HorizontalBarChart } from "../components/AnalyticsCharts.jsx";
 import useViewport from "../hooks/useViewport.js";
+import { useAuth } from "../context/AuthContext.jsx";
 
 const iconProps = { viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 2, strokeLinecap: "round", strokeLinejoin: "round", width: 20, height: 20 };
 
@@ -23,13 +24,14 @@ function computeRange(preset) {
 function toISO(d) { return d.toISOString().slice(0, 10); }
 
 export default function Analytics() {
+  const { user } = useAuth();
+  const isCaseManager = user?.role === "case_manager";
   const { isMobile, isTablet } = useViewport();
   const isCompact = isMobile || isTablet;
-  const kpiCols = isMobile ? 2 : isTablet ? 3 : 6;
+  const kpiCols = isMobile ? 2 : isTablet ? 3 : 7;
   const gridCols = isMobile ? 1 : isTablet ? 2 : 4;
 
-  // Must mirror AppShell's <main> padding exactly, or the page's negative-margin
-  // bleed trick below will overpull and eat into the reserved bottom-bar space.
+  // Mirror AppShell's <main> padding exactly for smooth full-bleed layout
   const mainPad = isMobile
     ? { top: 16, side: 16, bottom: 84 }
     : { top: 32, side: 32, bottom: 32 };
@@ -44,29 +46,72 @@ export default function Analytics() {
   }, []);
 
   return (
-    <AppShell title="Analytics" description="Program performance trends and key monitoring statistics.">
+    <AppShell title="Analytics" description="Program performance trends, clinical distributions, and monitoring statistics.">
       <div
         style={{
           ...styles.page,
           margin: `-${mainPad.top}px -${mainPad.side}px -${mainPad.bottom}px`,
           width: `calc(100% + ${mainPad.side * 2}px)`,
           padding: `${mainPad.top}px ${mainPad.side}px ${mainPad.bottom}px`,
-          height: isCompact ? "auto" : styles.page.height,
-          minHeight: isCompact ? `calc(100% + ${mainPad.top + mainPad.bottom}px)` : undefined,
+          height: "auto",
+          minHeight: `calc(100% + ${mainPad.top + mainPad.bottom}px)`,
         }}
       >
         {loading || !overview ? (
           <div style={{ padding: 60, textAlign: "center", color: "var(--color-text-muted)" }}>Loading analytics…</div>
         ) : (
           <>
-            {/* Row 1: KPI Cards */}
+            {/* Row 1: KPI Cards (7 Key Clinical & Program Indicators) */}
             <div style={{ ...styles.kpiRow, gridTemplateColumns: `repeat(${kpiCols}, 1fr)` }}>
-              <KpiCard label="Retention Rate" value={overview.kpis?.completionRate ?? 0} suffix="%" icon={<svg {...iconProps}><path d="M3 17l6-6 4 4 8-8" /></svg>} />
-              <KpiCard label="Active Caseload" value={overview.kpis?.activeCaseload ?? 0} suffix="" icon={<svg {...iconProps}><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M23 21v-2a4 4 0 00-3-3.87" /><path d="M16 3.13a4 4 0 010 7.75" /></svg>} />
-              <KpiCard label="Completed / Graduated" value={overview.kpis?.completedPatients ?? 0} suffix="" icon={<svg {...iconProps}><path d="M9 12l2 2 4-4" /><circle cx="12" cy="12" r="9" /></svg>} />
-              <KpiCard label="Total Discharged" value={overview.kpis?.totalDischarged ?? 0} suffix="" icon={<svg {...iconProps}><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4" /><polyline points="16 17 21 12 16 7" /><line x1="21" y1="12" x2="9" y2="12" /></svg>} />
-              <KpiCard label="Avg. Attendance" value={overview.kpis?.avgAttendance ?? 0} suffix="%" icon={<svg {...iconProps}><rect x="3" y="5" width="18" height="16" rx="2" /><path d="M3 10h18" /></svg>} />
-              <KpiCard label="Avg. Rehab Duration" value={overview.kpis?.avgDurationMonths ?? 0} suffix=" mo" icon={<svg {...iconProps}><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></svg>} />
+              <KpiCard
+                label="Retention Rate"
+                value={overview.kpis?.retentionRate ?? 100}
+                suffix="%"
+                subtitle="Active + Graduated"
+                icon={<svg {...iconProps}><path d="M3 17l6-6 4 4 8-8" /></svg>}
+              />
+              <KpiCard
+                label="Active Caseload"
+                value={overview.kpis?.activeCaseload ?? 0}
+                suffix=""
+                subtitle="Currently Enrolled"
+                icon={<svg {...iconProps}><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M23 21v-2a4 4 0 00-3-3.87" /><path d="M16 3.13a4 4 0 010 7.75" /></svg>}
+              />
+              <KpiCard
+                label="Completed / Graduated"
+                value={overview.kpis?.completedPatients ?? 0}
+                suffix=""
+                subtitle="PDC Cleared"
+                icon={<svg {...iconProps}><path d="M9 12l2 2 4-4" /><circle cx="12" cy="12" r="9" /></svg>}
+              />
+              <KpiCard
+                label="Total Discharged"
+                value={overview.kpis?.totalDischarged ?? 0}
+                suffix=""
+                subtitle="Exit Registry"
+                icon={<svg {...iconProps}><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4" /><polyline points="16 17 21 12 16 7" /><line x1="21" y1="12" x2="9" y2="12" /></svg>}
+              />
+              <KpiCard
+                label="Avg. Attendance"
+                value={overview.kpis?.avgAttendance ?? 0}
+                suffix="%"
+                subtitle="DOH Target: ≥80%"
+                icon={<svg {...iconProps}><rect x="3" y="5" width="18" height="16" rx="2" /><path d="M3 10h18" /></svg>}
+              />
+              <KpiCard
+                label="Avg. Rehab Duration"
+                value={overview.kpis?.avgDurationMonths ?? 0}
+                suffix=" mo"
+                subtitle="Program Length"
+                icon={<svg {...iconProps}><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></svg>}
+              />
+              <KpiCard
+                label="Drug Test Abstinence"
+                value={overview.kpis?.drugTestAbstinenceRate ?? 100}
+                suffix="%"
+                subtitle="Negative Screens"
+                icon={<svg {...iconProps}><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" /><path d="M9 12l2 2 4-4" /></svg>}
+              />
             </div>
 
             {/* Row 2: Monthly Admissions & Monthly Discharges TimeSeries */}
@@ -90,41 +135,88 @@ export default function Analytics() {
               </Card>
             </div>
 
-            {/* Row 4: Demographics */}
+            {/* Row 4: Clinical Intake & Demographic Profiles (4 Single-Span Cards) */}
             <div style={{ ...styles.gridRow, gridTemplateColumns: `repeat(${gridCols}, 1fr)` }}>
+              <Card title="Primary Substance Profile" span={1} maxSpan={gridCols} center>
+                {overview.substanceDistribution?.length ? (
+                  <DonutChart data={overview.substanceDistribution} size={110} />
+                ) : (
+                  <div style={styles.emptyText}>No substance data yet.</div>
+                )}
+              </Card>
+              <Card title="Admission Classification" span={1} maxSpan={gridCols} center>
+                {overview.admissionClassification?.length ? (
+                  <DonutChart data={overview.admissionClassification} size={110} />
+                ) : (
+                  <div style={styles.emptyText}>No classification data yet.</div>
+                )}
+              </Card>
               <Card title="Age Distribution" span={1} maxSpan={gridCols} center>
                 <BarChart data={overview.ageDistribution} />
               </Card>
               <Card title="Gender Distribution" span={1} maxSpan={gridCols} center>
                 <DonutChart data={overview.genderDistribution} size={110} />
               </Card>
-              <Card title="Municipality Distribution" span={2} maxSpan={gridCols}>
-                <HorizontalBarChart data={overview.municipalityDistribution} />
+            </div>
+
+            {/* Row 5: Clinical Interventions & Curriculum Progression */}
+            <div style={{ ...styles.gridRow, gridTemplateColumns: `repeat(${gridCols}, 1fr)` }}>
+              <Card title="Service Modality Volume (Attended Sessions)" span={2} maxSpan={gridCols}>
+                {(overview.modalityVolume || []).length === 0 ? (
+                  <div style={styles.emptyText}>No modality session records yet.</div>
+                ) : (
+                  <BarChart data={overview.modalityVolume} />
+                )}
+              </Card>
+              <Card title="43-Session Curriculum Cohort Progression" span={2} maxSpan={gridCols}>
+                {(overview.curriculumPhases || []).length === 0 ? (
+                  <div style={styles.emptyText}>No active curriculum cohort data.</div>
+                ) : (
+                  <BarChart data={overview.curriculumPhases} />
+                )}
               </Card>
             </div>
 
-            {/* Row 4: Attendance by Case Manager, Recent Statistics */}
-            <div
-              style={{
-                ...styles.gridRow,
-                gridTemplateColumns: `repeat(${gridCols}, 1fr)`,
-                flex: isCompact ? "none" : 1,
-                minHeight: isCompact ? "auto" : 0,
-                alignItems: isCompact ? "start" : styles.gridRow.alignItems,
-              }}
-            >
-              <Card title="Attendance by Case Manager" span={2} maxSpan={gridCols} isMobile={isCompact}>
-                {(overview.attendanceByCaseManager || []).length === 0 ? (
-                  <div style={styles.emptyText}>No case manager attendance data yet.</div>
-                ) : (
-                  <BarChartV data={overview.attendanceByCaseManager} />
-                )}
+            {/* Row 6: Municipality Distribution & Role-Specific Operational Card */}
+            <div style={{ ...styles.gridRow, gridTemplateColumns: `repeat(${gridCols}, 1fr)` }}>
+              <Card title="Municipality Distribution" span={2} maxSpan={gridCols}>
+                <HorizontalBarChart data={overview.municipalityDistribution} />
               </Card>
-              <Card title="Recent Statistics" span={2} maxSpan={gridCols} isMobile={isCompact} noScroll>
-                <div style={{ ...styles.statsRow, padding: "4px 0" }}>
+
+              {isCaseManager ? (
+                <Card title="My Caseload Phase Breakdown" span={2} maxSpan={gridCols} isMobile={isCompact}>
+                  {(overview.curriculumPhases || []).length === 0 ? (
+                    <div style={styles.emptyText}>No assigned patients in active curriculum.</div>
+                  ) : (
+                    <HorizontalBarChart
+                      data={(overview.curriculumPhases || []).map((p) => ({
+                        label: p.label,
+                        value: p.value,
+                        count: p.value,
+                      }))}
+                    />
+                  )}
+                </Card>
+              ) : (
+                <Card title="Attendance by Case Manager" span={2} maxSpan={gridCols} isMobile={isCompact}>
+                  {(overview.attendanceByCaseManager || []).length === 0 ? (
+                    <div style={styles.emptyText}>No case manager attendance data yet.</div>
+                  ) : (
+                    <BarChartV data={overview.attendanceByCaseManager} />
+                  )}
+                </Card>
+              )}
+            </div>
+
+            {/* Row 7: Clinical & Operational Highlights */}
+            <div style={{ ...styles.gridRow, gridTemplateColumns: `repeat(${gridCols}, 1fr)` }}>
+              <Card title="Program & Operational Highlights" span={4} maxSpan={gridCols} isMobile={isCompact} noScroll>
+                <div style={{ ...styles.statsRow, padding: "4px 0", flexWrap: isCompact ? "wrap" : "nowrap" }}>
                   <StatBlock label="Highest Attendance" value={overview.recentStats?.highestAttendance || "—"} />
                   <StatBlock label="Most Common Age Group" value={overview.recentStats?.mostCommonAge || "—"} />
-                  <StatBlock label="Most Active Municipality" value={overview.recentStats?.mostActiveMunicipality || "—"} />
+                  <StatBlock label="Primary Substance" value={overview.recentStats?.topSubstance || "—"} />
+                  <StatBlock label="Admission Type" value={overview.recentStats?.topAdmissionType || "—"} />
+                  <StatBlock label="Most Active LGU" value={overview.recentStats?.mostActiveMunicipality || "—"} />
                 </div>
               </Card>
             </div>
@@ -211,7 +303,7 @@ function Card({ title, span, center, children, maxSpan, isMobile, noScroll, cent
       }}
     >
       <div style={styles.cardTitle}>{title}</div>
-      <div style={{ display: "flex", justifyContent: center ? "center" : "flex-start", alignItems: "center", flex: centerBlock ? "none" : 1 }}>
+      <div style={{ display: "flex", justifyContent: center ? "center" : "flex-start", alignItems: "center", flex: centerBlock ? "none" : 1, width: "100%" }}>
         {children}
       </div>
     </div>
@@ -228,18 +320,18 @@ function StatBlock({ label, value }) {
 }
 
 const styles = {
-  page: { background: "#F6F5F1", boxSizing: "border-box", display: "flex", flexDirection: "column", gap: 14, height: "calc(100% + 64px)" },
+  page: { background: "#F6F5F1", boxSizing: "border-box", display: "flex", flexDirection: "column", gap: 14 },
 
-  kpiRow: { display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 14 },
+  kpiRow: { display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 14 },
   gridRow: { display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 14, alignItems: "stretch" },
 
   card: {
     background: "#fff", borderRadius: 18, padding: 14, boxShadow: "0 2px 10px rgba(20,20,40,0.05)",
-    display: "flex", flexDirection: "column", gap: 8, minHeight: 90, overflow: "auto",
+    display: "flex", flexDirection: "column", gap: 8, minHeight: 90, overflow: "auto", boxSizing: "border-box",
   },
   cardHeader: { display: "flex", justifyContent: "space-between", alignItems: "center" },
   cardTitle: { fontSize: 13, fontWeight: 700, color: "var(--color-text)" },
-  emptyText: { color: "var(--color-text-muted)", fontSize: 13, textAlign: "center", padding: "20px 0" },
+  emptyText: { color: "var(--color-text-muted)", fontSize: 13, textAlign: "center", padding: "20px 0", width: "100%" },
 
   presetBtn: { display: "flex", alignItems: "center", gap: 6, background: "#F6F5F1", border: "none", borderRadius: 8, padding: "6px 10px", fontSize: 11, fontWeight: 700, cursor: "pointer" },
   menuBackdrop: { position: "fixed", inset: 0, zIndex: 30 },

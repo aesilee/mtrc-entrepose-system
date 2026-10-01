@@ -278,6 +278,13 @@ export async function savePatientReferralDraft(req, res) {
       );
     }
 
+    if (referral.referralSource || referral.admissionType) {
+      await connection.query(
+        "UPDATE patients SET referral_source = COALESCE(?, referral_source), admission_type = COALESCE(?, admission_type) WHERE id = ?",
+        [referral.referralSource || null, referral.admissionType || null, patientId]
+      );
+    }
+
     await connection.query(
       "INSERT INTO audit_log (actor_username, action, table_name, record_id) VALUES (?, ?, 'patient_referrals', ?)",
       [req.user.username, `Saved referral draft for \"${patient.full_name}\" (${patient.patient_code})`, patientId]

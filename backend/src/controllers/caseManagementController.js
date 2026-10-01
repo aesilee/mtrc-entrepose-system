@@ -321,7 +321,7 @@ export async function getAttentionFlags(req, res) {
     // Due to MySQL complexity, we'll fetch active patients and evaluate basic flags
     
     const [patients] = await pool.query(
-      `SELECT p.id as patient_id, p.full_name, p.patient_code, p.photo_url 
+      `SELECT p.id as patient_id, p.full_name, p.patient_code, p.photo_url, p.admission_date 
        FROM patients p 
        WHERE p.assigned_case_manager_id = ? AND p.enrollment_status = 'active'`,
       [req.user.id]
@@ -358,12 +358,20 @@ export async function getAttentionFlags(req, res) {
       );
       
       const [[milestones]] = await pool.query(
-        `SELECT date_pdc FROM patient_milestones WHERE patient_id = ?`,
+        `SELECT date_pdc, date_initial_progress_report FROM patient_milestones WHERE patient_id = ?`,
         [p.patient_id]
       );
 
       if (sessions[0].cnt >= 43 && (!milestones || !milestones.date_pdc)) {
         flags.push({ ...p, issue: "43 Sessions Completed (Ready for PDC)", color: "blue" });
+      }
+
+      // Check Initial Court Progress Report Due (>30 days enrolled)
+      if (p.admission_date) {
+        const daysEnrolled = Math.floor((new Date() - new Date(p.admission_date)) / (1000 * 60 * 60 * 24));
+        if (daysEnrolled >= 30 && (!milestones || !milestones.date_initial_progress_report)) {
+          flags.push({ ...p, issue: "Initial Court Report Due (>30d Enrolled)", color: "yellow" });
+        }
       }
     }
 
@@ -438,6 +446,175 @@ export async function dischargePatient(req, res) {
     await connection.rollback();
     console.error(err);
     res.status(500).json({ message: "Could not discharge patient." });
+  } finally {
+    connection.release();
+  }
+}
+
+// 7. Individualized Treatment Plan (ITP)
+export async function getTreatmentPlan(req, res) {
+  const { id } = req.params;
+  try {
+    let rows = [];
+    try {
+      const [result] = await pool.query(
+        `SELECT tp.*, u.full_name AS case_manager_name, u.username AS case_manager_username
+         FROM patient_treatment_plans tp
+         LEFT JOIN users u ON u.id = tp.case_manager_id
+         WHERE tp.patient_id = ?
+         ORDER BY tp.created_at DESC
+         LIMIT 1`,
+        [id]
+      );
+      rows = result;
+    } catch (dbErr) {
+      if (dbErr.code === "ER_NO_SUCH_TABLE") {
+        return res.json({ treatmentPlan: null, tableNotCreated: true });
+      }
+      throw dbErr;
+    }
+
+    const plan = rows[0] || null;
+    if (!plan) {
+      return res.json({ treatmentPlan: null });
+    }
+
+    let problemDomains = plan.problem_domains;
+    if (typeof problemDomains === "string") {
+      try { problemDomains = JSON.parse(problemDomains); } catch (_) { problemDomains = []; }
+    }
+    let interventionModalities = plan.intervention_modalities;
+    if (typeof interventionModalities === "string") {
+      try { interventionModalities = JSON.parse(interventionModalities); } catch (_) { interventionModalities = []; }
+    }
+
+    res.json({
+      treatmentPlan: {
+        ...plan,
+        problem_domains: problemDomains || [],
+        intervention_modalities: interventionModalities || [],
+      }
+    });
+  } catch (err) {
+    console.error("Error in getTreatmentPlan:", err);
+    res.status(500).json({ message: "Could not fetch treatment plan." });
+  }
+}
+
+export async function saveTreatmentPlan(req, res) {
+  const { id } = req.params;
+  const {
+    plan_date,
+    target_completion_date,
+    problem_domains,
+    primary_goals,
+    intervention_modalities,
+    relapse_prevention_plan,
+    client_agreed,
+    status
+  } = req.body;
+
+  if (!plan_date || !primary_goals) {
+    return res.status(400).json({ message: "Plan date and primary goals are required." });
+  }
+
+  const connection = await pool.getConnection();
+  try {
+    await connection.beginTransaction();
+
+    const pDomainsJson = JSON.stringify(Array.isArray(problem_domains) ? problem_domains : []);
+    const iModalitiesJson = JSON.stringify(Array.isArray(intervention_modalities) ? intervention_modalities : []);
+
+    const [[existing]] = await connection.query(
+      "SELECT id FROM patient_treatment_plans WHERE patient_id = ? ORDER BY created_at DESC LIMIT 1",
+      [id]
+    );
+
+    if (existing) {
+      await connection.query(
+        `UPDATE patient_treatment_plans
+         SET plan_date = ?,
+             target_completion_date = ?,
+             problem_domains = ?,
+             primary_goals = ?,
+             intervention_modalities = ?,
+             relapse_prevention_plan = ?,
+             client_agreed = ?,
+             status = ?,
+             case_manager_id = ?
+         WHERE id = ?`,
+        [
+          plan_date,
+          target_completion_date || null,
+          pDomainsJson,
+          primary_goals,
+          iModalitiesJson,
+          relapse_prevention_plan || null,
+          client_agreed ? 1 : 0,
+          status || "active",
+          req.user.id,
+          existing.id
+        ]
+      );
+    } else {
+      await connection.query(
+        `INSERT INTO patient_treatment_plans (
+          patient_id, case_manager_id, plan_date, target_completion_date,
+          problem_domains, primary_goals, intervention_modalities,
+          relapse_prevention_plan, client_agreed, status
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          id,
+          req.user.id,
+          plan_date,
+          target_completion_date || null,
+          pDomainsJson,
+          primary_goals,
+          iModalitiesJson,
+          relapse_prevention_plan || null,
+          client_agreed ? 1 : 0,
+          status || "active"
+        ]
+      );
+    }
+
+    // Automatically synchronize date_initial_tx_planning into patient_milestones
+    await connection.query(
+      `INSERT INTO patient_milestones (patient_id, date_initial_tx_planning)
+       VALUES (?, ?)
+       ON DUPLICATE KEY UPDATE date_initial_tx_planning = VALUES(date_initial_tx_planning)`,
+      [id, plan_date]
+    );
+
+    // Record milestone history
+    await connection.query(
+      `INSERT INTO patient_milestone_history (patient_id, milestone_key, milestone_date, recorded_by)
+       VALUES (?, 'date_initial_tx_planning', ?, ?)`,
+      [id, plan_date, req.user.id]
+    ).catch(() => {});
+
+    // Audit log
+    const [[pRow]] = await connection.query("SELECT full_name FROM patients WHERE id = ?", [id]);
+    await connection.query(
+      "INSERT INTO audit_log (actor_username, action, table_name, record_id) VALUES (?, ?, 'patients', ?)",
+      [
+        req.user?.username || "Staff",
+        `Formulated/Updated Individualized Treatment Plan (ITP) for patient "${pRow?.full_name || `#${id}`}"`,
+        id
+      ]
+    );
+
+    await connection.commit();
+    res.json({ message: "Individualized Treatment Plan saved successfully and synchronized with clinical milestones." });
+  } catch (err) {
+    await connection.rollback();
+    console.error("Error in saveTreatmentPlan:", err);
+    if (err.code === "ER_NO_SUCH_TABLE") {
+      return res.status(500).json({
+        message: "The patient_treatment_plans table does not exist in MySQL. Please run the CREATE TABLE statement in MySQL Workbench first."
+      });
+    }
+    res.status(500).json({ message: "Could not save treatment plan." });
   } finally {
     connection.release();
   }

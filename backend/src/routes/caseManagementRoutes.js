@@ -11,6 +11,10 @@ import {
   dischargePatient,
   getTreatmentPlan,
   saveTreatmentPlan,
+  getPatientCbteEvaluations,
+  savePatientCbteEvaluation,
+  getCourtReportData,
+  saveCourtReport,
 } from "../controllers/caseManagementController.js";
 
 const router = express.Router();
@@ -24,6 +28,14 @@ router.get("/attention", requireRole("case_manager", "ict_admin"), getAttentionF
 // Individualized Treatment Plan (ITP)
 router.get("/patients/:id/treatment-plan", getTreatmentPlan);
 router.post("/patients/:id/treatment-plan", requireRole("case_manager", "ict_admin"), saveTreatmentPlan);
+
+// CBT-E Evaluations (Vol. 1 Sec 5.3 & Vol. 2A)
+router.get("/patients/:id/cbte-evaluations", getPatientCbteEvaluations);
+router.post("/patients/:id/cbte-evaluations", requireRole("case_manager", "ict_admin"), savePatientCbteEvaluation);
+
+// Automated Court Progress Reports (Vol. 1 Sec 7.2 & MTRC Ref Sec 08)
+router.get("/patients/:id/court-report", getCourtReportData);
+router.post("/patients/:id/court-report", requireRole("case_manager", "ict_admin", "him_staff"), saveCourtReport);
 
 // Milestones
 router.get("/patients/:id/milestones", getMilestones);

@@ -31,33 +31,97 @@ export async function recordAttendanceBulk(req, res) {
       return res.status(400).json({ message: "Individual counseling and conjoint/family sessions can only be recorded for 1 client at a time." });
     }
 
-    const [attCols] = await connection.query("SHOW COLUMNS FROM attendance LIKE 'topic_id'");
-    const hasAttTopic = attCols.length > 0;
+    const [allAttCols] = await connection.query("SHOW COLUMNS FROM attendance");
+    const attColNames = allAttCols.map((c) => c.Field);
+    const hasAttTopic = attColNames.includes("topic_id");
+    const hasRelapseRisk = attColNames.includes("relapse_risk");
+    const hasDrugTestResult = attColNames.includes("drug_test_result");
+    const hasFamilyAttended = attColNames.includes("family_attended");
+    const hasChairperson = attColNames.includes("is_chairperson");
+
+    // Guard: Enforce SHGM Chairperson 5-session term limit (Vol. 1 Sec 5.5.3)
+    if (session.session_type === "SHGM" && hasChairperson) {
+      for (const r of records) {
+        if (r.isChairperson && r.status === "present") {
+          const [[{ chairCount }]] = await connection.query(
+            "SELECT COUNT(*) as chairCount FROM attendance WHERE patient_id = ? AND session_type = 'SHGM' AND is_chairperson = 1 AND status = 'present'",
+            [r.patientId]
+          );
+          if (chairCount >= 5) {
+            connection.release();
+            return res.status(400).json({
+              message: `The designated chairperson has already chaired ${chairCount} SHGM sessions, reaching the maximum 5-session clinical term limit (ENTREPOSE Vol. 1 Sec 5.5.3).`
+            });
+          }
+        }
+      }
+    }
 
     await connection.beginTransaction();
     for (const r of records) {
+      const isAttended = r.status === "present" || r.status === "late";
+      const dtResult = isAttended ? (r.drugTestResult || "NEGATIVE") : null;
+
+      const cols = ["patient_id", "session_id", "session_date", "session_type", "status", "notes", "recorded_by"];
+      const vals = [
+        r.patientId,
+        sessionId,
+        session.session_date,
+        session.session_type || session.session_name,
+        r.status,
+        r.remarks || null,
+        req.user.id
+      ];
+
       if (hasAttTopic) {
+        cols.push("topic_id", "topic_name", "facilitator_name");
+        vals.push(session.topic_id || null, session.topic_name || null, session.facilitator_name || null);
+      }
+      if (hasRelapseRisk) {
+        cols.push("relapse_risk");
+        vals.push(r.relapseRisk || "SAFE");
+      }
+      if (hasDrugTestResult) {
+        cols.push("drug_test_result");
+        vals.push(dtResult);
+      }
+      if (hasFamilyAttended) {
+        cols.push("family_attended", "family_member_name");
+        vals.push(r.familyAttended ? 1 : 0, r.familyMemberName || null);
+      }
+      if (hasChairperson) {
+        cols.push("is_chairperson");
+        vals.push(r.isChairperson ? 1 : 0);
+      }
+
+      const placeholders = cols.map(() => "?").join(", ");
+      await connection.query(
+        `INSERT INTO attendance (${cols.join(", ")}) VALUES (${placeholders})`,
+        vals
+      );
+
+      // Post-Session Urine Drug Screening (RDT) Protocol:
+      // Every present patient undergoes drug testing immediately after the session.
+      if (isAttended) {
+        const substanceTested = r.substanceTested || (dtResult === "POSITIVE" ? "Multi-3: METH / THC / ECS" : "Multi-3 Rapid Drug Screen (THC, METH, ECS)");
+        const actionTaken = dtResult === "POSITIVE"
+          ? `Positive Multi-3 RDT (${substanceTested}): Flagged for Case Manager review & immediate clinical counseling`
+          : "Negative: Client cleared under post-session Multi-3 protocol";
+        const dtRemarks = r.drugTestRemarks || `Post-session Multi-3 RDT for ${session.session_type || session.session_name}${session.topic_name ? `: ${session.topic_name}` : ""}`;
+
         await connection.query(
-          `INSERT INTO attendance (patient_id, session_id, session_date, session_type, topic_id, topic_name, facilitator_name, status, notes, recorded_by)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          `INSERT INTO drug_test_logs (patient_id, test_date, test_type, substance_tested, result, action_taken, remarks, recorded_by)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
           [
             r.patientId,
-            sessionId,
             session.session_date,
-            session.session_type || session.session_name,
-            session.topic_id || null,
-            session.topic_name || null,
-            session.facilitator_name || null,
-            r.status,
-            r.remarks || null,
+            "Post-Session Screening",
+            substanceTested,
+            dtResult,
+            actionTaken,
+            dtRemarks,
             req.user.id
           ]
-        );
-      } else {
-        await connection.query(
-          `INSERT INTO attendance (patient_id, session_id, session_date, session_type, status, notes, recorded_by)
-           VALUES (?, ?, ?, ?, ?, ?, ?)`,
-          [r.patientId, sessionId, session.session_date, session.session_type || session.session_name, r.status, r.remarks || null, req.user.id]
         );
       }
     }
@@ -72,9 +136,12 @@ export async function recordAttendanceBulk(req, res) {
     const absentCount = records.filter((r) => r.status === "absent").length;
     const lateCount = records.filter((r) => r.status === "late").length;
     const excusedCount = records.filter((r) => r.status === "excused").length;
+    const positiveCount = records.filter((r) => (r.status === "present" || r.status === "late") && r.drugTestResult === "POSITIVE").length;
+    const negativeCount = (presentCount + lateCount) - positiveCount;
+
     await notifyIctAdmins(
       "reports", "attendance_summary",
-      `Attendance recorded for "${session.session_name}" (${session.session_date}): ${presentCount} present, ${absentCount} absent, ${lateCount} late, ${excusedCount} excused — by ${req.user.username}`
+      `Attendance recorded for "${session.session_name}" (${session.session_date}): ${presentCount} present, ${absentCount} absent, ${lateCount} late, ${excusedCount} excused — Drug tests: ${negativeCount} Negative, ${positiveCount} Positive — by ${req.user.username}`
     );
 
     // Batched notifications for absent patients' assigned case managers
@@ -140,6 +207,62 @@ export async function recordAttendanceBulk(req, res) {
       }
     }
 
+    // Relapse Risk Clinical Alert (ENTREPOSE Vol. 3A & Vol. 1 Sec 11.1)
+    const atRiskRecords = records.filter((r) => r.relapseRisk === "AT_RISK" || r.relapseRisk === "USED");
+    for (const r of atRiskRecords) {
+      const [[patient]] = await pool.query(
+        "SELECT id, full_name, assigned_case_manager_id FROM patients WHERE id = ?",
+        [r.patientId]
+      );
+      if (patient?.assigned_case_manager_id) {
+        const severityLabel = r.relapseRisk === "USED" ? "URGENT LAPSE/SLIP" : "AT RISK";
+        await notifyUser(
+          patient.assigned_case_manager_id,
+          "patients",
+          "relapse_risk_alert",
+          `Relapse Risk Alert [${severityLabel}]: "${patient.full_name}" was rated "${r.relapseRisk}" in Schedule Book review for session "${session.session_name}". Immediate clinical follow-up required.`
+        );
+        try {
+          const followUpReason = `Schedule Book Relapse Risk: ${r.relapseRisk} (${session.session_name || "Curriculum Session"})`;
+          await pool.query(
+            "INSERT INTO follow_ups (patient_id, assigned_to, reason, due_date, status) VALUES (?, ?, ?, CURDATE(), 'pending')",
+            [r.patientId, patient.assigned_case_manager_id, followUpReason]
+          );
+        } catch (fErr) {
+          console.warn("Could not auto-schedule follow-up:", fErr.message);
+        }
+      }
+    }
+
+    // Phase 1.3 Flag: Positive Drug Screening Clinical Alert (ENTREPOSE Protocol)
+    const positiveDtRecords = records.filter(
+      (r) => (r.status === "present" || r.status === "late") && r.drugTestResult === "POSITIVE"
+    );
+    for (const r of positiveDtRecords) {
+      const [[patient]] = await pool.query(
+        "SELECT id, full_name, assigned_case_manager_id FROM patients WHERE id = ?",
+        [r.patientId]
+      );
+      if (patient?.assigned_case_manager_id) {
+        const detectedSubstances = r.substanceTested || "Multi-3 Panel";
+        await notifyUser(
+          patient.assigned_case_manager_id,
+          "patients",
+          "drug_test_positive",
+          `🚨 Multi-3 Drug Test Alert: "${patient.full_name}" tested POSITIVE for [${detectedSubstances}] following session "${session.session_name}" (${session.session_date}). Immediate clinical counseling & relapse intervention required.`
+        );
+        try {
+          const dtFollowUpReason = `Multi-3 Positive Drug Test (${detectedSubstances}): ${session.session_name || "Clinical Session"} (${session.session_date})`;
+          await pool.query(
+            "INSERT INTO follow_ups (patient_id, assigned_to, reason, due_date, status) VALUES (?, ?, ?, CURDATE(), 'pending')",
+            [r.patientId, patient.assigned_case_manager_id, dtFollowUpReason]
+          );
+        } catch (dtfErr) {
+          console.warn("Could not auto-schedule positive drug test follow-up:", dtfErr.message);
+        }
+      }
+    }
+
     res.status(201).json({ message: "Attendance recorded." });
   } catch (err) {
     await connection.rollback();
@@ -186,17 +309,35 @@ export async function listAttendance(req, res) {
 
   const whereSql = where.length ? `WHERE ${where.join(" AND ")}` : "";
 
+  const [allCols] = await pool.query("SHOW COLUMNS FROM attendance");
+  const colNames = allCols.map((c) => c.Field);
+  const extraCols = [];
+  if (colNames.includes("relapse_risk")) extraCols.push("a.relapse_risk");
+  if (colNames.includes("family_attended")) extraCols.push("a.family_attended");
+  if (colNames.includes("family_member_name")) extraCols.push("a.family_member_name");
+  if (colNames.includes("is_chairperson")) extraCols.push("a.is_chairperson");
+  if (colNames.includes("drug_test_result")) extraCols.push("a.drug_test_result");
+  const extraSql = extraCols.length ? ", " + extraCols.join(", ") : "";
+
   const [rows] = await pool.query(
     `SELECT a.id, a.status, a.notes, a.session_date,
             p.id AS patient_id, p.patient_code, p.full_name,
             s.session_name, s.session_time,
             pr.name AS program_name,
-            u.full_name AS case_manager_name
+            u.full_name AS case_manager_name,
+            dt.substance_tested
+            ${extraSql}
      FROM attendance a
      JOIN patients p ON p.id = a.patient_id
      LEFT JOIN sessions s ON s.id = a.session_id
      LEFT JOIN programs pr ON pr.id = s.program_id
      LEFT JOIN users u ON u.id = s.case_manager_id
+     LEFT JOIN (
+       SELECT patient_id, test_date, MAX(substance_tested) as substance_tested
+       FROM drug_test_logs
+       WHERE test_type = 'Post-Session Screening'
+       GROUP BY patient_id, test_date
+     ) dt ON dt.patient_id = a.patient_id AND dt.test_date = a.session_date
      ${whereSql}
      ORDER BY a.session_date DESC, a.id DESC`,
     params

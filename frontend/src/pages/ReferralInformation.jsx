@@ -45,10 +45,9 @@ const SOURCE_OPTIONS = [
   { value: "NGO", label: "NGO-Referred" },
 ];
 
-// DOH/DDB-standard service categories (IDADIN Part C)
+// DOH/DDB-standard service categories (IDADIN Part C) - Outpatient Service Scope
 const TYPE_OF_SERVICE_OPTIONS = [
   { value: "Outpatient Service (ENTREPOSE)", label: "Outpatient Service (ENTREPOSE)" },
-  { value: "Inpatient / Residential Service", label: "Inpatient / Residential Service" },
   { value: "Aftercare Program (ACP / SIBOL)", label: "Aftercare Program (ACP / SIBOL)" },
 ];
 

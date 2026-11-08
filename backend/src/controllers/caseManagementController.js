@@ -619,3 +619,335 @@ export async function saveTreatmentPlan(req, res) {
     connection.release();
   }
 }
+
+// ==========================================
+// CBT-E EVALUATIONS (ENTREPOSE Vol. 1 Sec 5.3 & Vol. 2A)
+// ==========================================
+export async function getPatientCbteEvaluations(req, res) {
+  const { id } = req.params;
+  try {
+    const [tables] = await pool.query("SHOW TABLES LIKE 'patient_cbte_evaluations'");
+    if (tables.length === 0) {
+      return res.json({ evaluations: [] });
+    }
+
+    const [rows] = await pool.query(
+      `SELECT e.*, u.full_name AS evaluator_name
+       FROM patient_cbte_evaluations e
+       LEFT JOIN users u ON u.id = e.evaluator_id
+       WHERE e.patient_id = ?
+       ORDER BY e.evaluation_date DESC, e.id DESC`,
+      [id]
+    );
+
+    res.json({ evaluations: rows });
+  } catch (err) {
+    console.error("Error in getPatientCbteEvaluations:", err);
+    res.status(500).json({ message: "Could not retrieve CBT-E evaluations." });
+  }
+}
+
+export async function savePatientCbteEvaluation(req, res) {
+  const { id } = req.params;
+  const {
+    evaluationType,
+    evaluationDate,
+    recoveryDomainsJson,
+    copingSkillsJson,
+    lifeGoalsText,
+    overallScore,
+    clinicalJudgment,
+    evaluatorRemarks
+  } = req.body;
+
+  if (!evaluationType || !evaluationDate) {
+    return res.status(400).json({ message: "Evaluation type and date are required." });
+  }
+
+  const connection = await pool.getConnection();
+  try {
+    const [tables] = await connection.query("SHOW TABLES LIKE 'patient_cbte_evaluations'");
+    if (tables.length === 0) {
+      connection.release();
+      return res.status(500).json({
+        message: "The patient_cbte_evaluations table does not exist in MySQL. Please run the CREATE TABLE statement in MySQL Workbench first."
+      });
+    }
+
+    await connection.beginTransaction();
+
+    const [result] = await connection.query(
+      `INSERT INTO patient_cbte_evaluations
+        (patient_id, evaluation_type, evaluation_date, evaluator_id,
+         recovery_domains_json, coping_skills_json, life_goals_text,
+         overall_score, clinical_judgment, evaluator_remarks)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        id,
+        evaluationType,
+        evaluationDate,
+        req.user.id,
+        recoveryDomainsJson ? JSON.stringify(recoveryDomainsJson) : null,
+        copingSkillsJson ? JSON.stringify(copingSkillsJson) : null,
+        lifeGoalsText || null,
+        overallScore || null,
+        clinicalJudgment || "ON_TRACK",
+        evaluatorRemarks || null
+      ]
+    );
+
+    // Synchronize clinical milestones
+    if (evaluationType === "CBTE_1") {
+      await connection.query(
+        `INSERT INTO patient_milestones (patient_id, date_initial_assessment)
+         VALUES (?, ?)
+         ON DUPLICATE KEY UPDATE date_initial_assessment = COALESCE(date_initial_assessment, VALUES(date_initial_assessment))`,
+        [id, evaluationDate]
+      );
+    } else if (evaluationType === "CBTE_2") {
+      await connection.query(
+        `INSERT INTO patient_milestones (patient_id, date_followup_assessment)
+         VALUES (?, ?)
+         ON DUPLICATE KEY UPDATE date_followup_assessment = VALUES(date_followup_assessment)`,
+        [id, evaluationDate]
+      );
+    } else if (evaluationType === "CBTE_3") {
+      await connection.query(
+        `INSERT INTO patient_milestones (patient_id, date_acp_planning)
+         VALUES (?, ?)
+         ON DUPLICATE KEY UPDATE date_acp_planning = VALUES(date_acp_planning)`,
+        [id, evaluationDate]
+      );
+    }
+
+    const [[pRow]] = await connection.query("SELECT full_name FROM patients WHERE id = ?", [id]);
+    await connection.query(
+      "INSERT INTO audit_log (actor_username, action, table_name, record_id) VALUES (?, ?, 'patients', ?)",
+      [
+        req.user?.username || "Staff",
+        `Recorded ${evaluationType} evaluation for patient "${pRow?.full_name || `#${id}`}" (${clinicalJudgment})`,
+        id
+      ]
+    );
+
+    await connection.commit();
+    res.status(201).json({ id: result.insertId, message: `${evaluationType} evaluation recorded successfully.` });
+  } catch (err) {
+    await connection.rollback();
+    console.error("Error in savePatientCbteEvaluation:", err);
+    res.status(500).json({ message: "Could not save CBT-E evaluation." });
+  } finally {
+    connection.release();
+  }
+}
+
+// ==========================================
+// COURT PROGRESS REPORTS (Vol. 1 Sec 7.2 & MTRC Ref Sec 08)
+// ==========================================
+export async function getCourtReportData(req, res) {
+  const { id } = req.params;
+  const { reportType = "INITIAL" } = req.query;
+
+  try {
+    // 1. Patient & Referral Profile
+    const [[patient]] = await pool.query(
+      `SELECT p.id, p.full_name, p.patient_code, p.pwud_code, p.gender, p.civil_status,
+              p.birthdate, p.municipality, p.admission_date, p.admission_type, p.enrollment_status,
+              p.assigned_case_manager_id, u.full_name AS case_manager_name,
+              r.referring_organization, r.referring_professional, r.nature_of_confinement,
+              r.dde_severity_diagnosis
+       FROM patients p
+       LEFT JOIN users u ON u.id = p.assigned_case_manager_id
+       LEFT JOIN patient_referrals r ON r.patient_id = p.id
+       WHERE p.id = ?`,
+      [id]
+    );
+
+    if (!patient) return res.status(404).json({ message: "Patient not found." });
+
+    // 2. Attendance Summary
+    const [attStats] = await pool.query(
+      `SELECT 
+         COUNT(*) as total_recorded,
+         SUM(status = 'present') as present_count,
+         SUM(status = 'absent') as absent_count,
+         SUM(status = 'late') as late_count,
+         SUM(status = 'excused') as excused_count,
+         SUM(session_type = 'CBT_GROUP' AND status = 'present') as cbt_count,
+         SUM(session_type = 'PSYCHO_EDUCATION' AND status = 'present') as pe_count,
+         SUM(session_type = 'SHGM' AND status = 'present') as shgm_count,
+         SUM(session_type = 'INDIVIDUAL_COUNSELING' AND status = 'present') as individual_count,
+         SUM(session_type = 'CONJOINT_FAMILY' AND status = 'present') as family_count
+       FROM attendance WHERE patient_id = ?`,
+      [id]
+    );
+
+    // 3. Relapse Risk Counts (from Schedule Book logs)
+    let relapseStats = { safe: 0, atRisk: 0, used: 0 };
+    const [attCols] = await pool.query("SHOW COLUMNS FROM attendance LIKE 'relapse_risk'");
+    if (attCols.length > 0) {
+      const [[rs]] = await pool.query(
+        `SELECT 
+           SUM(relapse_risk = 'SAFE') as safe_count,
+           SUM(relapse_risk = 'AT_RISK') as at_risk_count,
+           SUM(relapse_risk = 'USED') as used_count
+         FROM attendance WHERE patient_id = ?`,
+        [id]
+      );
+      relapseStats = {
+        safe: Number(rs?.safe_count) || 0,
+        atRisk: Number(rs?.at_risk_count) || 0,
+        used: Number(rs?.used_count) || 0
+      };
+    }
+
+    // 4. Drug Tests
+    const [drugTests] = await pool.query(
+      `SELECT test_date, test_type, substance_tested, result, remarks
+       FROM drug_test_logs WHERE patient_id = ? ORDER BY test_date ASC`,
+      [id]
+    );
+
+    // 5. Milestones
+    const [[milestones]] = await pool.query(
+      `SELECT * FROM patient_milestones WHERE patient_id = ?`,
+      [id]
+    );
+
+    // 6. Latest Treatment Plan
+    let treatmentPlan = null;
+    const [tpTables] = await pool.query("SHOW TABLES LIKE 'patient_treatment_plans'");
+    if (tpTables.length > 0) {
+      const [[tp]] = await pool.query(
+        `SELECT * FROM patient_treatment_plans WHERE patient_id = ? ORDER BY plan_date DESC LIMIT 1`,
+        [id]
+      );
+      treatmentPlan = tp || null;
+    }
+
+    // Calculate months elapsed
+    const admDate = patient.admission_date ? new Date(patient.admission_date) : new Date();
+    const now = new Date();
+    const daysElapsed = Math.max(0, Math.floor((now - admDate) / (1000 * 60 * 60 * 24)));
+    const monthsElapsed = Math.floor(daysElapsed / 30);
+
+    // Generate Standardized Recommendation Template based on Report Type (7-Month Adjusted)
+    let defaultRecommendation = "";
+    if (reportType === "INITIAL") {
+      defaultRecommendation = `The client, ${patient.full_name}, has completed official intake and orientation, actively formulating their Individualized Treatment Plan (ITP). Baseline urine drug testing and initial sessions demonstrate satisfactory orientation and compliance. Respectfully recommended that outpatient rehabilitation under the 7-month ENTREPOSE program be continued with mandatory bi-monthly monitoring.`;
+    } else if (reportType === "MIDTERM") {
+      const attRate = attStats[0]?.total_recorded ? Math.round((attStats[0].present_count / attStats[0].total_recorded) * 100) : 0;
+      defaultRecommendation = `At the midterm evaluation (${monthsElapsed} months elapsed), client has demonstrated ${attRate}% attendance rate with continuous adherence to the cognitive-behavioral curriculum. Routine urine screening remains non-reactive. It is respectfully recommended that client be maintained on the second phase of treatment towards completion.`;
+    } else {
+      defaultRecommendation = `Having completed the full 7-month ENTREPOSE outpatient curriculum with 43 core sessions attended, certified negative urine drug surveillance records, and completed Pre-Discharge Conference (PDC), it is respectfully recommended that the client be awarded the Certificate of Completion and formally endorsed to the 9-Month Community Aftercare Program (OP-ACP).`;
+    }
+
+    res.json({
+      patient,
+      attendance: attStats[0] || {},
+      relapseStats,
+      drugTests,
+      milestones: milestones || {},
+      treatmentPlan,
+      monthsElapsed,
+      daysElapsed,
+      defaultRecommendation,
+      reportType
+    });
+  } catch (err) {
+    console.error("Error in getCourtReportData:", err);
+    res.status(500).json({ message: "Could not compile court progress report data." });
+  }
+}
+
+export async function saveCourtReport(req, res) {
+  const { id } = req.params;
+  const {
+    reportType,
+    courtBranch,
+    criminalCaseNo,
+    presidingJudge,
+    reportDate,
+    attendanceSummaryJson,
+    drugTestSummaryJson,
+    clinicalProgressNarrative,
+    caseManagerRecommendation
+  } = req.body;
+
+  if (!reportType || !reportDate || !clinicalProgressNarrative) {
+    return res.status(400).json({ message: "Report type, report date, and clinical narrative are required." });
+  }
+
+  const connection = await pool.getConnection();
+  try {
+    const year = new Date().getFullYear().toString().slice(-2);
+    const typeCode = reportType === "INITIAL" ? "INIT" : reportType === "MIDTERM" ? "MID" : "FNL";
+    const controlNo = `CPR-${typeCode}-${year}-${String(Date.now()).slice(-5)}`;
+
+    const [tables] = await connection.query("SHOW TABLES LIKE 'court_progress_reports'");
+    if (tables.length > 0) {
+      await connection.query(
+        `INSERT INTO court_progress_reports
+          (patient_id, report_type, report_control_no, court_branch, criminal_case_no,
+           presiding_judge, report_date, prepared_by, attendance_summary_json,
+           drug_test_summary_json, clinical_progress_narrative, case_manager_recommendation)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          id,
+          reportType,
+          controlNo,
+          courtBranch || null,
+          criminalCaseNo || null,
+          presidingJudge || null,
+          reportDate,
+          req.user.id,
+          attendanceSummaryJson ? JSON.stringify(attendanceSummaryJson) : null,
+          drugTestSummaryJson ? JSON.stringify(drugTestSummaryJson) : null,
+          clinicalProgressNarrative,
+          caseManagerRecommendation
+        ]
+      );
+    }
+
+    // Auto-update corresponding milestone date
+    if (reportType === "INITIAL") {
+      await connection.query(
+        `INSERT INTO patient_milestones (patient_id, date_initial_progress_report)
+         VALUES (?, ?)
+         ON DUPLICATE KEY UPDATE date_initial_progress_report = VALUES(date_initial_progress_report)`,
+        [id, reportDate]
+      );
+    } else if (reportType === "MIDTERM") {
+      await connection.query(
+        `INSERT INTO patient_milestones (patient_id, date_status_reporting)
+         VALUES (?, ?)
+         ON DUPLICATE KEY UPDATE date_status_reporting = VALUES(date_status_reporting)`,
+        [id, reportDate]
+      );
+    } else if (reportType === "FINAL") {
+      await connection.query(
+        `INSERT INTO patient_milestones (patient_id, date_final_progress_report)
+         VALUES (?, ?)
+         ON DUPLICATE KEY UPDATE date_final_progress_report = VALUES(date_final_progress_report)`,
+        [id, reportDate]
+      );
+    }
+
+    const [[patient]] = await connection.query("SELECT full_name FROM patients WHERE id = ?", [id]);
+    await connection.query(
+      "INSERT INTO audit_log (actor_username, action, table_name, record_id) VALUES (?, ?, 'patients', ?)",
+      [
+        req.user.username,
+        `Generated ${reportType} Court Progress Report (${controlNo}) for ${patient?.full_name || `#${id}`}`,
+        id
+      ]
+    );
+
+    res.status(201).json({ success: true, controlNo, message: `${reportType} Court Progress Report successfully generated and milestone updated.` });
+  } catch (err) {
+    console.error("Error in saveCourtReport:", err);
+    res.status(500).json({ message: "Could not save court progress report." });
+  } finally {
+    connection.release();
+  }
+}

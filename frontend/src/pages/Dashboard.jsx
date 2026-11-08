@@ -732,7 +732,7 @@ function CaseManagerDashboard() {
           <path d="M3 9h18M9 21V9" />
         </svg>
       ),
-      onClick: () => navigate("/op-cm-tracker"),
+      onClick: () => navigate("/reports/op-cm-tracker"),
     },
     {
       key: "continue-registration",
@@ -1010,7 +1010,7 @@ function CaseManagerDashboard() {
         <CmCard
           title="43-Session Curriculum Progression"
           height={overviewPanelHeight}
-          headerAction={<button type="button" style={cmStyles.viewAllBtn} onClick={() => navigate("/op-cm-tracker")}>View matrix →</button>}
+          headerAction={<button type="button" style={cmStyles.viewAllBtn} onClick={() => navigate("/reports/op-cm-tracker")}>View matrix →</button>}
         >
           <div style={{ ...cmStyles.statusOverview, ...cmStyles.scrollArea, ...cmStyles.boxList }}>
             <div style={cmStyles.statusTotalRow}>

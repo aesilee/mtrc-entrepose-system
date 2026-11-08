@@ -15,6 +15,7 @@ export default function ProgressNoteModal({ patientId: initialPatientId, note, o
   const [form, setForm] = useState({
     sessionDate: note?.session_date?.slice(0, 10) || new Date().toISOString().slice(0, 10),
     sessionType: note?.session_type || "",
+    relapseRisk: note?.relapse_risk || "SAFE",
     observation: note?.observation || "",
     interventionProvided: note?.intervention_provided || "",
     patientResponse: note?.patient_response || "",
@@ -104,6 +105,25 @@ export default function ProgressNoteModal({ patientId: initialPatientId, note, o
               </select>
             </label>
           </div>
+
+          <label style={styles.label}>
+            Schedule Book Relapse Risk (ENTREPOSE Vol. 3A)
+            <select
+              style={{
+                ...styles.input,
+                background: form.relapseRisk === "USED" ? "#FEE2E2" : form.relapseRisk === "AT_RISK" ? "#FEF3C7" : "#ECFDF5",
+                color: form.relapseRisk === "USED" ? "#991B1B" : form.relapseRisk === "AT_RISK" ? "#92400E" : "#065F46",
+                fontWeight: 600,
+                borderColor: form.relapseRisk === "USED" ? "#FCA5A5" : form.relapseRisk === "AT_RISK" ? "#FCD34D" : "#A7F3D0",
+              }}
+              value={form.relapseRisk}
+              onChange={(e) => update("relapseRisk", e.target.value)}
+            >
+              <option value="SAFE">🟢 Safe (Adhering to recovery schedule & clean)</option>
+              <option value="AT_RISK">🟡 At Risk (Trigger proximity, cravings, or skipped activities)</option>
+              <option value="USED">🔴 Used / Slip (Substance lapse or relapse reported)</option>
+            </select>
+          </label>
           <label style={styles.label}>
             Observation
             <textarea style={{ ...styles.input, minHeight: 70 }} value={form.observation} onChange={(e) => update("observation", e.target.value)} required />

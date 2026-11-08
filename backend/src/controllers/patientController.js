@@ -242,6 +242,37 @@ export async function listPatients(req, res) {
     params
   );
 
+  // If requested for attendance modal, return lightweight roster without heavy photos and subqueries
+  if (forAttendance) {
+    const [chairCol] = await pool.query("SHOW COLUMNS FROM attendance LIKE 'is_chairperson'");
+    const chairSql = chairCol.length > 0
+      ? "(SELECT COUNT(*) FROM attendance a WHERE a.patient_id = p.id AND a.session_type = 'SHGM' AND a.is_chairperson = 1 AND a.status = 'present') AS shgm_chaired_count"
+      : "0 AS shgm_chaired_count";
+
+    const [attendanceRows] = await pool.query(
+      `SELECT p.id, p.patient_code, p.pwud_code, p.full_name,
+              p.assigned_case_manager_id AS case_manager_id,
+              u.full_name AS case_manager_name,
+              ${chairSql}
+       FROM patients p
+       LEFT JOIN users u ON u.id = p.assigned_case_manager_id
+       WHERE ${clauses.join(" AND ")}
+       ORDER BY p.full_name ASC
+       LIMIT ? OFFSET ?`,
+      [...params, limit, offset]
+    );
+
+    return res.json({
+      patients: attendanceRows,
+      pagination: { total, page: 1, limit, totalPages: 1 }
+    });
+  }
+
+  const [chairCol] = await pool.query("SHOW COLUMNS FROM attendance LIKE 'is_chairperson'");
+  const chairSql = chairCol.length > 0
+    ? "(SELECT COUNT(*) FROM attendance a WHERE a.patient_id = p.id AND a.session_type = 'SHGM' AND a.is_chairperson = 1 AND a.status = 'present') AS shgm_chaired_count,"
+    : "0 AS shgm_chaired_count,";
+
   const [rows] = await pool.query(
     `SELECT p.id, p.patient_code, p.pwud_code, p.full_name, p.photo_url, p.gender, p.municipality,
             p.admission_date, p.enrollment_status, p.is_archived,
@@ -253,6 +284,7 @@ export async function listPatients(req, res) {
             p.admission_type,
             d.discharge_type,
             d.discharge_date,
+            ${chairSql}
             (SELECT COUNT(*) FROM attendance a WHERE a.patient_id = p.id) AS total_sessions,
             (SELECT COUNT(*) FROM attendance a WHERE a.patient_id = p.id AND a.status = 'present') AS present_sessions,
             (SELECT COUNT(*) FROM attendance a WHERE a.patient_id = p.id AND a.status = 'present' AND a.session_type IN ('CBT_GROUP', 'PSYCHO_EDUCATION')) AS core_sessions,
@@ -598,10 +630,20 @@ export async function getPatientAttendance(req, res) {
     const access = await verifyPatientAccess(id, req.user);
     if (!access.allowed) return res.status(access.status).json({ message: access.message });
 
+    const [attCols] = await pool.query("SHOW COLUMNS FROM attendance");
+    const attColNames = attCols.map((c) => c.Field);
+    const extraAtt = [];
+    if (attColNames.includes("relapse_risk")) extraAtt.push("a.relapse_risk");
+    if (attColNames.includes("family_attended")) extraAtt.push("a.family_attended");
+    if (attColNames.includes("family_member_name")) extraAtt.push("a.family_member_name");
+    if (attColNames.includes("is_chairperson")) extraAtt.push("a.is_chairperson");
+    const extraAttSql = extraAtt.length ? ", " + extraAtt.join(", ") : "";
+
     const [rows] = await pool.query(
       `SELECT a.id, a.session_date,
               COALESCE(s.session_name, a.session_type) AS session_type,
               a.status, a.notes
+              ${extraAttSql}
        FROM attendance a
        LEFT JOIN sessions s ON s.id = a.session_id
        WHERE a.patient_id = ?
@@ -621,10 +663,15 @@ export async function getPatientProgressNotes(req, res) {
     const access = await verifyPatientAccess(id, req.user);
     if (!access.allowed) return res.status(access.status).json({ message: access.message });
 
+    const [pnCols] = await pool.query("SHOW COLUMNS FROM progress_notes");
+    const pnColNames = pnCols.map((c) => c.Field);
+    const extraPnSql = pnColNames.includes("relapse_risk") ? ", pn.relapse_risk" : "";
+
     const [rows] = await pool.query(
       `SELECT pn.id, pn.session_date, pn.session_type, pn.observation, pn.intervention_provided,
               pn.patient_response, pn.recommendations, pn.next_follow_up_date,
               pn.created_at, pn.updated_at, u.full_name AS case_manager_name
+              ${extraPnSql}
        FROM progress_notes pn
        LEFT JOIN users u ON u.id = pn.case_manager_id
        WHERE pn.patient_id = ? ORDER BY pn.session_date DESC, pn.created_at DESC`,

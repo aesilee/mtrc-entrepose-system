@@ -192,7 +192,27 @@ export default function Attendance() {
                       <td style={styles.td}>{r.case_manager_name || "—"}</td>
                       <td style={styles.td}>{r.session_date ? String(r.session_date).slice(0, 10) : "—"}</td>
                       <td style={styles.td}>
-                        <span style={{ ...styles.statusBadge, background: statusStyle.bg, color: statusStyle.color }}>{r.status}</span>
+                        <div style={{ display: "flex", flexDirection: "column", gap: "4px", alignItems: "flex-start" }}>
+                          <span style={{ ...styles.statusBadge, background: statusStyle.bg, color: statusStyle.color }}>{r.status}</span>
+                          {r.drug_test_result && (
+                            <span style={{
+                              display: "inline-flex",
+                              alignItems: "center",
+                              gap: "3px",
+                              padding: "2px 6px",
+                              borderRadius: "4px",
+                              fontSize: "10.5px",
+                              fontWeight: 700,
+                              background: r.drug_test_result === "POSITIVE" ? "#FEE2E2" : "#ECFDF5",
+                              color: r.drug_test_result === "POSITIVE" ? "#991B1B" : "#065F46",
+                              border: `1px solid ${r.drug_test_result === "POSITIVE" ? "#FCA5A5" : "#A7F3D0"}`,
+                            }}>
+                              {r.drug_test_result === "POSITIVE"
+                                ? `🔴 Multi-3: Positive${r.substance_tested && r.substance_tested.includes(":") ? ` (${r.substance_tested.split(":")[1].trim()})` : ""}`
+                                : "🟢 Multi-3: Negative"}
+                            </span>
+                          )}
+                        </div>
                       </td>
                       <td style={styles.td}>{r.notes || "—"}</td>
                     </tr>

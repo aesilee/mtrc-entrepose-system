@@ -156,6 +156,10 @@ export default function App() {
         }
       />
       <Route
+        path="/op-cm-tracker"
+        element={<Navigate to="/reports/op-cm-tracker" replace />}
+      />
+      <Route
         path="/analytics"
         element={
           <ProtectedRoute allowedRoles={["case_manager", "him_staff", "ict_admin"]}>

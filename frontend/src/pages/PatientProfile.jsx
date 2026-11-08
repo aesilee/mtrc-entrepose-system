@@ -11,6 +11,8 @@ import SharedEmptyState from "../components/EmptyState.jsx";
 import StatutoryCertificateModal from "../components/StatutoryCertificateModal.jsx";
 import DrugTestModal from "../components/DrugTestModal.jsx";
 import TreatmentPlanModal from "../components/TreatmentPlanModal.jsx";
+import CbteEvaluationModal from "../components/CbteEvaluationModal.jsx";
+import CourtProgressReportModal from "../components/CourtProgressReportModal.jsx";
 import DischargeModal from "../components/DischargeModal.jsx";
 import TransmittalNoticeModal from "../components/TransmittalNoticeModal.jsx";
 import CardActionMenu from "../components/CardActionMenu.jsx";
@@ -113,6 +115,9 @@ export default function PatientProfile() {
   const [attendanceModalOpen, setAttendanceModalOpen] = useState(false);
   const [treatmentPlanModalOpen, setTreatmentPlanModalOpen] = useState(false);
   const [treatmentPlan, setTreatmentPlan] = useState(null);
+  const [cbteModalOpen, setCbteModalOpen] = useState(false);
+  const [cbteEvaluations, setCbteEvaluations] = useState([]);
+  const [courtReportModalOpen, setCourtReportModalOpen] = useState(false);
   
   const [milestones, setMilestones] = useState(null);
   const [milestoneHistory, setMilestoneHistory] = useState([]);
@@ -207,7 +212,8 @@ export default function PatientProfile() {
       api.get(`/case-management/patients/${id}/sessions/summary`),
       api.get(`/case-management/patients/${id}/drug-tests`),
       api.get(`/case-management/patients/${id}/treatment-plan`).catch(() => ({ data: { treatmentPlan: null } })),
-    ]).then(([p, a, pn, c, h, fu, tl, cm, pr, ms, ss, dt, tp]) => {
+      api.get(`/case-management/patients/${id}/cbte-evaluations`).catch(() => ({ data: { evaluations: [] } })),
+    ]).then(([p, a, pn, c, h, fu, tl, cm, pr, ms, ss, dt, tp, cbte]) => {
       setPatient(p.data.patient);
       setForm(toFormState(p.data.patient));
       setAttendance(a.data.attendance);
@@ -223,6 +229,7 @@ export default function PatientProfile() {
       setSessionSummary(ss.data);
       setDrugTests(dt.data.drugTests || []);
       setTreatmentPlan(tp?.data?.treatmentPlan || null);
+      setCbteEvaluations(cbte?.data?.evaluations || []);
     }).catch(err => {
       console.error("Error loading patient profile data:", err);
     }).finally(() => setLoading(false));
@@ -725,31 +732,79 @@ export default function PatientProfile() {
                 <StatChip label="Attendance rate" value={attendancePct !== null ? `${attendancePct}%` : "—"} />
               </div>
               {attendance.length === 0 ? <EmptyState text="No attendance records yet." /> : (
-                <SimpleTable columns={["Date", "Session", "Status", "Remarks"]} rows={attendance.map((a) => [fmtDate(a.session_date), a.session_type || "—", a.status, a.notes || "—"])} />
+                <SimpleTable
+                  columns={["Date", "Session & Modality", "Status", "Schedule Book Relapse Risk", "Remarks"]}
+                  rows={attendance.map((a) => [
+                    fmtDate(a.session_date),
+                    <div>
+                      <div style={{ fontWeight: 600 }}>{a.session_type || "—"}</div>
+                      <div style={{ display: "flex", gap: 4, marginTop: 2, flexWrap: "wrap" }}>
+                        {a.is_chairperson ? (
+                          <span style={{ fontSize: 10, padding: "1px 6px", borderRadius: 4, background: "#EBF8FF", color: "#2B6CB0", fontWeight: 700 }}>
+                            👑 SHGM Chair
+                          </span>
+                        ) : null}
+                        {a.family_attended ? (
+                          <span style={{ fontSize: 10, padding: "1px 6px", borderRadius: 4, background: "#F0FFF4", color: "#276749", fontWeight: 700 }}>
+                            👨‍👩‍👧 Family: {a.family_member_name || "Present"}
+                          </span>
+                        ) : null}
+                      </div>
+                    </div>,
+                    <span style={{ textTransform: "capitalize", fontWeight: 600, color: a.status === "present" ? "var(--color-primary-dark)" : a.status === "absent" ? "#C53030" : "inherit" }}>
+                      {a.status}
+                    </span>,
+                    <span style={{
+                      display: "inline-block",
+                      padding: "2px 8px",
+                      borderRadius: 999,
+                      fontSize: 11,
+                      fontWeight: 700,
+                      background: a.relapse_risk === "USED" ? "#FEE2E2" : a.relapse_risk === "AT_RISK" ? "#FEF3C7" : "#ECFDF5",
+                      color: a.relapse_risk === "USED" ? "#991B1B" : a.relapse_risk === "AT_RISK" ? "#92400E" : "#065F46",
+                      border: a.relapse_risk === "USED" ? "1px solid #FCA5A5" : a.relapse_risk === "AT_RISK" ? "1px solid #FCD34D" : "1px solid #A7F3D0"
+                    }}>
+                      {a.relapse_risk === "USED" ? "🔴 USED / SLIP" : a.relapse_risk === "AT_RISK" ? "🟡 AT RISK" : "🟢 SAFE"}
+                    </span>,
+                    a.notes || "—"
+                  ])}
+                />
               )}
             </div>
           ) : activeSection === "case-notes" ? (
             <div>
               <SectionHeader icon={NAV_ICONS["case-notes"]} title="Case Management" />
 
-              <div style={styles.subTabBar}>
-                {[
-                  { key: "treatment-plan", label: "Treatment Plan (ITP)" },
-                  { key: "summary", label: "Progress & Summary" },
-                  { key: "milestones", label: "Milestones" },
-                  { key: "drug-tests", label: "Drug Tests" },
-                  { key: "notes", label: "Progress Notes" },
-                  { key: "followups", label: "Follow-up Actions" },
-                ].map((t) => (
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14, flexWrap: "wrap", gap: 10 }}>
+                <div style={styles.subTabBar}>
+                  {[
+                    { key: "treatment-plan", label: "Treatment Plan (ITP)" },
+                    { key: "summary", label: "Progress & Summary" },
+                    { key: "milestones", label: "Milestones" },
+                    { key: "cbte", label: "CBT-E Evaluations" },
+                    { key: "drug-tests", label: "Drug Tests" },
+                    { key: "notes", label: "Progress Notes" },
+                    { key: "followups", label: "Follow-up Actions" },
+                  ].map((t) => (
+                    <button
+                      key={t.key}
+                      type="button"
+                      onClick={() => setCaseSubTab(t.key)}
+                      style={{ ...styles.subTabButton, ...(caseSubTab === t.key ? styles.subTabButtonActive : {}) }}
+                    >
+                      {t.label}
+                    </button>
+                  ))}
+                </div>
+                {canManageCase && (
                   <button
-                    key={t.key}
                     type="button"
-                    onClick={() => setCaseSubTab(t.key)}
-                    style={{ ...styles.subTabButton, ...(caseSubTab === t.key ? styles.subTabButtonActive : {}) }}
+                    style={{ ...styles.generateBtn, background: "#2B6CB0", display: "flex", alignItems: "center", gap: 6, whiteSpace: "nowrap" }}
+                    onClick={() => setCourtReportModalOpen(true)}
                   >
-                    {t.label}
+                    ⚖️ Court Progress Report
                   </button>
-                ))}
+                )}
               </div>
 
               {caseSubTab === "treatment-plan" && (
@@ -873,6 +928,76 @@ export default function PatientProfile() {
                           </div>
                         </div>
                       </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {caseSubTab === "cbte" && (
+                <div>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+                    <div>
+                      <h3 style={{ margin: 0, fontSize: 16, color: "#2D3748" }}>CBT Clinical Evaluations (CBT-E 1, 2, 3)</h3>
+                      <p style={{ margin: "2px 0 0", fontSize: 12.5, color: "#718096" }}>
+                        Formal milestone evaluations: Recovery Status (W5), Relapse Prevention (W13), and Discharge Readiness (W26).
+                      </p>
+                    </div>
+                    {canManageCase && (
+                      <button
+                        type="button"
+                        style={styles.generateBtn}
+                        onClick={() => setCbteModalOpen(true)}
+                      >
+                        + Record CBT-E Evaluation
+                      </button>
+                    )}
+                  </div>
+
+                  {cbteEvaluations.length === 0 ? (
+                    <EmptyState text="No CBT-E evaluations recorded yet. Record CBT-E 1 at Week 5, CBT-E 2 at Week 13, and CBT-E 3 at Month 6–7." />
+                  ) : (
+                    <div style={styles.list}>
+                      {cbteEvaluations.map((ev) => (
+                        <div key={ev.id} style={styles.noteCard}>
+                          <div style={styles.noteHeader}>
+                            <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                              <span style={{
+                                fontWeight: 800,
+                                fontSize: 13,
+                                padding: "3px 10px",
+                                borderRadius: 6,
+                                background: ev.evaluation_type === "CBTE_1" ? "#EBF8FF" : ev.evaluation_type === "CBTE_2" ? "#FEF3C7" : "#ECFDF5",
+                                color: ev.evaluation_type === "CBTE_1" ? "#2B6CB0" : ev.evaluation_type === "CBTE_2" ? "#92400E" : "#065F46",
+                              }}>
+                                {ev.evaluation_type === "CBTE_1" ? "CBT-E 1 (Week 5)" : ev.evaluation_type === "CBTE_2" ? "CBT-E 2 (Week 13)" : "CBT-E 3 (Month 6–7)"}
+                              </span>
+                              <span style={{ fontWeight: 600, fontSize: 13 }}>{fmtDate(ev.evaluation_date)}</span>
+                              {ev.overall_score && (
+                                <span style={{ fontSize: 12, background: "#EDF2F7", padding: "2px 8px", borderRadius: 999, fontWeight: 700 }}>
+                                  Score: {ev.overall_score} / 5.0
+                                </span>
+                              )}
+                              <span style={{
+                                fontSize: 11,
+                                fontWeight: 700,
+                                padding: "2px 8px",
+                                borderRadius: 999,
+                                background: ev.clinical_judgment === "RECOMMEND_DISCHARGE" ? "#ECFDF5" : ev.clinical_judgment === "NEEDS_INTENSIFICATION" ? "#FEF3C7" : ev.clinical_judgment === "REFER_RESIDENTIAL" ? "#FEE2E2" : "#EBF8FF",
+                                color: ev.clinical_judgment === "RECOMMEND_DISCHARGE" ? "#065F46" : ev.clinical_judgment === "NEEDS_INTENSIFICATION" ? "#92400E" : ev.clinical_judgment === "REFER_RESIDENTIAL" ? "#991B1B" : "#2B6CB0",
+                              }}>
+                                {ev.clinical_judgment === "RECOMMEND_DISCHARGE" ? "🎓 Discharge Ready" : ev.clinical_judgment === "NEEDS_INTENSIFICATION" ? "⚠️ Needs Intensification" : ev.clinical_judgment === "REFER_RESIDENTIAL" ? "🚨 Residential Re-eval" : "✅ On Track"}
+                              </span>
+                            </div>
+                            <span style={styles.noteMeta}>Evaluator: {ev.evaluator_name || "Case Manager"}</span>
+                          </div>
+                          {ev.life_goals_text && (
+                            <p style={styles.noteContent}><strong>Continuing Recovery Goals:</strong> {ev.life_goals_text}</p>
+                          )}
+                          {ev.evaluator_remarks && (
+                            <p style={styles.noteContent}><strong>Evaluator Remarks:</strong> {ev.evaluator_remarks}</p>
+                          )}
+                        </div>
+                      ))}
                     </div>
                   )}
                 </div>
@@ -1042,7 +1167,22 @@ export default function PatientProfile() {
                       {progressNotes.map((n) => (
                         <div key={n.id} style={styles.noteCard}>
                           <div style={styles.noteHeader}>
-                            <span style={{ fontWeight: 700 }}>{fmtDate(n.session_date)} {n.session_type && `· ${n.session_type}`}</span>
+                            <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                              <span style={{ fontWeight: 700 }}>{fmtDate(n.session_date)} {n.session_type && `· ${n.session_type}`}</span>
+                              {n.relapse_risk && (
+                                <span style={{
+                                  fontSize: 10,
+                                  fontWeight: 700,
+                                  padding: "1px 7px",
+                                  borderRadius: 999,
+                                  background: n.relapse_risk === "USED" ? "#FEE2E2" : n.relapse_risk === "AT_RISK" ? "#FEF3C7" : "#ECFDF5",
+                                  color: n.relapse_risk === "USED" ? "#991B1B" : n.relapse_risk === "AT_RISK" ? "#92400E" : "#065F46",
+                                  border: n.relapse_risk === "USED" ? "1px solid #FCA5A5" : n.relapse_risk === "AT_RISK" ? "1px solid #FCD34D" : "1px solid #A7F3D0"
+                                }}>
+                                  {n.relapse_risk === "USED" ? "🔴 USED" : n.relapse_risk === "AT_RISK" ? "🟡 AT RISK" : "🟢 SAFE"}
+                                </span>
+                              )}
+                            </div>
                             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                               <span style={styles.noteMeta}>{n.case_manager_name || "—"} · {fmtDateTime(n.created_at)}</span>
                               {canManageCase && (
@@ -1296,7 +1436,28 @@ export default function PatientProfile() {
         />
       )}
 
+      {cbteModalOpen && (
+        <CbteEvaluationModal
+          patient={patient}
+          onClose={() => setCbteModalOpen(false)}
+          onSaved={() => {
+            setCbteModalOpen(false);
+            loadAll();
+            setToast("CBT-E evaluation saved and clinical milestones synchronized.");
+          }}
+        />
+      )}
 
+      {courtReportModalOpen && (
+        <CourtProgressReportModal
+          patient={patient}
+          onClose={() => setCourtReportModalOpen(false)}
+          onSaved={() => {
+            loadAll();
+            setToast("Court progress report saved and milestone updated.");
+          }}
+        />
+      )}
 
       {showTransmittalModal && (
         <TransmittalNoticeModal

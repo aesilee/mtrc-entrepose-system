@@ -1,4 +1,7 @@
 import pool from "../config/db.js";
+import { getBulkUnifiedPatientProgress } from "../utils/curriculumProgress.js";
+import { ensureProgramDurationSchema, evaluatePatientDuration } from "../utils/programDuration.js";
+import { getAttendanceRates } from "../utils/attendanceRate.js";
 
 export async function getDashboardStats(req, res) {
   try {
@@ -40,9 +43,11 @@ export async function getCaseManagerStats(req, res) {
        FROM sessions s
        LEFT JOIN attendance a ON a.session_id = s.id
        LEFT JOIN patients p ON p.id = a.patient_id AND p.is_archived = FALSE
+       LEFT JOIN session_roster sr ON sr.session_id = s.id
+       LEFT JOIN patients prp ON prp.id = sr.patient_id AND prp.is_archived = FALSE
        WHERE s.session_date = CURDATE()
-         AND (s.case_manager_id = ? OR p.assigned_case_manager_id = ?)`,
-      [cmId, cmId]
+         AND (s.case_manager_id = ? OR p.assigned_case_manager_id = ? OR prp.assigned_case_manager_id = ?)`,
+      [cmId, cmId, cmId]
     );
 
     const [[{ missedSessions }]] = await pool.query(
@@ -65,29 +70,28 @@ export async function getCaseManagerStats(req, res) {
     );
 
     // Caseload Adherence Rate Calculation
-    const [[attStat]] = await pool.query(
-      `SELECT 
-         COALESCE(SUM(CASE WHEN a.status = 'present' THEN 1 ELSE 0 END), 0) AS presentCount,
-         COUNT(*) AS totalCount
-       FROM attendance a
-       JOIN patients p ON p.id = a.patient_id
-       WHERE p.assigned_case_manager_id = ?
-         AND p.is_archived = FALSE
-         AND p.enrollment_status = 'active'`,
+    const [activePatients] = await pool.query(
+      `SELECT id FROM patients
+       WHERE assigned_case_manager_id = ?
+         AND is_archived = FALSE
+         AND enrollment_status = 'active'`,
       [cmId]
     );
-    const totalAttCount = Number(attStat?.totalCount || 0);
-    const presentAttCount = Number(attStat?.presentCount || 0);
-    const attendanceRate = totalAttCount > 0 ? Math.round((presentAttCount / totalAttCount) * 100) : 100;
+    const activePatientIds = activePatients.map((p) => p.id);
+    const attRates = await getAttendanceRates(pool, activePatientIds);
+    let totalCbtAtt = 0;
+    let totalCbtExp = 0;
+    for (const v of attRates.values()) {
+      totalCbtAtt += v.attended;
+      totalCbtExp += v.expected;
+    }
+    const attendanceRate = totalCbtExp > 0 ? Math.round((totalCbtAtt / totalCbtExp) * 100) : null;
 
-    // 43 Core Sessions Cohort Curriculum Progression
+    // 43 Core Requirements Cohort Curriculum Progression (28 CBT + 3 CBT-E + 12 PE + patient-specific duration)
+    await ensureProgramDurationSchema();
     const [coreRows] = await pool.query(
-      `SELECT 
-         p.id,
-         (SELECT COUNT(*) FROM attendance a 
-          WHERE a.patient_id = p.id 
-            AND a.status = 'present' 
-            AND a.session_type IN ('CBT_GROUP', 'PSYCHO_EDUCATION')) AS coreSessions
+      `SELECT p.id, p.admission_date, p.rehab_start_date, p.required_duration_months,
+              p.duration_basis, p.extension_months, p.expected_completion_date
        FROM patients p
        WHERE p.assigned_case_manager_id = ?
          AND p.is_archived = FALSE
@@ -95,14 +99,21 @@ export async function getCaseManagerStats(req, res) {
       [cmId]
     );
 
+    const progressMap = await getBulkUnifiedPatientProgress(
+      pool,
+      coreRows.map((r) => r.id)
+    ).catch(() => new Map());
+
     let phase1Count = 0;
     let phase2Count = 0;
     let phase3Count = 0;
     let pdcReadyCount = 0;
 
     for (const r of coreRows) {
-      const s = Number(r.coreSessions || 0);
-      if (s >= 43) pdcReadyCount++;
+      const prog = progressMap.get(Number(r.id));
+      const dur = evaluatePatientDuration(r);
+      const s = prog ? prog.attendedCore : 0;
+      if (prog?.isCoreComplete && dur?.isDurationMet) pdcReadyCount++;
       else if (s >= 29) phase3Count++;
       else if (s >= 15) phase2Count++;
       else phase1Count++;
@@ -169,11 +180,13 @@ export async function getCaseManagerStats(req, res) {
        FROM sessions s
        LEFT JOIN attendance a ON a.session_id = s.id
        LEFT JOIN patients p ON p.id = a.patient_id
+       LEFT JOIN session_roster sr ON sr.session_id = s.id
+       LEFT JOIN patients prp ON prp.id = sr.patient_id
        LEFT JOIN programs pr ON pr.id = s.program_id
        WHERE s.session_date = CURDATE()
-         AND (s.case_manager_id = ? OR p.assigned_case_manager_id = ?)
+         AND (s.case_manager_id = ? OR p.assigned_case_manager_id = ? OR prp.assigned_case_manager_id = ?)
        ORDER BY s.session_time, s.session_name`,
-      [cmId, cmId]
+      [cmId, cmId, cmId]
     );
 
     const [recentPatients] = await pool.query(

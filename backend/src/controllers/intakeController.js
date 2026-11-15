@@ -1,6 +1,15 @@
 import pool from "../config/db.js";
 import { notifyRoles, notifyUser } from "../utils/notify.js";
 import { generatePwudCode } from "./patientController.js";
+import {
+  ensureProgramDurationSchema,
+  calculateExpectedCompletionDate,
+  evaluatePatientDuration,
+} from "../utils/programDuration.js";
+import {
+  recordPatientStatusChange,
+  recordCaseManagerAssignment,
+} from "../utils/historicalReportSchema.js";
 
 // Official 3-letter LGU codes for Albay/Bicol municipalities
 const LGU_CODE_MAP = {
@@ -203,9 +212,11 @@ export async function getPatientIntake(req, res) {
   if (!Number.isInteger(patientId)) return res.status(400).json({ message: "Invalid patient ID." });
 
   try {
+    await ensureProgramDurationSchema();
     const patient = await getPatient(pool, patientId);
     if (!patient) return res.status(404).json({ message: "Patient not found." });
     if (!canAccessPatient(req.user, patient)) return res.status(403).json({ message: "You do not have access to this patient." });
+    patient.durationSummary = evaluatePatientDuration(patient);
     const [referral, intake, [cmRows]] = await Promise.all([
       getReferral(pool, patientId),
       getIntake(pool, patientId),
@@ -437,10 +448,17 @@ export async function finalizeEnrollment(req, res) {
   const dataPrivacyConsentSigned = req.body.dataPrivacyConsentSigned === true;
   const generalMedicalConsentSigned = req.body.generalMedicalConsentSigned === true;
   const admissionDate = req.body.admissionDate || null;
+  const rehabStartDate = req.body.rehabStartDate || null;
+  const requiredDurationMonths = Number(req.body.requiredDurationMonths) > 0
+    ? Number(req.body.requiredDurationMonths)
+    : 7;
+  const durationBasis = cleanText(req.body.durationBasis, 60) || "STANDARD_PROGRAM";
+  const durationBasisDetail = cleanText(req.body.durationBasisDetail, 255) || null;
   const assignedCaseManagerId = req.body.assignedCaseManagerId ? Number(req.body.assignedCaseManagerId) : null;
 
   if (!Number.isInteger(patientId)) return res.status(400).json({ message: "Invalid patient ID." });
 
+  await ensureProgramDurationSchema();
   const connection = await pool.getConnection();
   try {
     await connection.beginTransaction();
@@ -498,6 +516,8 @@ export async function finalizeEnrollment(req, res) {
 
     const year = new Date().getFullYear().toString().slice(-2);
     const effectiveAdmissionDate = admissionDate || (patient.admission_date ? String(patient.admission_date).slice(0, 10) : new Date().toISOString().slice(0, 10));
+    const effectiveRehabStartDate = rehabStartDate || effectiveAdmissionDate;
+    const effectiveExpectedCompletionDate = calculateExpectedCompletionDate(effectiveRehabStartDate, requiredDurationMonths);
     const effectiveCmId = !isOPD ? (assignedCaseManagerId || patient.assigned_case_manager_id) : null;
 
     if (isOPD) {
@@ -525,9 +545,73 @@ export async function finalizeEnrollment(req, res) {
       // Reuse existing PWUD code or generate new one
       const pwudCode = patient.pwud_code || (await generatePwudCode(patient.municipality, connection));
       await connection.query(
-        "UPDATE patients SET admission_date = ?, enrollment_status = 'active', current_status = 'active', assigned_case_manager_id = COALESCE(?, assigned_case_manager_id), pwud_code = COALESCE(pwud_code, ?) WHERE id = ?",
-        [effectiveAdmissionDate, effectiveCmId, pwudCode, patientId]
+        `UPDATE patients
+         SET admission_date = ?,
+             rehab_start_date = ?,
+             required_duration_months = ?,
+             duration_basis = ?,
+             duration_basis_detail = ?,
+             expected_completion_date = ?,
+             enrollment_status = 'active',
+             current_status = 'active',
+             assigned_case_manager_id = COALESCE(?, assigned_case_manager_id),
+             pwud_code = COALESCE(pwud_code, ?)
+         WHERE id = ?`,
+        [
+          effectiveAdmissionDate,
+          effectiveRehabStartDate,
+          requiredDurationMonths,
+          durationBasis,
+          durationBasisDetail,
+          effectiveExpectedCompletionDate,
+          effectiveCmId,
+          pwudCode,
+          patientId,
+        ]
       );
+
+      // Log initial enrollment duration requirement in patient_duration_history
+      await connection.query(
+        `INSERT INTO patient_duration_history
+           (patient_id, change_type, previous_duration_months, new_duration_months,
+            extension_months, total_duration_months, previous_basis, new_basis,
+            basis_detail, agreed_start_date, previous_expected_completion_date,
+            new_expected_completion_date, reason, effective_date,
+            approved_by_name, recorded_by, recorded_by_name)
+         VALUES (?, 'INITIAL_ENROLLMENT', NULL, ?, 0, ?, NULL, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?)`,
+        [
+          patientId,
+          requiredDurationMonths,
+          requiredDurationMonths,
+          durationBasis,
+          durationBasisDetail,
+          effectiveRehabStartDate,
+          effectiveExpectedCompletionDate,
+          durationBasisDetail || "Documented enrollment duration requirement upon intake finalization",
+          effectiveRehabStartDate,
+          req.user.full_name || req.user.username || "Admitting Staff",
+          req.user.id,
+          req.user.full_name || req.user.username || "Admitting Staff",
+        ]
+      ).catch(() => {});
+
+      await recordPatientStatusChange(connection, {
+        patientId,
+        newStatus: "active",
+        effectiveDate: effectiveAdmissionDate,
+        reason: "Initial enrollment finalized upon intake completion",
+        changedBy: req.user.id,
+      }).catch(() => {});
+
+      if (effectiveCmId) {
+        await recordCaseManagerAssignment(connection, {
+          patientId,
+          newCaseManagerId: effectiveCmId,
+          effectiveDate: effectiveAdmissionDate,
+          reason: "Assigned upon enrollment",
+          assignedBy: req.user.id,
+        }).catch(() => {});
+      }
     }
 
     await connection.query("UPDATE patient_referrals SET status = 'intake_completed' WHERE patient_id = ?", [patientId]);

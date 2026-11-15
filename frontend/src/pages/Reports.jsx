@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import AppShell from "../components/AppShell.jsx";
 import api from "../api/axios.js";
 import * as XLSX from "xlsx";
+import ReportDefinitionsModal from "../components/opCmTracker/ReportDefinitionsModal.jsx";
 import {
   Form41View,
   Form42View,
@@ -43,6 +44,7 @@ export default function Reports() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [definitionsModalOpen, setDefinitionsModalOpen] = useState(false);
 
   React.useEffect(() => {
     setData(null);
@@ -146,11 +148,30 @@ export default function Reports() {
 
   return (
     <AppShell title="DOH Reports Automation" description="Generate, print, and export official DOH Outpatient statutory forms.">
-      <div className="no-print" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-        <p style={{ margin: 0, fontSize: 13 }}>
+      <div className="no-print" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16, flexWrap: "wrap", gap: 10 }}>
+        <p style={{ margin: 0, fontSize: 13, display: "flex", alignItems: "center", gap: 12 }}>
           <Link to="/reports/op-cm-tracker" style={{ color: "var(--color-primary-dark)", fontWeight: 700, textDecoration: "none" }}>
             ← Open OP CM Tracker (Monthly Intervention)
           </Link>
+          <button
+            type="button"
+            onClick={() => setDefinitionsModalOpen(true)}
+            style={{
+              background: "#FFFFFF",
+              border: "1px solid #CBD5E1",
+              borderRadius: 6,
+              padding: "4px 10px",
+              fontSize: 12,
+              fontWeight: 700,
+              color: "var(--color-primary-dark)",
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              gap: 4,
+            }}
+          >
+            <span>📘</span> HIM Definitions
+          </button>
         </p>
         <span style={{ fontSize: 12, color: "#64748b", background: "#f1f5f9", padding: "4px 10px", borderRadius: 4, fontWeight: 600 }}>
           Facility: DOH - Malinao TRC | Outpatient Scope
@@ -584,6 +605,11 @@ export default function Reports() {
           }
         }
       `}</style>
+
+      <ReportDefinitionsModal
+        isOpen={definitionsModalOpen}
+        onClose={() => setDefinitionsModalOpen(false)}
+      />
     </AppShell>
   );
 }

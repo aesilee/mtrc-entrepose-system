@@ -1,5 +1,7 @@
 import pool from "../config/db.js";
 import { notifyRoles } from "../utils/notify.js";
+import { recordPatientStatusChange } from "../utils/historicalReportSchema.js";
+import { legacyDischargeReasonCode, isCompleterOutcome, enrollmentStatusForOutcome } from "../utils/classification.js";
 
 function cleanText(value) {
   return typeof value === "string" ? value.trim() : value;
@@ -63,70 +65,104 @@ export async function getDischarge(req, res) {
   }
 }
 
-// Create a new discharge record
+// Create a new discharge record (Findings 6 & 7: Exact outcome code check & atomic transaction)
 export async function createDischarge(req, res) {
-  const { patientId, programType, dischargeType, dischargeDate, remarks } = req.body;
+  const { patientId, programType, dischargeType, dischargeDate, remarks, outcome } = req.body;
 
   if (!patientId || !programType || !dischargeType || !dischargeDate) {
     return res.status(400).json({ message: "Patient, program type, discharge type, and discharge date are required." });
   }
 
+  // Exact comparison & canonical code evaluation (Finding 6: NON_COMPLETER is never counted as completer)
+  const isCompleter = isCompleterOutcome(outcome || dischargeType, remarks);
+  const outcomeCode = isCompleter ? "COMPLETER" : "NON_COMPLETER";
+  const reasonCode = legacyDischargeReasonCode(remarks || dischargeType) || (isCompleter ? "COMPLETED_PROGRAM" : "NON_COMPLIANCE");
+
+  const isAttritionRemarks = /non-compliance|abscond|drop|expel|arrest|buy-bust|incarcerat|death/i.test(remarks || "");
+  if (isCompleter && isAttritionRemarks) {
+    return res.status(400).json({ message: "Incompatible discharge status: A Completer cannot have non-compliance or disciplinary remarks." });
+  }
+
+  const connection = await pool.getConnection();
   try {
-    const [[patient]] = await pool.query(
-      "SELECT full_name, patient_code FROM patients WHERE id = ?",
+    await connection.beginTransaction();
+
+    const [[patient]] = await connection.query(
+      "SELECT full_name, patient_code FROM patients WHERE id = ? FOR UPDATE",
       [patientId]
     );
 
-    if (!patient) return res.status(404).json({ message: "Patient not found." });
+    if (!patient) {
+      await connection.rollback();
+      return res.status(404).json({ message: "Patient not found." });
+    }
 
-    const [[existing]] = await pool.query(
-  "SELECT id FROM discharges WHERE patient_id = ?",
-  [patientId]
-);
-if (existing) return res.status(409).json({ message: "This patient has already been discharged." });
+    const [[existing]] = await connection.query(
+      "SELECT id FROM discharges WHERE patient_id = ?",
+      [patientId]
+    );
+    if (existing) {
+      await connection.rollback();
+      return res.status(409).json({ message: "This patient has already been discharged." });
+    }
 
-    const [result] = await pool.query(
-      `INSERT INTO discharges (patient_id, program_type, discharge_type, discharge_date, remarks, discharged_by)
-       VALUES (?, ?, ?, ?, ?, ?)`,
-      [patientId, programType, dischargeType, dischargeDate, cleanText(remarks) || null, req.user.username]
+    const [result] = await connection.query(
+      `INSERT INTO discharges (patient_id, program_type, discharge_type, discharge_date, remarks, discharged_by, outcome, reason_code)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [patientId, programType, isCompleter ? "Completer" : "Non-Completer", dischargeDate, cleanText(remarks) || null, req.user.username, outcomeCode, reasonCode]
     );
 
     // Harmonize patient enrollment_status and mirror to patient_discharges for reporting
-    const isCompleted = /complete|graduat/i.test(dischargeType || "");
-    const enrollmentStatus = isCompleted ? 'completed' : 'dropped';
-    await pool.query(
+    const enrollmentStatus = enrollmentStatusForOutcome(outcomeCode);
+    await connection.query(
       "UPDATE patients SET enrollment_status = ? WHERE id = ?",
       [enrollmentStatus, patientId]
     );
-    await pool.query(
-      `INSERT INTO patient_discharges (patient_id, discharge_date, status, reason, intervention_upon_discharge)
-       VALUES (?, ?, ?, ?, ?)`,
-      [patientId, dischargeDate, dischargeType, dischargeType, cleanText(remarks) || null]
-    ).catch(() => {});
 
-    await pool.query(
+    // Synchronize historical status change without swallowing errors (Finding 7)
+    await recordPatientStatusChange(connection, {
+      patientId,
+      newStatus: enrollmentStatus,
+      effectiveDate: dischargeDate,
+      reason: `Discharged: ${isCompleter ? "Completer" : "Non-Completer"}${remarks ? ` — ${remarks}` : ""}`,
+      changedBy: req.user.id,
+    });
+
+    // Synchronize to patient_discharges without swallowing errors (Finding 7)
+    await connection.query(
+      `INSERT INTO patient_discharges (patient_id, discharge_date, status, reason, outcome, reason_code, intervention_upon_discharge)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [patientId, dischargeDate, isCompleter ? "Completer" : "Non-Completer", cleanText(remarks) || dischargeType, outcomeCode, reasonCode, cleanText(remarks) || null]
+    );
+
+    await connection.query(
       "INSERT INTO audit_log (actor_username, action, table_name, record_id) VALUES (?, ?, ?, ?)",
       [req.user.username, `Discharged patient "${patient.full_name}" (${programType} — ${dischargeType})`, "discharges", result.insertId]
     );
 
-    await pool.query(
+    await connection.query(
       "INSERT INTO audit_log (actor_username, action, table_name, record_id) VALUES (?, ?, 'patients', ?)",
       [req.user.username, `Discharged patient "${patient.full_name}" (${programType} — ${dischargeType})`, patientId]
     );
 
-    await notifyRoles(
+    await connection.commit();
+
+    notifyRoles(
       ["ict_admin", "him_staff", "admitting"],
       "discharges",
       "patient_discharged",
       `Patient discharged: "${patient.full_name}" (${patient.patient_code}) — ${dischargeType} — by ${req.user.username}`
-    );
+    ).catch(() => {});
 
     res.status(201).json({ id: result.insertId, message: "Discharge record created." });
   } catch (err) {
-    console.error(err);
+    await connection.rollback();
+    console.error("Discharge error:", err);
     if (err.code === "ER_NO_SUCH_TABLE") {
       return res.status(500).json({ message: "The discharges table migration has not been applied." });
     }
-    res.status(500).json({ message: "Could not create discharge record." });
+    res.status(500).json({ message: `Discharge synchronization failed: ${err.message}` });
+  } finally {
+    connection.release();
   }
 }

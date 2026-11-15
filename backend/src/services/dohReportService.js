@@ -1,4 +1,13 @@
 import pool from "../config/db.js";
+import {
+  REFERRAL_CATEGORIES,
+  ADMISSION_CATEGORIES,
+  DISCHARGE_OUTCOMES,
+  normalizeSex,
+  normalizeReferralCategory,
+  normalizeAdmissionCategory,
+  isCompleterOutcome,
+} from "../utils/classification.js";
 
 function formatDateYMD(d) {
   const y = d.getFullYear();
@@ -17,22 +26,35 @@ function getMonthRange(month, year) {
   return { start, end, month: m, year: y };
 }
 
-const isFemale = (gender) => gender && String(gender).trim().toLowerCase().startsWith("f");
+export const isFemale = (gender) => gender && String(gender).trim().toLowerCase().startsWith("f");
+export const isMale = (gender) => gender && String(gender).trim().toLowerCase().startsWith("m");
+export const isUnspecifiedSex = (gender) => !isFemale(gender) && !isMale(gender);
 
 // 1. Form 4.1 (A & B) — Percentage of Drug Abuse Cases Managed (Outpatient & Aftercare)
 export async function getCensusMetrics(month, year) {
   const { start, end } = getMonthRange(month, year);
 
-  // Fetch all relevant active/enrolled patients and referrals
+  // Fetch all relevant active/enrolled patients and referrals during the reporting period
+  const endDateTime = `${end} 23:59:59`;
   const [patients] = await pool.query(
     `SELECT p.id, p.patient_code, p.gender, p.admission_date, p.enrollment_status,
             p.current_status, p.program_phase, p.prior_rehab_admissions, p.notes,
+            p.referral_category, p.admission_category,
+            pd.discharge_date,
             COALESCE(r.referral_source, p.referral_source) as referral_source,
             COALESCE(r.nature_of_confinement, p.nature_of_confinement) as nature_of_confinement,
             COALESCE(r.prior_rehab_admissions, p.prior_rehab_admissions, 0) as prior_admissions
      FROM patients p
      LEFT JOIN patient_referrals r ON r.patient_id = p.id
-     WHERE p.is_archived = FALSE`
+     LEFT JOIN (
+       SELECT patient_id, discharge_date, status, reason, outcome
+       FROM patient_discharges
+       WHERE id IN (SELECT MAX(id) FROM patient_discharges GROUP BY patient_id)
+     ) pd ON pd.patient_id = p.id
+     WHERE (p.is_archived = FALSE OR p.archived_at IS NULL OR p.archived_at > ?)
+       AND (p.admission_date IS NOT NULL AND p.admission_date <= ?)
+       AND (pd.discharge_date IS NULL OR pd.discharge_date >= ?)`,
+    [endDateTime, end, start]
   );
 
   // Initialize Form 4.1 A (Outpatient Service) counters
@@ -82,11 +104,13 @@ export async function getCensusMetrics(month, year) {
   };
 
   function addCount(target, gender) {
-    const isF = isFemale(gender);
-    if (isF) {
+    if (target.u === undefined) target.u = 0;
+    if (isFemale(gender)) {
       target.f++;
-    } else {
+    } else if (isMale(gender)) {
       target.m++;
+    } else {
+      target.u++;
     }
     target.total++;
   }
@@ -104,18 +128,18 @@ export async function getCensusMetrics(month, year) {
 
     const isAdmittedBeforeMonth =
       admDate &&
-      formatDateYMD(admDate) < start &&
-      (p.enrollment_status === "active" || p.current_status === "active");
+      formatDateYMD(admDate) < start;
 
     const nature = (p.nature_of_confinement || "").toLowerCase();
     const refSrc = (p.referral_source || "").toLowerCase();
     const priorAdm = Number(p.prior_admissions) || 0;
-    const isRecommitment = nature.includes("recommit") || (p.notes && p.notes.toLowerCase().includes("recommit"));
+    const isRecommitment = p.admission_category === "RECOMMITMENT" || nature.includes("recommit") || (p.notes && p.notes.toLowerCase().includes("recommit"));
+    const isReadmission = p.admission_category === "READMISSION" || priorAdm > 0;
 
     if (isAc) {
       // AFTERCARE SERVICE
       if (isAdmittedThisMonth) {
-        if (priorAdm > 0) {
+        if (isReadmission) {
           addCount(ac.readm_total, p.gender);
         } else {
           // New enrollment in aftercare
@@ -136,21 +160,23 @@ export async function getCensusMetrics(month, year) {
       // OUTPATIENT SERVICE
       if (isAdmittedThisMonth) {
         if (isRecommitment) {
-          if (nature.includes("court") || refSrc.includes("court")) {
+          const isCourtRecommit = p.referral_category === "COURT_MANDATED" || (!nature.includes("without court order") && (nature.includes("court") || refSrc.includes("court")));
+          if (isCourtRecommit) {
             addCount(op.recommit_court, p.gender);
           } else {
             addCount(op.recommit_non_court, p.gender);
           }
-        } else if (priorAdm > 0) {
+        } else if (isReadmission) {
           // Readmission
-          if (nature.includes("plea") || nature.includes("court") || nature.includes("compulsory") || refSrc.includes("court")) {
-            if (nature.includes("compulsory")) {
+          const isCourtReadm = p.referral_category === "COURT_MANDATED" || (!nature.includes("without court order") && (nature.includes("plea") || nature.includes("court") || nature.includes("compulsory") || refSrc.includes("court")));
+          if (isCourtReadm) {
+            if (nature.includes("compulsory") || nature.includes("section 61") || nature.includes("section 62")) {
               addCount(op.readm_court_compulsory, p.gender);
             } else {
               addCount(op.readm_court_voluntary, p.gender);
             }
           } else {
-            if (refSrc.includes("lgu")) {
+            if (p.referral_category === "LGU_REFERRED" || refSrc.includes("lgu") || refSrc.includes("badac") || refSrc.includes("madac") || refSrc.includes("cadac")) {
               addCount(op.readm_non_court_lgu, p.gender);
             } else {
               addCount(op.readm_non_court_voluntary, p.gender);
@@ -158,23 +184,28 @@ export async function getCensusMetrics(month, year) {
           }
         } else {
           // New Enrolment
-          const isCourt =
-            nature.includes("plea") ||
-            nature.includes("court") ||
-            nature.includes("compulsory") ||
-            nature.includes("arrested") ||
-            refSrc.includes("court");
+          const isCourt = p.referral_category === "COURT_MANDATED" || (
+            !nature.includes("without court order") && !nature.includes("self-referral") && !refSrc.includes("self") && !refSrc.includes("walk-in") && !refSrc.includes("family") && (
+              nature.includes("plea") ||
+              nature.includes("compulsory") ||
+              nature.includes("section 61") ||
+              nature.includes("section 62") ||
+              nature.includes("arrested") ||
+              nature.includes("court") ||
+              refSrc.includes("court")
+            )
+          );
 
           if (isCourt) {
             if (nature.includes("plea")) {
               addCount(op.new_court_plea, p.gender);
-            } else if (nature.includes("compulsory")) {
+            } else if (nature.includes("compulsory") || nature.includes("section 61") || nature.includes("section 62")) {
               addCount(op.new_court_compulsory, p.gender);
             } else {
               addCount(op.new_court_voluntary, p.gender);
             }
           } else {
-            if (refSrc.includes("lgu")) {
+            if (p.referral_category === "LGU_REFERRED" || refSrc.includes("lgu") || refSrc.includes("badac") || refSrc.includes("madac") || refSrc.includes("cadac")) {
               addCount(op.new_non_court_lgu, p.gender);
             } else {
               addCount(op.new_non_court_voluntary, p.gender);
@@ -203,7 +234,7 @@ export async function getCensusMetrics(month, year) {
   });
   op.performance.numerator = op.grand_total.total;
   op.performance.denominator = op.grand_total.total;
-  op.performance.rate = op.grand_total.total > 0 ? 100 : 100;
+  op.performance.rate = op.grand_total.total > 0 ? 100 : null;
 
   // Calculate subtotals for Aftercare (B)
   ["m", "f", "total"].forEach((k) => {
@@ -215,7 +246,7 @@ export async function getCensusMetrics(month, year) {
   });
   ac.performance.numerator = ac.grand_total.total;
   ac.performance.denominator = ac.grand_total.total;
-  ac.performance.rate = ac.grand_total.total > 0 ? 100 : 100;
+  ac.performance.rate = ac.grand_total.total > 0 ? 100 : null;
 
   return { outpatient: op, aftercare: ac, month: Number(month), year: Number(year) };
 }
@@ -258,10 +289,12 @@ export async function getServiceTallies(month, year) {
     [start, end, start, end]
   );
 
-  const initCounter = () => ({ m: 0, f: 0, total: 0 });
+  const initCounter = () => ({ m: 0, f: 0, u: 0, total: 0 });
   const bump = (obj, gender, count = 1) => {
+    if (obj.u === undefined) obj.u = 0;
     if (isFemale(gender)) obj.f += count;
-    else obj.m += count;
+    else if (isMale(gender)) obj.m += count;
+    else obj.u += count;
     obj.total += count;
   };
 
@@ -416,13 +449,14 @@ export async function getServiceTallies(month, year) {
 export async function getDemographics(month, year) {
   const { end } = getMonthRange(month, year);
 
+  const endDateTime = `${end} 23:59:59`;
   const [rows] = await pool.query(
     `SELECT p.id, p.gender, p.civil_status, p.birthdate,
             CASE WHEN p.current_status = 'aftercare' OR p.program_phase = 'Aftercare' THEN 'aftercare' ELSE 'outpatient' END as modality,
             TIMESTAMPDIFF(YEAR, p.birthdate, ?) as age
      FROM patients p
-     WHERE p.is_archived = FALSE AND (p.admission_date <= ? OR p.admission_date IS NULL)`,
-    [end, end]
+     WHERE (p.is_archived = FALSE OR p.archived_at IS NULL OR p.archived_at > ?) AND (p.admission_date <= ? OR p.admission_date IS NULL)`,
+    [end, endDateTime, end]
   );
 
   const AGE_BRACKETS = ["<18", "18-19", "20-30", "31-40", "41-50", "51-60", "61+"];
@@ -484,14 +518,18 @@ export async function getDemographics(month, year) {
     else if (rawCs.includes("unk")) cs = "Unknown";
     else if (rawCs.includes("sing")) cs = "Single";
 
-    row[`${cs}${suffix}`]++;
-    if (isF) row.total_f++;
-    else row.total_m++;
+    if (isF) {
+      row[`${cs}_f`]++;
+      row.total_f++;
+      sec.totals[`${cs}_f`]++;
+      sec.totals.total_f++;
+    } else if (isMale(p.gender)) {
+      row[`${cs}_m`]++;
+      row.total_m++;
+      sec.totals[`${cs}_m`]++;
+      sec.totals.total_m++;
+    }
     row.grand_total++;
-
-    sec.totals[`${cs}${suffix}`]++;
-    if (isF) sec.totals.total_f++;
-    else sec.totals.total_m++;
     sec.totals.grand_total++;
   });
 
@@ -501,15 +539,16 @@ export async function getDemographics(month, year) {
 // 4. Form 4.3 Part II — PWUDs Employment Status
 export async function getEmployment(month, year) {
   const { end } = getMonthRange(month, year);
+  const endDateTime = `${end} 23:59:59`;
 
   const [rows] = await pool.query(
     `SELECT p.employment_status, p.gender,
             CASE WHEN p.current_status = 'aftercare' OR p.program_phase = 'Aftercare' THEN 'aftercare' ELSE 'outpatient' END as modality,
             COUNT(*) as count
      FROM patients p
-     WHERE p.is_archived = FALSE AND (p.admission_date <= ? OR p.admission_date IS NULL)
+     WHERE (p.is_archived = FALSE OR p.archived_at IS NULL OR p.archived_at > ?) AND (p.admission_date <= ? OR p.admission_date IS NULL)
      GROUP BY p.employment_status, p.gender, modality`,
-    [end]
+    [endDateTime, end]
   );
 
   const CATEGORIES = ["Employed", "Unemployed", "Self-Employed", "Student", "Others"];
@@ -547,14 +586,18 @@ export async function getEmployment(month, year) {
     const cnt = Number(r.count) || 0;
     const isF = isFemale(r.gender);
     const mod = r.modality === "aftercare" ? "aftercare" : "outpatient";
-    const key = `${mod}_${isF ? "f" : "m"}`;
+    if (isF) {
+      row[`${mod}_f`] += cnt;
+      totals[`${mod}_f`] += cnt;
+    } else if (isMale(r.gender)) {
+      row[`${mod}_m`] += cnt;
+      totals[`${mod}_m`] += cnt;
+    }
     const totKey = `${mod}_total`;
 
-    row[key] += cnt;
     row[totKey] += cnt;
     row.grand_total += cnt;
 
-    totals[key] += cnt;
     totals[totKey] += cnt;
     totals.grand_total += cnt;
   });
@@ -565,15 +608,16 @@ export async function getEmployment(month, year) {
 // 5. Form 4.3 Part III — Residence and Educational Status
 export async function getEducationResidence(month, year) {
   const { end } = getMonthRange(month, year);
+  const endDateTime = `${end} 23:59:59`;
 
   const [rows] = await pool.query(
     `SELECT p.educational_attainment, p.municipality,
             CASE WHEN p.current_status = 'aftercare' OR p.program_phase = 'Aftercare' THEN 'aftercare' ELSE 'outpatient' END as modality,
             COUNT(*) as count
      FROM patients p
-     WHERE p.is_archived = FALSE AND (p.admission_date <= ? OR p.admission_date IS NULL)
+     WHERE (p.is_archived = FALSE OR p.archived_at IS NULL OR p.archived_at > ?) AND (p.admission_date <= ? OR p.admission_date IS NULL)
      GROUP BY p.educational_attainment, p.municipality, modality`,
-    [end]
+    [endDateTime, end]
   );
 
   const initTable = () => ({
@@ -621,6 +665,7 @@ export async function getEducationResidence(month, year) {
 // 6. Form 4.3 Part IV — Substance of Abuse and Duration of Use
 export async function getSubstanceProfile(month, year) {
   const { end } = getMonthRange(month, year);
+  const endDateTime = `${end} 23:59:59`;
 
   const [rows] = await pool.query(
     `SELECT ps.drug_used, ps.is_primary_substance, pi.length_of_use,
@@ -629,9 +674,9 @@ export async function getSubstanceProfile(month, year) {
      FROM patient_substances ps
      JOIN patients p ON p.id = ps.patient_id
      LEFT JOIN patient_intakes pi ON pi.patient_id = p.id
-     WHERE p.is_archived = FALSE AND (p.admission_date <= ? OR p.admission_date IS NULL)
+     WHERE (p.is_archived = FALSE OR p.archived_at IS NULL OR p.archived_at > ?) AND (p.admission_date <= ? OR p.admission_date IS NULL)
      GROUP BY ps.drug_used, ps.is_primary_substance, pi.length_of_use, modality`,
-    [end]
+    [endDateTime, end]
   );
 
   const DURATIONS = [
@@ -712,15 +757,16 @@ export async function getSubstanceProfile(month, year) {
 // 7. Form 4.3 Part V — Readmission or Recommitment Count
 export async function getReadmissions(month, year) {
   const { end } = getMonthRange(month, year);
+  const endDateTime = `${end} 23:59:59`;
 
   const [rows] = await pool.query(
     `SELECT p.prior_rehab_admissions, p.gender,
             CASE WHEN p.current_status = 'aftercare' OR p.program_phase = 'Aftercare' THEN 'aftercare' ELSE 'outpatient' END as modality,
             COUNT(*) as count
      FROM patients p
-     WHERE p.is_archived = FALSE AND p.prior_rehab_admissions > 0 AND (p.admission_date <= ? OR p.admission_date IS NULL)
+     WHERE (p.is_archived = FALSE OR p.archived_at IS NULL OR p.archived_at > ?) AND p.prior_rehab_admissions > 0 AND (p.admission_date <= ? OR p.admission_date IS NULL)
      GROUP BY p.prior_rehab_admissions, p.gender, modality`,
-    [end]
+    [endDateTime, end]
   );
 
   const data = [
@@ -750,14 +796,18 @@ export async function getReadmissions(month, year) {
     const isF = isFemale(r.gender);
     const mod = r.modality === "aftercare" ? "aftercare" : "outpatient";
     const cnt = Number(r.count) || 0;
-    const key = `${mod}_${isF ? "f" : "m"}`;
+    if (isF) {
+      row[`${mod}_f`] += cnt;
+      totals[`${mod}_f`] += cnt;
+    } else if (isMale(r.gender)) {
+      row[`${mod}_m`] += cnt;
+      totals[`${mod}_m`] += cnt;
+    }
     const totKey = `${mod}_total`;
 
-    row[key] += cnt;
     row[totKey] += cnt;
     row.combined_total += cnt;
 
-    totals[key] += cnt;
     totals[totKey] += cnt;
     totals.combined_total += cnt;
   });
@@ -768,14 +818,15 @@ export async function getReadmissions(month, year) {
 // 8. Form 4.3 Part VI — Complications & Co-morbidities (Medical & Psychiatric)
 export async function getComorbidities(month, year) {
   const { end } = getMonthRange(month, year);
+  const endDateTime = `${end} 23:59:59`;
 
   const [rows] = await pool.query(
     `SELECT pi.comorbidities, p.gender,
             CASE WHEN p.current_status = 'aftercare' OR p.program_phase = 'Aftercare' THEN 'aftercare' ELSE 'outpatient' END as modality
      FROM patient_intakes pi
      JOIN patients p ON p.id = pi.patient_id
-     WHERE p.is_archived = FALSE AND (p.admission_date <= ? OR p.admission_date IS NULL)`,
-    [end]
+     WHERE (p.is_archived = FALSE OR p.archived_at IS NULL OR p.archived_at > ?) AND (p.admission_date <= ? OR p.admission_date IS NULL)`,
+    [endDateTime, end]
   );
 
   const MEDICAL_LIST = [
@@ -850,7 +901,7 @@ export async function getComorbidities(month, year) {
           if (cLower.includes(item.condition.toLowerCase().slice(0, 5))) {
             matched = true;
             if (isF) { item.facility_f++; item.total_f++; }
-            else { item.facility_m++; item.total_m++; }
+            else if (isMale(r.gender)) { item.facility_m++; item.total_m++; }
             item.grand_total++;
           }
         });
@@ -860,7 +911,7 @@ export async function getComorbidities(month, year) {
           sec.psychiatric.forEach((item) => {
             if (cLower.includes("depress") || cLower.includes("mood") || cLower.includes("anxiet") || cLower.includes("psych")) {
               if (isF) { item.facility_f++; item.total_f++; }
-              else { item.facility_m++; item.total_m++; }
+              else if (isMale(r.gender)) { item.facility_m++; item.total_m++; }
               item.grand_total++;
             }
           });
@@ -896,14 +947,16 @@ export async function getCompletionRates(quarter, year) {
     const cohortStartFmt = formatDateYMD(cohortStartDate);
     const cohortEndFmt = formatDateYMD(cohortEndDate);
 
+    const evalEndDateTime = `${endFmt} 23:59:59`;
+
     // Outpatient Target Cohort
     const [targetOp] = await pool.query(
       `SELECT gender, COUNT(*) as count 
        FROM patients 
-       WHERE is_archived = FALSE AND (current_status != 'aftercare' OR current_status IS NULL)
+       WHERE (is_archived = FALSE OR archived_at IS NULL OR archived_at > ?) AND (current_status != 'aftercare' OR current_status IS NULL)
          AND admission_date BETWEEN ? AND ?
        GROUP BY gender`,
-      [cohortStartFmt, cohortEndFmt]
+      [evalEndDateTime, cohortStartFmt, cohortEndFmt]
     );
 
     // Outpatient Actual Completers
@@ -911,7 +964,8 @@ export async function getCompletionRates(quarter, year) {
       `SELECT p.gender, COUNT(*) as count 
        FROM patient_discharges pd
        JOIN patients p ON p.id = pd.patient_id
-       WHERE pd.status LIKE '%Completer%' AND pd.discharge_date BETWEEN ? AND ?
+       WHERE (pd.outcome = 'COMPLETER' OR (pd.outcome IS NULL AND pd.status NOT LIKE '%Non%' AND (pd.status LIKE '%Completer%' OR pd.status LIKE '%Graduat%')))
+         AND pd.discharge_date BETWEEN ? AND ?
        GROUP BY p.gender`,
       [startFmt, endFmt]
     );
@@ -920,19 +974,28 @@ export async function getCompletionRates(quarter, year) {
     const [[{ non_completers_op }]] = await pool.query(
       `SELECT COUNT(*) as non_completers_op
        FROM patient_discharges pd
-       WHERE pd.status LIKE '%Non-Completer%' AND pd.discharge_date BETWEEN ? AND ?`,
+       WHERE (pd.outcome = 'NON_COMPLETER' OR (pd.outcome IS NULL AND pd.status LIKE '%Non-Completer%'))
+         AND pd.discharge_date BETWEEN ? AND ?`,
       [startFmt, endFmt]
     );
 
-    let targetOpM = 0, targetOpF = 0;
-    targetOp.forEach(r => { if (isFemale(r.gender)) targetOpF += r.count; else targetOpM += r.count; });
-    const targetOpTotal = targetOpM + targetOpF;
+    let targetOpM = 0, targetOpF = 0, targetOpU = 0;
+    targetOp.forEach((r) => {
+      if (isFemale(r.gender)) targetOpF += r.count;
+      else if (isMale(r.gender)) targetOpM += r.count;
+      else targetOpU += r.count;
+    });
+    const targetOpTotal = targetOpM + targetOpF + targetOpU;
 
-    let compOpM = 0, compOpF = 0;
-    completersOp.forEach(r => { if (isFemale(r.gender)) compOpF += r.count; else compOpM += r.count; });
-    const compOpTotal = compOpM + compOpF;
+    let compOpM = 0, compOpF = 0, compOpU = 0;
+    completersOp.forEach((r) => {
+      if (isFemale(r.gender)) compOpF += r.count;
+      else if (isMale(r.gender)) compOpM += r.count;
+      else compOpU += r.count;
+    });
+    const compOpTotal = compOpM + compOpF + compOpU;
 
-    const rateOp = targetOpTotal > 0 ? (compOpTotal / targetOpTotal) * 100 : (compOpTotal > 0 ? 100 : 0);
+    const rateOp = targetOpTotal > 0 ? Number(((compOpTotal / targetOpTotal) * 100).toFixed(2)) : null;
 
     quartersData.push({
       quarter: `Q${q}`,
@@ -946,8 +1009,8 @@ export async function getCompletionRates(quarter, year) {
       actual_f: compOpF,
       actual_total: compOpTotal,
       non_completers: Number(non_completers_op) || 0,
-      completion_rate: Number(rateOp.toFixed(2)),
-      remarks: rateOp >= 100 ? "Met Target" : rateOp > 0 ? "Ongoing" : "No cohort scheduled"
+      completion_rate: rateOp,
+      remarks: rateOp == null ? "N/A (No baseline cohort)" : rateOp >= 100 ? "Met Target" : rateOp > 0 ? "Ongoing" : "No completers in period"
     });
   }
 
@@ -961,11 +1024,11 @@ export async function getCompletionRates(quarter, year) {
     actual_f: quartersData.reduce((s, q) => s + q.actual_f, 0),
     actual_total: quartersData.reduce((s, q) => s + q.actual_total, 0),
     non_completers: quartersData.reduce((s, q) => s + q.non_completers, 0),
-    completion_rate: 0,
+    completion_rate: null,
     remarks: ""
   };
-  totals.completion_rate = totals.target_total > 0 ? Number(((totals.actual_total / totals.target_total) * 100).toFixed(2)) : 0;
-  totals.remarks = totals.completion_rate >= 100 ? "Met Statutory Standard" : "Performance Logged";
+  totals.completion_rate = totals.target_total > 0 ? Number(((totals.actual_total / totals.target_total) * 100).toFixed(2)) : null;
+  totals.remarks = totals.completion_rate == null ? "N/A" : totals.completion_rate >= 100 ? "Met Statutory Standard" : "Performance Logged";
 
   // Selected quarter highlight
   const selectedQuarterData = quartersData[qSelected - 1] || quartersData[0];
@@ -985,7 +1048,8 @@ export async function getDischargeSummary(month, year) {
 
   // Roster of discharged patients (Page 19 & 20)
   const [roster] = await pool.query(
-    `SELECT pd.id, pd.discharge_date, pd.status, pd.reason, pd.treatment_duration_months, pd.intervention_upon_discharge,
+    `SELECT pd.id, pd.discharge_date, pd.status, pd.reason, pd.outcome, pd.reason_code,
+            pd.treatment_duration_months, pd.intervention_upon_discharge,
             p.patient_code, p.gender, p.admission_date,
             CASE WHEN p.current_status = 'aftercare' OR p.program_phase = 'Aftercare' THEN 'aftercare' ELSE 'outpatient' END as modality
      FROM patient_discharges pd
@@ -1032,23 +1096,34 @@ export async function getDischargeSummary(month, year) {
     const mod = r.modality === "aftercare" ? "aftercare" : "outpatient";
     const reasonText = (r.reason || r.status || "").toLowerCase();
 
+    let isCompleter = false;
+    if (r.outcome) {
+      isCompleter = r.outcome === "COMPLETER";
+    } else {
+      isCompleter = isCompleterOutcome(r.status, r.reason);
+    }
+
     let index = 0;
-    if (reasonText.includes("graduat") || reasonText.includes("complet")) index = 5;
-    else if (reasonText.includes("early")) index = 1;
-    else if (reasonText.includes("court") || reasonText.includes("law") || reasonText.includes("enforce")) index = 2;
-    else if (reasonText.includes("transfer")) index = 3;
-    else if (reasonText.includes("dead") || reasonText.includes("death") || reasonText.includes("deceas")) index = 4;
+    if (isCompleter) index = 5;
+    else if (r.reason_code === "EARLY_RELEASE_COURT" || reasonText.includes("early")) index = 1;
+    else if (r.reason_code === "TURNED_OVER_LAW_ENFORCEMENT" || reasonText.includes("court") || reasonText.includes("law") || reasonText.includes("enforce")) index = 2;
+    else if (r.reason_code === "TRANSFERRED_FACILITY" || reasonText.includes("transfer")) index = 3;
+    else if (r.reason_code === "DEATH" || reasonText.includes("dead") || reasonText.includes("death") || reasonText.includes("deceas")) index = 4;
     else index = 0; // non-compliance
 
     const row = consolidated[index];
-    const key = `${mod}_${isF ? "f" : "m"}`;
+    if (isF) {
+      row[`${mod}_f`]++;
+      totals[`${mod}_f`]++;
+    } else if (isMale(r.gender)) {
+      row[`${mod}_m`]++;
+      totals[`${mod}_m`]++;
+    }
     const totKey = `${mod}_total`;
 
-    row[key]++;
     row[totKey]++;
     row.grand_total++;
 
-    totals[key]++;
     totals[totKey]++;
     totals.grand_total++;
   });
@@ -1161,15 +1236,38 @@ export async function getDrugTestSurveillance(month, year) {
   return { windows, totals, roster, month: Number(month), year: Number(year) };
 }
 
-// 12. Program Census Summary
+// 12. Program Census Summary (Historically Accurate by Month & Effective Case Manager)
 export async function getProgramCensus(month, year) {
+  const { start, end } = getMonthRange(month, year);
+  const endDateTime = `${end} 23:59:59`;
+
   const [rows] = await pool.query(
-    `SELECT u.full_name as case_manager, p.referral_source, p.gender,
-            COUNT(*) as active_caseload
+    `SELECT 
+       COALESCE(pcmh.case_manager_name, u.full_name, 'Unassigned') as case_manager,
+       COALESCE(p.referral_category, p.referral_source, 'Voluntary') as referral_source,
+       COALESCE(p.gender, 'Unspecified') as gender,
+       COUNT(DISTINCT p.id) as active_caseload
      FROM patients p
+     LEFT JOIN (
+       SELECT patient_id, discharge_date
+       FROM patient_discharges
+       WHERE id IN (SELECT MAX(id) FROM patient_discharges GROUP BY patient_id)
+     ) pd ON pd.patient_id = p.id
+     LEFT JOIN (
+       SELECT patient_id, case_manager_name
+       FROM patient_case_manager_history
+       WHERE start_date <= ? AND (end_date IS NULL OR end_date >= ?)
+       ORDER BY start_date DESC, id DESC
+     ) pcmh ON pcmh.patient_id = p.id
      LEFT JOIN users u ON u.id = p.assigned_case_manager_id
-     WHERE p.enrollment_status = 'active' AND p.is_archived = FALSE
-     GROUP BY u.full_name, p.referral_source, p.gender`
+     WHERE (p.is_archived = FALSE OR p.archived_at IS NULL OR p.archived_at > ?)
+       AND (p.admission_date IS NOT NULL AND p.admission_date <= ?)
+       AND (pd.discharge_date IS NULL OR pd.discharge_date >= ?)
+     GROUP BY COALESCE(pcmh.case_manager_name, u.full_name, 'Unassigned'),
+              COALESCE(p.referral_category, p.referral_source, 'Voluntary'),
+              COALESCE(p.gender, 'Unspecified')
+     ORDER BY case_manager, referral_source`,
+    [end, start, endDateTime, end, start]
   );
   return rows;
 }
@@ -1178,10 +1276,13 @@ export async function getProgramCensus(month, year) {
 export async function getNonCompleters(month, year) {
   const { start, end } = getMonthRange(month, year);
   const [rows] = await pool.query(
-    `SELECT p.full_name, p.gender, p.patient_code, pd.discharge_date, pd.reason, pd.intervention_upon_discharge
+    `SELECT p.full_name, COALESCE(p.gender, 'Unspecified') as gender, p.patient_code,
+            pd.discharge_date, pd.reason, pd.reason_code, pd.outcome, pd.intervention_upon_discharge
      FROM patient_discharges pd
      JOIN patients p ON p.id = pd.patient_id
-     WHERE pd.status LIKE '%Non-Completer%' AND pd.discharge_date BETWEEN ? AND ?`,
+     WHERE (pd.outcome = 'NON_COMPLETER' OR (pd.outcome IS NULL AND pd.status LIKE '%Non-Completer%'))
+       AND pd.discharge_date BETWEEN ? AND ?
+     ORDER BY pd.discharge_date ASC`,
     [start, end]
   );
   return rows;

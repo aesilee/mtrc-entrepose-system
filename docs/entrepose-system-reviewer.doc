@@ -1,0 +1,1494 @@
+
+<html xmlns:o='urn:schemas-microsoft-com:office:office'
+      xmlns:w='urn:schemas-microsoft-com:office:word'
+      xmlns='http://www.w3.org/TR/REC-html40'>
+<head>
+  <meta charset="utf-8">
+  <title>ENTREPOSE System — Complete Reviewer & Checklist</title>
+  <!--[if gte mso 9]>
+  <xml>
+    <w:WordDocument>
+      <w:View>Print</w:View>
+      <w:Zoom>100</w:Zoom>
+      <w:DoNotOptimizeForBrowser/>
+    </w:WordDocument>
+  </xml>
+  <![endif]-->
+  <style>
+    body {
+      font-family: 'Segoe UI', Calibri, Arial, sans-serif;
+      font-size: 11pt;
+      line-height: 1.5;
+      color: #1F2421;
+    }
+    h1 { font-size: 20pt; color: #1E5A34; border-bottom: 2pt solid #1E5A34; padding-bottom: 4pt; margin-bottom: 10pt; }
+    h2 { font-size: 14pt; color: #26653B; border-left: 4pt solid #26653B; padding-left: 8pt; margin-top: 18pt; margin-bottom: 8pt; }
+    h3 { font-size: 12pt; color: #357648; margin-top: 14pt; margin-bottom: 6pt; }
+    h4 { font-size: 11pt; color: #476A30; margin-top: 10pt; }
+    table { width: 100%; border-collapse: collapse; margin: 10pt 0; font-size: 9.5pt; }
+    th { background: #1E5A34; color: #FFFFFF; padding: 6pt 8pt; border: 1pt solid #1E5A34; text-align: left; }
+    td { padding: 5pt 7pt; border: 1pt solid #DCE7DC; vertical-align: top; }
+    tr:nth-child(even) td { background: #F8FAF8; }
+    blockquote { background: #F4F8F4; border-left: 3pt solid #357648; padding: 6pt 10pt; margin: 8pt 0; color: #2E4734; }
+    code { font-family: Consolas, monospace; background: #EEF5EF; color: #1E5A34; padding: 1pt 4pt; }
+    .checklist-container { background: #FAFDFB; border: 1pt solid #D8E6DA; padding: 8pt 12pt; margin: 8pt 0; }
+    .checklist-item { padding: 3pt 0; font-size: 10pt; }
+    .process-diagram { background: #F4F8F4; border: 1pt solid #D8E6DA; padding: 10pt; margin: 10pt 0; text-align: center; }
+    .process-step { display: inline-block; background: #FFFFFF; border: 1pt solid #26653B; padding: 5pt 7pt; margin: 3pt; font-size: 8.5pt; vertical-align: middle; }
+    .process-arrow { display: inline-block; color: #357648; font-weight: bold; margin: 0 4pt; vertical-align: middle; }
+  </style>
+</head>
+<body>
+
+<h1>📘 ENTREPOSE System — Complete Reviewer & Checklist</h1>
+<blockquote><strong>ENTREPOSE</strong> = Patient Monitoring Information System  </blockquote>
+<blockquote><strong>MTRC</strong> = Malinao Treatment and Rehabilitation Center  </blockquote>
+<blockquote><strong>Facility Head:</strong> Fulbert Alec R. Gillego, RMT, MD, MSPH — Medical Center Chief III  </blockquote>
+<blockquote><strong>Location:</strong> Albay, Philippines  </blockquote>
+<blockquote><strong>Program Scope:</strong> DOH-Licensed Outpatient Drug Rehabilitation (7-month program + 9-month aftercare)</blockquote>
+<hr />
+<h2>Table of Contents</h2>
+<p>1. <a href="#1-system-overview">System Overview</a></p>
+<p>2. <a href="#2-user-roles--who-does-what">User Roles — Who Does What</a></p>
+<p>3. <a href="#3-the-complete-patient-journey-start-to-finish">The Complete Patient Journey (Start to Finish)</a></p>
+<p>4. <a href="#4-system-modules--page-by-page">System Modules — Page by Page</a></p>
+<p>5. <a href="#5-session-types--therapy-framework">Session Types & Therapy Framework</a></p>
+<p>6. <a href="#6-drug-testing-protocol">Drug Testing Protocol</a></p>
+<p>7. <a href="#7-clinical-milestones">Clinical Milestones</a></p>
+<p>8. <a href="#8-certificates">Certificates</a></p>
+<p>9. <a href="#9-doh-reports">DOH Reports</a></p>
+<p>10. <a href="#10-notifications--alerts">Notifications & Alerts</a></p>
+<p>11. <a href="#11-glossary-of-keywords">Glossary of Keywords</a></p>
+<p>12. <a href="#12-quick-reference-checklist">Quick-Reference Checklist</a></p>
+<hr />
+<h2>1. System Overview</h2>
+<p>ENTREPOSE is a <strong>web-based patient monitoring information system</strong> built for MTRC. It digitizes the entire outpatient drug rehabilitation workflow — from the moment a patient is referred, through 7 months of therapy sessions, all the way to discharge and aftercare.</p>
+<h3>What Problem Does It Solve?</h3>
+<p>Before ENTREPOSE, MTRC used <strong>paper-based records</strong> — folders, logbooks, and handwritten forms. This caused:</p>
+<ul>
+  <li>Slow record retrieval</li>
+  <li>Risk of lost or damaged files</li>
+  <li>Manual counting for DOH reports</li>
+  <li>No real-time tracking of patient progress</li>
+</ul>
+<h3>Tech Stack</h3>
+<table class="styled-table">
+  <thead>
+    <tr>
+      <th>Layer</th>
+      <th>Technology</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Frontend</td>
+      <td>React (Vite)</td>
+    </tr>
+    <tr>
+      <td>Backend</td>
+      <td>Express.js (Node.js)</td>
+    </tr>
+    <tr>
+      <td>Database</td>
+      <td>MySQL</td>
+    </tr>
+    <tr>
+      <td>Auth</td>
+      <td>JWT (JSON Web Tokens)</td>
+    </tr>
+  </tbody>
+</table>
+<h3>Who Uses It?</h3>
+<p>Four types of staff use the system, each with different permissions (explained in Section 2).</p>
+<hr />
+<h2>2. User Roles — Who Does What</h2>
+<p>There are <strong>4 user roles</strong> in the system. Think of them as different "access levels."</p>
+<h3>👤 Admitting Personnel (<code>admitting</code>)</h3>
+<p><strong>Main Job:</strong> Register new patients and handle their paperwork.</p>
+<table class="styled-table">
+  <thead>
+    <tr>
+      <th>What They Can Do</th>
+      <th>What They Cannot Do</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><span style="color:#2E7D32;">✔</span> Register new patients</td>
+      <td><span style="color:#C62828;">✖</span> Record attendance/sessions</td>
+    </tr>
+    <tr>
+      <td><span style="color:#2E7D32;">✔</span> Fill out the 5-step IDADIN registration workflow</td>
+      <td><span style="color:#C62828;">✖</span> Generate DOH reports</td>
+    </tr>
+    <tr>
+      <td><span style="color:#2E7D32;">✔</span> Record referral information (Step 2)</td>
+      <td><span style="color:#C62828;">✖</span> Manage other users</td>
+    </tr>
+    <tr>
+      <td><span style="color:#2E7D32;">✔</span> Complete clinical triage & social classification (Steps 3-4)</td>
+      <td><span style="color:#C62828;">✖</span> Discharge patients</td>
+    </tr>
+    <tr>
+      <td><span style="color:#2E7D32;">✔</span> Record consents and assign case managers (Step 5)</td>
+      <td><span style="color:#C62828;">✖</span> View audit logs</td>
+    </tr>
+    <tr>
+      <td><span style="color:#2E7D32;">✔</span> Generate Enrollment Certificates</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td><span style="color:#2E7D32;">✔</span> Edit patient information</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td><span style="color:#2E7D32;">✔</span> View Dashboard</td>
+      <td></td>
+    </tr>
+  </tbody>
+</table>
+<p><strong>Pages They See:</strong> Dashboard, Patients, Register Patient</p>
+<hr />
+<h3>👤 Case Manager (<code>case_manager</code>)</h3>
+<p><strong>Main Job:</strong> Handle day-to-day patient care — sessions, progress notes, drug tests, and milestones.</p>
+<table class="styled-table">
+  <thead>
+    <tr>
+      <th>What They Can Do</th>
+      <th>What They Cannot Do</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><span style="color:#2E7D32;">✔</span> View and manage their <strong>assigned</strong> patients only</td>
+      <td><span style="color:#C62828;">✖</span> See other case managers' patients</td>
+    </tr>
+    <tr>
+      <td><span style="color:#2E7D32;">✔</span> Record attendance for sessions</td>
+      <td><span style="color:#C62828;">✖</span> Register new patients</td>
+    </tr>
+    <tr>
+      <td><span style="color:#2E7D32;">✔</span> Write SOAP progress notes</td>
+      <td><span style="color:#C62828;">✖</span> Generate DOH reports</td>
+    </tr>
+    <tr>
+      <td><span style="color:#2E7D32;">✔</span> Log drug test results</td>
+      <td><span style="color:#C62828;">✖</span> Manage users</td>
+    </tr>
+    <tr>
+      <td><span style="color:#2E7D32;">✔</span> Track clinical milestones</td>
+      <td><span style="color:#C62828;">✖</span> View audit logs</td>
+    </tr>
+    <tr>
+      <td><span style="color:#2E7D32;">✔</span> Create treatment plans (ITP)</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td><span style="color:#2E7D32;">✔</span> Conduct CBT-E evaluations (CBTE-1, 2, 3)</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td><span style="color:#2E7D32;">✔</span> Generate court progress reports</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td><span style="color:#2E7D32;">✔</span> Process patient discharges</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td><span style="color:#2E7D32;">✔</span> Schedule and resolve follow-ups</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td><span style="color:#2E7D32;">✔</span> Generate Completion Certificates</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td><span style="color:#2E7D32;">✔</span> View analytics for their caseload</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td><span style="color:#2E7D32;">✔</span> Export OP CM Tracker to Excel</td>
+      <td></td>
+    </tr>
+  </tbody>
+</table>
+<p><strong>Pages They See:</strong> Dashboard, My Patients, Attendance, OP CM Tracker, Analytics, Archives</p>
+<hr />
+<h3>👤 HIM Staff (<code>him_staff</code>)</h3>
+<p><strong>Main Job:</strong> Generate and manage official reports (DOH forms), and view records for quality assurance.</p>
+<table class="styled-table">
+  <thead>
+    <tr>
+      <th>What They Can Do</th>
+      <th>What They Cannot Do</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><span style="color:#2E7D32;">✔</span> View patient records (read-only)</td>
+      <td><span style="color:#C62828;">✖</span> Edit patient information</td>
+    </tr>
+    <tr>
+      <td><span style="color:#2E7D32;">✔</span> View attendance records (read-only)</td>
+      <td><span style="color:#C62828;">✖</span> Record attendance</td>
+    </tr>
+    <tr>
+      <td><span style="color:#2E7D32;">✔</span> Generate and manage DOH reports</td>
+      <td><span style="color:#C62828;">✖</span> Register patients</td>
+    </tr>
+    <tr>
+      <td><span style="color:#2E7D32;">✔</span> View full analytics</td>
+      <td><span style="color:#C62828;">✖</span> Manage users</td>
+    </tr>
+    <tr>
+      <td><span style="color:#2E7D32;">✔</span> View archived records (read-only)</td>
+      <td><span style="color:#C62828;">✖</span> Record drug tests</td>
+    </tr>
+    <tr>
+      <td><span style="color:#2E7D32;">✔</span> Issue Completion Certificates</td>
+      <td></td>
+    </tr>
+  </tbody>
+</table>
+<blockquote><strong>HIM</strong> = Health Information Management</blockquote>
+<p><strong>Pages They See:</strong> Dashboard, Patients (View), Attendance (View), Reports, OP CM Tracker, Analytics, Archives (View)</p>
+<hr />
+<h3>👤 ICT Administrator (<code>ict_admin</code>)</h3>
+<p><strong>Main Job:</strong> Full system control — manage users, view audit logs, configure settings.</p>
+<table class="styled-table">
+  <thead>
+    <tr>
+      <th>What They Can Do</th>
+      <th>What They Cannot Do</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><span style="color:#2E7D32;">✔</span> <strong>Everything</strong> all other roles can do</td>
+      <td><span style="color:#C62828;">✖</span> Nothing is restricted</td>
+    </tr>
+    <tr>
+      <td><span style="color:#2E7D32;">✔</span> Manage user accounts (create, edit, deactivate)</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td><span style="color:#2E7D32;">✔</span> View audit logs (who did what, when)</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td><span style="color:#2E7D32;">✔</span> Archive and restore patient records</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td><span style="color:#2E7D32;">✔</span> Configure system-wide settings (organization name, logo, signatories)</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td><span style="color:#2E7D32;">✔</span> Database backup and restore</td>
+      <td></td>
+    </tr>
+  </tbody>
+</table>
+<blockquote><strong>ICT</strong> = Information and Communications Technology</blockquote>
+<p><strong>Pages They See:</strong> Dashboard, Patients, Attendance, Reports, OP CM Tracker, Analytics, Administration (User Management, Audit Logs, Archives, Settings)</p>
+<hr />
+<h2>3. The Complete Patient Journey (Start to Finish)</h2>
+<p>This is the <strong>full cycle</strong> of a patient in MTRC, from referral to discharge/aftercare.</p>
+
+        <div class="process-diagram">
+          <div class="process-step"><strong>1. Referral</strong><span>Court / Walk-in / LGU</span></div>
+          <div class="process-arrow">➔</div>
+          <div class="process-step"><strong>2. Registration</strong><span>5-Step IDADIN Intake</span></div>
+          <div class="process-arrow">➔</div>
+          <div class="process-step"><strong>3. Orientation</strong><span>Program rules & PO</span></div>
+          <div class="process-arrow">➔</div>
+          <div class="process-step"><strong>4. Active Care (7mo)</strong><span>43 Core Sessions + Drug Tests</span></div>
+          <div class="process-arrow">➔</div>
+          <div class="process-step"><strong>5. PDC Clearance</strong><span>Final evaluation</span></div>
+          <div class="process-arrow">➔</div>
+          <div class="process-step"><strong>6. Graduation</strong><span>Completion Certificate</span></div>
+          <div class="process-arrow">➔</div>
+          <div class="process-step"><strong>7. SIBOL (9mo)</strong><span>Community Aftercare</span></div>
+        </div>
+      <h3>Step 1: Referral</h3>
+<p>A patient arrives at MTRC through one of these sources:</p>
+<ul>
+  <li><strong>Voluntary Walk-In</strong> — The person comes on their own</li>
+  <li><strong>Court-Mandated</strong> — A judge orders them to attend (often through Plea Bargaining)</li>
+  <li><strong>LGU-Referred</strong> — Local government refers them (CADAC/MADAC/BADAC)</li>
+  <li><strong>Workplace-Referred</strong> — Their employer refers them</li>
+  <li><strong>NGO-Referred</strong> — A non-government organization refers them</li>
+</ul>
+<h3>Step 2: Registration (IDADIN 5-Step Intake Workflow)</h3>
+<p>The Admitting Personnel enters the patient into the system using a <strong>5-step workflow</strong>:</p>
+<table class="styled-table">
+  <thead>
+    <tr>
+      <th>Step</th>
+      <th>Name</th>
+      <th>What's Collected</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>1</strong></td>
+      <td>Patient Registration</td>
+      <td>Full name, birthdate, gender, address, contact info, photo, emergency contact, living arrangement</td>
+    </tr>
+    <tr>
+      <td><strong>2</strong></td>
+      <td>Referral & Admission Info</td>
+      <td>Referral source, admission type (new/readmission), nature of confinement (legal track), ASSIST risk level, DDE diagnosis, baseline drug test, prior hospitalizations</td>
+    </tr>
+    <tr>
+      <td><strong>3</strong></td>
+      <td>Drug Use History</td>
+      <td>Substances used, age at first use, frequency, length of use, primary reason, drug source, daily expense</td>
+    </tr>
+    <tr>
+      <td><strong>4</strong></td>
+      <td>Clinical Triage</td>
+      <td>Vital signs (BP, pulse, temp, weight), mental status exam, comorbidities (medical + psychiatric), socioeconomic classification</td>
+    </tr>
+    <tr>
+      <td><strong>5</strong></td>
+      <td>Finalize & Enroll</td>
+      <td>Signed consents (4 forms), program orientation date, admission date, case manager assignment → <strong>Patient becomes ACTIVE</strong></td>
+    </tr>
+  </tbody>
+</table>
+<blockquote><strong>IDADIN</strong> = The name of the DOH-standard intake/registration form used in drug rehab facilities.</blockquote>
+<h3>Step 3: Program Orientation (PO)</h3>
+<p>After enrollment, the patient attends an orientation session where they learn about:</p>
+<ul>
+  <li>The program rules and schedule</li>
+  <li>Their rights and responsibilities</li>
+  <li>The treatment plan process</li>
+  <li>The 43 core sessions they need to complete</li>
+</ul>
+<h3>Step 4: Active Treatment (7 Months)</h3>
+<p>This is the <strong>main treatment phase</strong>. The patient must complete <strong>43 core sessions</strong> total:</p>
+<table class="styled-table">
+  <thead>
+    <tr>
+      <th>Session Type</th>
+      <th>Count</th>
+      <th>Description</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>CBT Group Sessions</td>
+      <td>28</td>
+      <td>Group therapy using cognitive-behavioral techniques</td>
+    </tr>
+    <tr>
+      <td>Psycho-Education Sessions</td>
+      <td>12</td>
+      <td>Educational sessions about drugs, recovery, and life skills</td>
+    </tr>
+    <tr>
+      <td>CBT-E Evaluations</td>
+      <td>3</td>
+      <td>Formal evaluations (beginning, middle, end of treatment)</td>
+    </tr>
+    <tr>
+      <td><strong>Total Core</strong></td>
+      <td><strong>43</strong></td>
+      <td>Required for completion</td>
+    </tr>
+  </tbody>
+</table>
+<p><strong>Additional sessions</strong> (not counted toward the 43, but still important):</p>
+<ul>
+  <li>SHGM (Self-Help Group Meetings)</li>
+  <li>Individual Counseling</li>
+  <li>Conjoint/Family Sessions</li>
+  <li>Life Skills Training</li>
+  <li>Home Visits</li>
+  <li>ASI Interviews</li>
+</ul>
+<p><strong>During each session:</strong></p>
+<p>1. Attendance is recorded (present, absent, late, excused)</p>
+<p>2. A <strong>Multi-3 Rapid Drug Test</strong> is administered to every present patient</p>
+<p>3. Relapse risk is assessed (SAFE, AT RISK, or USED)</p>
+<p>4. Progress notes (SOAP format) are written</p>
+<h3>Step 5: Pre-Discharge Conference (PDC)</h3>
+<p>When a patient completes all 43 core sessions and meets all requirements, a Pre-Discharge Conference is held. This is the final review before graduation.</p>
+<p><strong>Requirements to be eligible for completion:</strong></p>
+<ul>
+  <li><span style="color:#2E7D32;">✔</span> At least 7 months since admission</li>
+  <li><span style="color:#2E7D32;">✔</span> 43 core sessions attended (28 CBT + 12 PE + 3 CBT-E)</li>
+  <li><span style="color:#2E7D32;">✔</span> No positive drug tests on record</li>
+  <li><span style="color:#2E7D32;">✔</span> PDC milestone date recorded</li>
+  <li><span style="color:#2E7D32;">✔</span> Patient must be "active" or "completed" status</li>
+</ul>
+<h3>Step 6: Discharge</h3>
+<p>The patient is formally discharged with one of these outcomes:</p>
+<table class="styled-table">
+  <thead>
+    <tr>
+      <th>Discharge Type</th>
+      <th>Meaning</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>Completer (Graduated)</strong></td>
+      <td>Successfully finished the 7-month program</td>
+    </tr>
+    <tr>
+      <td><strong>Dropped</strong></td>
+      <td>Left the program before completing (AWOL, non-compliance)</td>
+    </tr>
+    <tr>
+      <td><strong>Transferred</strong></td>
+      <td>Moved to another facility</td>
+    </tr>
+  </tbody>
+</table>
+<h3>Step 7: Aftercare (SIBOL Program)</h3>
+<p>Completers who graduate can transition to the <strong>9-Month Community Aftercare Program</strong> called <strong>SIBOL</strong>. Their program phase changes to "Aftercare."</p>
+<hr />
+<h2>4. System Modules — Page by Page</h2>
+<h3>📊 Dashboard</h3>
+<ul>
+  <li>Shows a quick overview of facility statistics</li>
+  <li>Total patients, active patients, new admissions</li>
+  <li>Today's sessions, attendance rates</li>
+  <li>Clinical attention flags (for case managers)</li>
+</ul>
+<h3>👥 Patients Page</h3>
+<ul>
+  <li>Lists all patients (or only assigned patients for case managers)</li>
+  <li>Search by name or patient code</li>
+  <li>Filter by status (active, completed, dropped)</li>
+  <li>Click a patient to view their full profile</li>
+</ul>
+<h3>📋 Patient Profile</h3>
+<p>Contains <strong>8 tabs</strong>:</p>
+<table class="styled-table">
+  <thead>
+    <tr>
+      <th>Tab</th>
+      <th>Content</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>Personal Information</strong></td>
+      <td>Name, age, gender, address, contact, photo, emergency contact</td>
+    </tr>
+    <tr>
+      <td><strong>Admission Information</strong></td>
+      <td>Referral details, admission date, type, confinement nature, baseline drug test</td>
+    </tr>
+    <tr>
+      <td><strong>Rehabilitation Information</strong></td>
+      <td>Treatment plan, milestones, program phase, case manager</td>
+    </tr>
+    <tr>
+      <td><strong>Attendance</strong></td>
+      <td>Session attendance history with drug test results</td>
+    </tr>
+    <tr>
+      <td><strong>Case Management</strong></td>
+      <td>SOAP progress notes, drug test logs, CBT-E evaluations, treatment plan, milestones, court reports, follow-ups</td>
+    </tr>
+    <tr>
+      <td><strong>Timeline</strong></td>
+      <td>Chronological view of all clinical events</td>
+    </tr>
+    <tr>
+      <td><strong>Certificates</strong></td>
+      <td>Enrollment and completion certificates</td>
+    </tr>
+    <tr>
+      <td><strong>History</strong></td>
+      <td>Audit trail of changes to this patient's record</td>
+    </tr>
+  </tbody>
+</table>
+<h3>✍️ Register Patient</h3>
+<ul>
+  <li>The IDADIN 5-step workflow (described in Section 3, Step 2)</li>
+  <li>Only accessible to Admitting Personnel and ICT Admin</li>
+</ul>
+<h3>📄 Referral Information</h3>
+<ul>
+  <li>Step 2 of the registration workflow</li>
+  <li>Records legal track, ASSIST risk level, DDE diagnosis, baseline drug test</li>
+  <li>Can save as draft or submit</li>
+</ul>
+<h3>📝 Intake Workflow</h3>
+<ul>
+  <li>Steps 3-5 of the registration workflow</li>
+  <li>Drug use history, clinical triage, finalize & enroll</li>
+</ul>
+<h3>📅 Attendance Page</h3>
+<ul>
+  <li>Lists all recorded attendance across all sessions</li>
+  <li>Filter by date (today, yesterday, this week, custom range)</li>
+  <li>Filter by status, search by patient name</li>
+  <li>Shows drug test result badges (Multi-3: Positive/Negative)</li>
+  <li>"Record Attendance" button opens a 4-step wizard</li>
+</ul>
+<h3>📅 Record Attendance Modal (4-Step Wizard)</h3>
+<table class="styled-table">
+  <thead>
+    <tr>
+      <th>Step</th>
+      <th>What Happens</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>Step 1</strong></td>
+      <td>Select session type, topic, date, facilitator</td>
+    </tr>
+    <tr>
+      <td><strong>Step 2</strong></td>
+      <td>Patient checklist — select which patients attended, mark status, quick drug test toggle</td>
+    </tr>
+    <tr>
+      <td><strong>Step 3</strong></td>
+      <td>Drug Test Details — Multi-3 checklist with THC/METH/ECS checkboxes for positives</td>
+    </tr>
+    <tr>
+      <td><strong>Step 4</strong></td>
+      <td>Remarks & Submit</td>
+    </tr>
+  </tbody>
+</table>
+<h3>📊 Reports Page</h3>
+<ul>
+  <li>Generate official DOH reports for submission</li>
+  <li>14 different report types (see Section 9)</li>
+  <li>Filter by date range (quarter/year)</li>
+  <li>Export to Excel, print, or save as PDF</li>
+</ul>
+<h3>📋 OP CM Tracker</h3>
+<ul>
+  <li><strong>OP CM</strong> = Outpatient Case Management</li>
+  <li>A comprehensive tracker showing all patients with their session progress</li>
+  <li>Shows how many CBT, PE, SHGM, counseling sessions each patient has attended</li>
+  <li>Exportable to Excel</li>
+</ul>
+<h3>📈 Analytics Page</h3>
+<ul>
+  <li>Visual charts and graphs</li>
+  <li>Patient demographics, admission trends</li>
+  <li>Session attendance rates over time</li>
+  <li>Drug test result trends</li>
+  <li>Discharge outcomes</li>
+</ul>
+<h3>🏛️ Administration (ICT Admin Only)</h3>
+<h4>User Management</h4>
+<ul>
+  <li>Create, edit, deactivate user accounts</li>
+  <li>Assign roles (admitting, case_manager, him_staff, ict_admin)</li>
+  <li>Reset passwords</li>
+</ul>
+<h4>Audit Logs</h4>
+<ul>
+  <li>Complete history of every action in the system</li>
+  <li>Who did what, when, to which record</li>
+  <li>Searchable and filterable</li>
+</ul>
+<h4>Archives</h4>
+<ul>
+  <li>Archived (soft-deleted) patient records</li>
+  <li>Can be restored by ICT Admin</li>
+</ul>
+<h4>Settings</h4>
+<ul>
+  <li>Organization name, logo, address</li>
+  <li>Signatory names for certificates</li>
+  <li>System-wide configuration</li>
+</ul>
+<h3>🔔 Notifications</h3>
+<ul>
+  <li>Bell icon in the top bar</li>
+  <li>Real-time alerts for clinical events (see Section 10)</li>
+</ul>
+<h3>👤 Profile Page</h3>
+<ul>
+  <li>View and edit your own profile</li>
+  <li>Change password</li>
+  <li>See your role and permissions</li>
+</ul>
+<hr />
+<h2>5. Session Types & Therapy Framework</h2>
+<h3>The CBT Framework</h3>
+<p><strong>CBT</strong> = <strong>Cognitive Behavioral Therapy</strong> — the main therapeutic approach used at MTRC.</p>
+<p>CBT is based on the idea that our <strong>thoughts</strong>, <strong>feelings</strong>, and <strong>behaviors</strong> are all connected. By changing negative thought patterns, patients can change their behavior (substance use).</p>
+<h3>Session Types in ENTREPOSE</h3>
+<table class="styled-table">
+  <thead>
+    <tr>
+      <th>Code</th>
+      <th>Full Name</th>
+      <th>Description</th>
+      <th>Count Toward 43?</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>CBT_GROUP</code></td>
+      <td>CBT Group Session</td>
+      <td>Group therapy (5-12 patients) using CBT techniques</td>
+      <td><span style="color:#2E7D32;">✔</span> Yes (28 sessions)</td>
+    </tr>
+    <tr>
+      <td><code>PSYCHO_EDUCATION</code></td>
+      <td>Psycho-Education</td>
+      <td>Educational sessions about addiction, recovery, health</td>
+      <td><span style="color:#2E7D32;">✔</span> Yes (12 sessions)</td>
+    </tr>
+    <tr>
+      <td><code>INDIVIDUAL_COUNSELING</code></td>
+      <td>Individual Counseling</td>
+      <td>One-on-one therapy session</td>
+      <td><span style="color:#C62828;">✖</span> No (supplementary)</td>
+    </tr>
+    <tr>
+      <td><code>CONJOINT_FAMILY</code></td>
+      <td>Conjoint/Family Session</td>
+      <td>Session with patient and their family</td>
+      <td><span style="color:#C62828;">✖</span> No (supplementary)</td>
+    </tr>
+    <tr>
+      <td><code>SHGM</code></td>
+      <td>Self-Help Group Meeting</td>
+      <td>Peer-led support group (like AA/NA style)</td>
+      <td><span style="color:#C62828;">✖</span> No (supplementary)</td>
+    </tr>
+    <tr>
+      <td><code>LIFE_SKILLS</code></td>
+      <td>Life Skills Training</td>
+      <td>Practical skills for daily living</td>
+      <td><span style="color:#C62828;">✖</span> No (supplementary)</td>
+    </tr>
+    <tr>
+      <td><code>ASI_INTERVIEW</code></td>
+      <td>ASI Interview</td>
+      <td>Addiction Severity Index assessment</td>
+      <td><span style="color:#C62828;">✖</span> No (assessment)</td>
+    </tr>
+    <tr>
+      <td><code>HOME_VISIT</code></td>
+      <td>Home Visit</td>
+      <td>Case manager visits patient's home</td>
+      <td><span style="color:#C62828;">✖</span> No (supplementary)</td>
+    </tr>
+    <tr>
+      <td><code>PROGRAM_ORIENTATION</code></td>
+      <td>Program Orientation</td>
+      <td>Initial orientation for new patients</td>
+      <td><span style="color:#C62828;">✖</span> No (one-time)</td>
+    </tr>
+  </tbody>
+</table>
+<h3>CBT-E Evaluations</h3>
+<p><strong>CBT-E</strong> = <strong>CBT Evaluation</strong> — formal assessments done at three points during treatment:</p>
+<table class="styled-table">
+  <thead>
+    <tr>
+      <th>Evaluation</th>
+      <th>When</th>
+      <th>Purpose</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>CBTE-1</strong></td>
+      <td>Beginning of treatment</td>
+      <td>Baseline assessment of recovery domains, coping skills, life goals</td>
+    </tr>
+    <tr>
+      <td><strong>CBTE-2</strong></td>
+      <td>Mid-treatment</td>
+      <td>Follow-up assessment to measure progress</td>
+    </tr>
+    <tr>
+      <td><strong>CBTE-3</strong></td>
+      <td>End of treatment</td>
+      <td>Final evaluation before discharge</td>
+    </tr>
+  </tbody>
+</table>
+<p>Each CBT-E evaluation records:</p>
+<ul>
+  <li>Recovery domain scores</li>
+  <li>Coping skills assessment</li>
+  <li>Life goals text</li>
+  <li>Overall score</li>
+  <li>Clinical judgment (ON_TRACK, NEEDS_ATTENTION, AT_RISK)</li>
+</ul>
+<h3>SHGM Special Rules</h3>
+<ul>
+  <li><strong>SHGM</strong> = <strong>Self-Help Group Meeting</strong></li>
+  <li>These are <strong>peer-led</strong> meetings, not facilitated by professionals</li>
+  <li>A patient is elected as <strong>Chairperson</strong> for each meeting</li>
+  <li><strong>5-session term limit</strong>: No patient can chair more than 5 SHGM sessions (ENTREPOSE Vol. 1 Sec 5.5.3)</li>
+  <li>The system enforces this rule automatically</li>
+</ul>
+<hr />
+<h2>6. Drug Testing Protocol</h2>
+<h3>Multi-3 Rapid Drug Test</h3>
+<p>MTRC uses the <strong>Multi-3 Rapid Urine Drug Test</strong> after every session. This test screens for <strong>3 substances</strong>:</p>
+<table class="styled-table">
+  <thead>
+    <tr>
+      <th>Substance</th>
+      <th>Code</th>
+      <th>Color Badge</th>
+      <th>What It Detects</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>THC</strong></td>
+      <td>THC</td>
+      <td><span style="color:#2E7D32;">●</span> Green</td>
+      <td>Marijuana/Cannabis</td>
+    </tr>
+    <tr>
+      <td><strong>METH</strong></td>
+      <td>METH</td>
+      <td><span style="color:#1565C0;">●</span> Blue</td>
+      <td>Methamphetamine (Shabu)</td>
+    </tr>
+    <tr>
+      <td><strong>ECS</strong></td>
+      <td>ECS</td>
+      <td><span style="color:#6A1B9A;">●</span> Purple</td>
+      <td>Ecstasy (MDMA)</td>
+    </tr>
+  </tbody>
+</table>
+<h3>How Drug Testing Works in the System</h3>
+<p>1. During attendance recording (Step 3), each present patient's drug test result is marked as <strong>POSITIVE</strong> or <strong>NEGATIVE</strong></p>
+<p>2. If <strong>POSITIVE</strong>, checkboxes appear for which substance(s) were detected (THC, METH, ECS)</p>
+<p>3. A patient can be positive for multiple substances at once ("poly-positive")</p>
+<p>4. Results are logged in the <code>drug_test_logs</code> table automatically</p>
+<p>5. Positive results trigger automatic notifications and follow-up scheduling</p>
+<h3>Baseline Drug Test</h3>
+<p>At referral (Step 2 of registration), a <strong>baseline drug test</strong> is recorded:</p>
+<ul>
+  <li>Date of test</li>
+  <li>Reference number</li>
+  <li>Which substances were detected (METH, THC, Other)</li>
+  <li>Finding (Positive/Negative)</li>
+</ul>
+<h3>Drug Test Types in the System</h3>
+<table class="styled-table">
+  <thead>
+    <tr>
+      <th>Type</th>
+      <th>When</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>Post-Session Screening</strong></td>
+      <td>Automatically logged after every session attendance</td>
+    </tr>
+    <tr>
+      <td><strong>Random Screening</strong></td>
+      <td>Logged manually through Case Management</td>
+    </tr>
+    <tr>
+      <td><strong>Baseline</strong></td>
+      <td>Recorded during referral registration</td>
+    </tr>
+  </tbody>
+</table>
+<hr />
+<h2>7. Clinical Milestones</h2>
+<p>Milestones are important dates in a patient's treatment journey. The case manager records these dates as they happen.</p>
+<table class="styled-table">
+  <thead>
+    <tr>
+      <th>Milestone</th>
+      <th>Code</th>
+      <th>When It Happens</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>Program Orientation</strong></td>
+      <td><code>date_po</code></td>
+      <td>After enrollment, patient attends orientation</td>
+    </tr>
+    <tr>
+      <td><strong>VLTS Referral</strong></td>
+      <td><code>date_vlts_referral</code></td>
+      <td>Voluntary Legal Tracing Service referral</td>
+    </tr>
+    <tr>
+      <td><strong>Initial Assessment</strong></td>
+      <td><code>date_initial_assessment</code></td>
+      <td>First CBT-E evaluation (CBTE-1) — auto-filled</td>
+    </tr>
+    <tr>
+      <td><strong>Initial Treatment Planning</strong></td>
+      <td><code>date_initial_tx_planning</code></td>
+      <td>When the ITP is first created — auto-filled</td>
+    </tr>
+    <tr>
+      <td><strong>Initial Progress Report</strong></td>
+      <td><code>date_initial_progress_report</code></td>
+      <td>First court progress report — auto-filled</td>
+    </tr>
+    <tr>
+      <td><strong>Case Conference</strong></td>
+      <td><code>date_case_conference</code></td>
+      <td>When a clinical case conference is held</td>
+    </tr>
+    <tr>
+      <td><strong>Status Reporting</strong></td>
+      <td><code>date_status_reporting</code></td>
+      <td>Midterm court progress report — auto-filled</td>
+    </tr>
+    <tr>
+      <td><strong>Home Visit</strong></td>
+      <td><code>date_home_visit</code></td>
+      <td>When a home visit is conducted</td>
+    </tr>
+    <tr>
+      <td><strong>Follow-up Assessment</strong></td>
+      <td><code>date_followup_assessment</code></td>
+      <td>Second CBT-E evaluation (CBTE-2) — auto-filled</td>
+    </tr>
+    <tr>
+      <td><strong>ACP Planning</strong></td>
+      <td><code>date_acp_planning</code></td>
+      <td>Aftercare Program planning / Third CBT-E (CBTE-3) — auto-filled</td>
+    </tr>
+    <tr>
+      <td><strong>Pre-Discharge Conference</strong></td>
+      <td><code>date_pdc</code></td>
+      <td>Final review before graduation — auto-filled at discharge</td>
+    </tr>
+    <tr>
+      <td><strong>Final Progress Report</strong></td>
+      <td><code>date_final_progress_report</code></td>
+      <td>Final court progress report — auto-filled</td>
+    </tr>
+    <tr>
+      <td><strong>Referral Outside MTRC</strong></td>
+      <td><code>date_referral_outside_mtrc</code></td>
+      <td>If patient needs to be referred to another facility</td>
+    </tr>
+  </tbody>
+</table>
+<blockquote><strong>Auto-filled</strong> means the system automatically records the date when the corresponding action is done (e.g., saving a CBT-E evaluation fills the assessment milestone).</blockquote>
+<hr />
+<h2>8. Certificates</h2>
+<p>The system generates two types of official certificates:</p>
+<h3>Enrollment Certificate (<code>ENROLLMENT</code>)</h3>
+<ul>
+  <li><strong>Who can issue:</strong> Admitting Personnel, ICT Admin</li>
+  <li><strong>When:</strong> After a patient completes the intake workflow and is enrolled</li>
+  <li><strong>Requirement:</strong> Patient must have an admission date</li>
+  <li><strong>Control Number Format:</strong> <code>CERT-ENR-[YY]-[XXXXX]</code></li>
+</ul>
+<h3>Completion Certificate (<code>COMPLETION</code>)</h3>
+<ul>
+  <li><strong>Who can issue:</strong> Case Manager, HIM Staff, ICT Admin</li>
+  <li><strong>When:</strong> After a patient completes the full 7-month program</li>
+  <li><strong>Requirements (all must be met):</strong></li>
+</ul>
+<p>  - <span style="color:#2E7D32;">✔</span> Patient status is "active" or "completed"</p>
+<p>  - <span style="color:#2E7D32;">✔</span> At least 7 months since admission</p>
+<p>  - <span style="color:#2E7D32;">✔</span> 43 core sessions attended</p>
+<p>  - <span style="color:#2E7D32;">✔</span> Zero positive drug tests</p>
+<p>  - <span style="color:#2E7D32;">✔</span> PDC milestone date recorded</p>
+<ul>
+  <li><strong>Control Number Format:</strong> <code>CERT-CMP-[YY]-[XXXXX]</code></li>
+</ul>
+<h3>Court Progress Reports</h3>
+<p>Not certificates, but formal documents generated for the court:</p>
+<table class="styled-table">
+  <thead>
+    <tr>
+      <th>Report Type</th>
+      <th>Code</th>
+      <th>When</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>Initial</strong></td>
+      <td><code>INIT</code></td>
+      <td>Around 30 days after enrollment</td>
+    </tr>
+    <tr>
+      <td><strong>Midterm</strong></td>
+      <td><code>MID</code></td>
+      <td>Around mid-treatment</td>
+    </tr>
+    <tr>
+      <td><strong>Final</strong></td>
+      <td><code>FNL</code></td>
+      <td>At program completion</td>
+    </tr>
+  </tbody>
+</table>
+<p>Each includes: attendance summary, drug test summary, relapse risk stats, clinical narrative, and case manager recommendation.</p>
+<hr />
+<h2>9. DOH Reports</h2>
+<p>The system generates <strong>14 official DOH reports</strong> for submission to the Department of Health. All reports focus on the <strong>Outpatient Program</strong> (not inpatient).</p>
+<table class="styled-table">
+  <thead>
+    <tr>
+      <th>#</th>
+      <th>Report</th>
+      <th>What It Shows</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>1</td>
+      <td><strong>Form 4.1</strong> — New Outpatient Admissions</td>
+      <td>New patients admitted during the period, split by gender</td>
+    </tr>
+    <tr>
+      <td>2</td>
+      <td><strong>Form 4.2</strong> — Outpatient Census</td>
+      <td>Total active patients at end of period, split by gender</td>
+    </tr>
+    <tr>
+      <td>3</td>
+      <td><strong>Form 4.3 Part I</strong> — Demographics</td>
+      <td>Age groups and gender breakdown of active patients</td>
+    </tr>
+    <tr>
+      <td>4</td>
+      <td><strong>Form 4.3 Part II</strong> — Referral Sources</td>
+      <td>Where patients were referred from (court, voluntary, LGU, etc.)</td>
+    </tr>
+    <tr>
+      <td>5</td>
+      <td><strong>Form 4.3 Part III</strong> — Substances Used</td>
+      <td>Which drugs patients use (meth, THC, etc.) by gender</td>
+    </tr>
+    <tr>
+      <td>6</td>
+      <td><strong>Form 4.3 Part IV</strong> — Employment Status</td>
+      <td>Employment breakdown of patients</td>
+    </tr>
+    <tr>
+      <td>7</td>
+      <td><strong>Form 4.3 Part V</strong> — Educational Attainment</td>
+      <td>Education level breakdown of patients</td>
+    </tr>
+    <tr>
+      <td>8</td>
+      <td><strong>Form 4.3 Part VI</strong> — Civil Status</td>
+      <td>Marital status breakdown of patients</td>
+    </tr>
+    <tr>
+      <td>9</td>
+      <td><strong>Form 10.1</strong> — Treatment Outcomes</td>
+      <td>How many patients completed, dropped out, transferred</td>
+    </tr>
+    <tr>
+      <td>10</td>
+      <td><strong>Form 10.2</strong> — Length of Stay</td>
+      <td>How long patients stayed before discharge (in months)</td>
+    </tr>
+    <tr>
+      <td>11</td>
+      <td><strong>Form 11</strong> — Positive Drug Test Roster</td>
+      <td>List of all patients who tested positive, with specific substances</td>
+    </tr>
+    <tr>
+      <td>12</td>
+      <td><strong>Program Census</strong></td>
+      <td>Full headcount of all patients by program phase</td>
+    </tr>
+    <tr>
+      <td>13</td>
+      <td><strong>Non-Completers</strong></td>
+      <td>List of patients who did not complete the program, with reasons</td>
+    </tr>
+    <tr>
+      <td>14</td>
+      <td><strong>Positive DT Roster</strong></td>
+      <td>Detailed roster of positive drug test cases</td>
+    </tr>
+  </tbody>
+</table>
+<p>Each report includes the <strong>official MTRC header</strong> with:</p>
+<ul>
+  <li>Department of Health banner</li>
+  <li>Malinao Treatment and Rehabilitation Center name</li>
+  <li>Facility head signatory (Dr. Gillego)</li>
+  <li>Report period and date prepared</li>
+</ul>
+<hr />
+<h2>10. Notifications & Alerts</h2>
+<p>The system sends <strong>automatic notifications</strong> to the right staff when important events happen.</p>
+<table class="styled-table">
+  <thead>
+    <tr>
+      <th>Event</th>
+      <th>Who Gets Notified</th>
+      <th>Alert Message</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>Patient missed a session</strong></td>
+      <td>Assigned case manager</td>
+      <td>"Patient [name] missed today's session"</td>
+    </tr>
+    <tr>
+      <td><strong>2 consecutive absences</strong></td>
+      <td>Assigned case manager</td>
+      <td>"Clinical Flag: [name] has 2 consecutive absences — needs follow-up"</td>
+    </tr>
+    <tr>
+      <td><strong>Positive drug test</strong></td>
+      <td>Case manager + ICT Admin + HIM Staff</td>
+      <td>"Multi-3 Drug Test Alert: [name] tested POSITIVE for [substances]"</td>
+    </tr>
+    <tr>
+      <td><strong>43 sessions completed</strong></td>
+      <td>Assigned case manager</td>
+      <td>"Milestone Alert: [name] has completed 43 core sessions — ready for PDC"</td>
+    </tr>
+    <tr>
+      <td><strong>Relapse risk: AT RISK or USED</strong></td>
+      <td>Assigned case manager</td>
+      <td>"Relapse Risk Alert: [name] rated [risk level] — immediate follow-up required"</td>
+    </tr>
+    <tr>
+      <td><strong>Patient discharged</strong></td>
+      <td>ICT Admin + HIM Staff + Admitting</td>
+      <td>"Patient discharged: [name] — [type]"</td>
+    </tr>
+    <tr>
+      <td><strong>Attendance recorded</strong></td>
+      <td>ICT Admins</td>
+      <td>Summary: "[session] — X present, Y absent, Z positive"</td>
+    </tr>
+    <tr>
+      <td><strong>Initial court report due</strong></td>
+      <td>Case manager (via attention flags)</td>
+      <td>"[name] — Initial Court Report Due (>30d Enrolled)"</td>
+    </tr>
+  </tbody>
+</table>
+<h3>Auto-Scheduled Follow-Ups</h3>
+<p>The system automatically creates follow-up tasks when:</p>
+<ul>
+  <li>A patient's relapse risk is AT_RISK or USED</li>
+  <li>A patient tests positive on a drug test</li>
+</ul>
+<hr />
+<h2>11. Glossary of Keywords</h2>
+<h3>Clinical Terms</h3>
+<table class="styled-table">
+  <thead>
+    <tr>
+      <th>Term</th>
+      <th>Full Name</th>
+      <th>Simple Explanation</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>PWUD</strong></td>
+      <td>Person Who Uses Drugs</td>
+      <td>The official DOH/DDB term for a patient in a drug rehab program</td>
+    </tr>
+    <tr>
+      <td><strong>CBT</strong></td>
+      <td>Cognitive Behavioral Therapy</td>
+      <td>A type of therapy that helps people change negative thought patterns to change behavior</td>
+    </tr>
+    <tr>
+      <td><strong>SHGM</strong></td>
+      <td>Self-Help Group Meeting</td>
+      <td>Peer-led support group meetings (patients help each other, like AA meetings)</td>
+    </tr>
+    <tr>
+      <td><strong>SIBOL</strong></td>
+      <td>(Aftercare Program Name)</td>
+      <td>The 9-month community aftercare program after completing the 7-month outpatient program</td>
+    </tr>
+    <tr>
+      <td><strong>ASSIST</strong></td>
+      <td>Alcohol, Smoking, and Substance Involvement Screening Test</td>
+      <td>A WHO screening tool that measures how risky a person's substance use is (Low, Moderate, High)</td>
+    </tr>
+    <tr>
+      <td><strong>DDE</strong></td>
+      <td>Drug Dependence Examination</td>
+      <td>A medical exam that determines the severity of a person's drug dependence (Mild, Moderate, Severe)</td>
+    </tr>
+    <tr>
+      <td><strong>SOAP</strong></td>
+      <td>Subjective, Objective, Assessment, Plan</td>
+      <td>A standard format for writing clinical progress notes</td>
+    </tr>
+    <tr>
+      <td><strong>ITP</strong></td>
+      <td>Individualized Treatment Plan</td>
+      <td>A personalized plan for each patient outlining their goals, problems, and interventions</td>
+    </tr>
+    <tr>
+      <td><strong>PDC</strong></td>
+      <td>Pre-Discharge Conference</td>
+      <td>The final review meeting before a patient graduates from the program</td>
+    </tr>
+    <tr>
+      <td><strong>ACP</strong></td>
+      <td>Aftercare Program</td>
+      <td>The follow-up program after completing the main treatment</td>
+    </tr>
+    <tr>
+      <td><strong>CBT-E</strong></td>
+      <td>CBT Evaluation</td>
+      <td>Formal assessment done at beginning, middle, and end of treatment (CBTE-1, 2, 3)</td>
+    </tr>
+    <tr>
+      <td><strong>RDT</strong></td>
+      <td>Rapid Drug Test</td>
+      <td>A quick urine drug test done at the facility</td>
+    </tr>
+    <tr>
+      <td><strong>Multi-3</strong></td>
+      <td>Multi-3 Rapid Urine Drug Test</td>
+      <td>The specific drug test kit used that tests for THC, METH, and ECS simultaneously</td>
+    </tr>
+    <tr>
+      <td><strong>ASI</strong></td>
+      <td>Addiction Severity Index</td>
+      <td>A clinical interview tool that measures how severe someone's addiction is</td>
+    </tr>
+    <tr>
+      <td><strong>VLTS</strong></td>
+      <td>Voluntary Legal Tracing Service</td>
+      <td>A legal service for tracing court/legal documentation</td>
+    </tr>
+    <tr>
+      <td><strong>MSE</strong></td>
+      <td>Mental Status Examination</td>
+      <td>A clinical exam that checks a patient's mental health state</td>
+    </tr>
+  </tbody>
+</table>
+<h3>Legal Terms</h3>
+<table class="styled-table">
+  <thead>
+    <tr>
+      <th>Term</th>
+      <th>Simple Explanation</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>RA 9165</strong></td>
+      <td>Republic Act 9165 — The Comprehensive Dangerous Drugs Act of 2002 (Philippines drug law)</td>
+    </tr>
+    <tr>
+      <td><strong>Plea Bargaining</strong></td>
+      <td>A court agreement where the accused agrees to attend rehab instead of going to prison</td>
+    </tr>
+    <tr>
+      <td><strong>Section 61, RA 9165</strong></td>
+      <td>Compulsory confinement for first-time drug users found to be drug-dependent</td>
+    </tr>
+    <tr>
+      <td><strong>Section 62, RA 9165</strong></td>
+      <td>Compulsory confinement for drug users who are not first-time offenders</td>
+    </tr>
+    <tr>
+      <td><strong>CADAC/MADAC/BADAC</strong></td>
+      <td>City/Municipal/Barangay Anti-Drug Abuse Council — local government drug units</td>
+    </tr>
+    <tr>
+      <td><strong>DDB</strong></td>
+      <td>Dangerous Drugs Board — the national agency that oversees drug policy</td>
+    </tr>
+    <tr>
+      <td><strong>DOH</strong></td>
+      <td>Department of Health — the national health agency</td>
+    </tr>
+    <tr>
+      <td><strong>Court Progress Report</strong></td>
+      <td>A formal report sent to the court about a patient's progress in rehab</td>
+    </tr>
+  </tbody>
+</table>
+<h3>System Terms</h3>
+<table class="styled-table">
+  <thead>
+    <tr>
+      <th>Term</th>
+      <th>Simple Explanation</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>IDADIN</strong></td>
+      <td>The DOH-standard intake/admission form used in all licensed drug rehab facilities</td>
+    </tr>
+    <tr>
+      <td><strong>ENTREPOSE</strong></td>
+      <td>The name of this system — Patient Monitoring Information System for MTRC</td>
+    </tr>
+    <tr>
+      <td><strong>MTRC</strong></td>
+      <td>Malinao Treatment and Rehabilitation Center — the facility where this system is used</td>
+    </tr>
+    <tr>
+      <td><strong>HIM</strong></td>
+      <td>Health Information Management — the staff responsible for reports and records</td>
+    </tr>
+    <tr>
+      <td><strong>ICT</strong></td>
+      <td>Information and Communications Technology — the tech admin staff</td>
+    </tr>
+    <tr>
+      <td><strong>OP CM Tracker</strong></td>
+      <td>Outpatient Case Management Tracker — a spreadsheet-like view of all patients and their session progress</td>
+    </tr>
+    <tr>
+      <td><strong>Audit Log</strong></td>
+      <td>A record of every action performed in the system (who did what, when)</td>
+    </tr>
+    <tr>
+      <td><strong>PWUD Code</strong></td>
+      <td>A unique code assigned to each patient (like a patient ID number)</td>
+    </tr>
+    <tr>
+      <td><strong>Patient Code</strong></td>
+      <td>Another unique identifier for patients in the system</td>
+    </tr>
+  </tbody>
+</table>
+<h3>Treatment Plan Terms</h3>
+<table class="styled-table">
+  <thead>
+    <tr>
+      <th>Term</th>
+      <th>Simple Explanation</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>Problem Domains</strong></td>
+      <td>Areas of concern in the patient's life (substance use, family, employment, legal, mental health, etc.)</td>
+    </tr>
+    <tr>
+      <td><strong>Primary Goals</strong></td>
+      <td>The main treatment objectives set for the patient</td>
+    </tr>
+    <tr>
+      <td><strong>Intervention Modalities</strong></td>
+      <td>The types of therapy and activities planned (CBT, psycho-ed, counseling, etc.)</td>
+    </tr>
+    <tr>
+      <td><strong>Relapse Prevention Plan</strong></td>
+      <td>A plan for how the patient will avoid going back to drug use</td>
+    </tr>
+    <tr>
+      <td><strong>Client Agreed</strong></td>
+      <td>Whether the patient has agreed to and signed the treatment plan</td>
+    </tr>
+  </tbody>
+</table>
+<h3>Drug Test Terms</h3>
+<table class="styled-table">
+  <thead>
+    <tr>
+      <th>Term</th>
+      <th>Simple Explanation</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>THC</strong></td>
+      <td>Tetrahydrocannabinol — the active chemical in marijuana/cannabis</td>
+    </tr>
+    <tr>
+      <td><strong>METH</strong></td>
+      <td>Methamphetamine — commonly known as "shabu" in the Philippines</td>
+    </tr>
+    <tr>
+      <td><strong>ECS</strong></td>
+      <td>Ecstasy — MDMA, a synthetic stimulant drug</td>
+    </tr>
+    <tr>
+      <td><strong>Poly-Positive</strong></td>
+      <td>Testing positive for more than one substance at the same time</td>
+    </tr>
+    <tr>
+      <td><strong>Baseline Drug Test</strong></td>
+      <td>The first drug test taken at registration, before treatment begins</td>
+    </tr>
+    <tr>
+      <td><strong>Post-Session Screening</strong></td>
+      <td>Drug test done immediately after every therapy session</td>
+    </tr>
+  </tbody>
+</table>
+<h3>Discharge Terms</h3>
+<table class="styled-table">
+  <thead>
+    <tr>
+      <th>Term</th>
+      <th>Simple Explanation</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>Completer (Graduated)</strong></td>
+      <td>Patient who successfully finished all 43 sessions and the 7-month program</td>
+    </tr>
+    <tr>
+      <td><strong>Dropped</strong></td>
+      <td>Patient who left the program early (AWOL, non-compliance, personal reasons)</td>
+    </tr>
+    <tr>
+      <td><strong>Transferred</strong></td>
+      <td>Patient who was moved to another treatment facility</td>
+    </tr>
+    <tr>
+      <td><strong>Non-Completer</strong></td>
+      <td>Any patient who did not finish the program (dropped or transferred)</td>
+    </tr>
+  </tbody>
+</table>
+<h3>Session-Related Terms</h3>
+<table class="styled-table">
+  <thead>
+    <tr>
+      <th>Term</th>
+      <th>Simple Explanation</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>Relapse Risk</strong></td>
+      <td>How likely a patient is to use drugs again: <strong>SAFE</strong> (no risk), <strong>AT_RISK</strong> (showing warning signs), <strong>USED</strong> (has actually used drugs)</td>
+    </tr>
+    <tr>
+      <td><strong>Chairperson</strong></td>
+      <td>In SHGM sessions, one patient is elected to lead/chair the meeting. Max 5 sessions per patient.</td>
+    </tr>
+    <tr>
+      <td><strong>Family Attended</strong></td>
+      <td>Whether a family member joined the session (for conjoint/family sessions)</td>
+    </tr>
+    <tr>
+      <td><strong>Core Sessions</strong></td>
+      <td>The 43 required sessions (28 CBT + 12 PE + 3 CBT-E) that count toward completion</td>
+    </tr>
+    <tr>
+      <td><strong>Supplementary Sessions</strong></td>
+      <td>Additional sessions (SHGM, counseling, home visits) that support recovery but don't count toward the 43</td>
+    </tr>
+  </tbody>
+</table>
+<hr />
+<h2>12. Quick-Reference Checklist</h2>
+<h3><span style="color:#2E7D32;">✔</span> Registration Checklist (Admitting Personnel)</h3>
+<div class="checklist-container">
+  <div class="checklist-item"><span class="checkbox-box">☐</span> <span>Patient personal info entered (name, birthdate, gender, address)</span></div>
+  <div class="checklist-item"><span class="checkbox-box">☐</span> <span>Photo uploaded</span></div>
+  <div class="checklist-item"><span class="checkbox-box">☐</span> <span>Emergency contact recorded</span></div>
+  <div class="checklist-item"><span class="checkbox-box">☐</span> <span>Referral source identified</span></div>
+  <div class="checklist-item"><span class="checkbox-box">☐</span> <span>Admission type set (New/Readmission/Recommitment)</span></div>
+  <div class="checklist-item"><span class="checkbox-box">☐</span> <span>Nature of confinement selected (legal track)</span></div>
+  <div class="checklist-item"><span class="checkbox-box">☐</span> <span>ASSIST risk level recorded</span></div>
+  <div class="checklist-item"><span class="checkbox-box">☐</span> <span>DDE severity diagnosis recorded</span></div>
+  <div class="checklist-item"><span class="checkbox-box">☐</span> <span>Baseline drug test recorded</span></div>
+  <div class="checklist-item"><span class="checkbox-box">☐</span> <span>Prior hospitalizations recorded (if any)</span></div>
+  <div class="checklist-item"><span class="checkbox-box">☐</span> <span>Drug use history completed (substances, frequency, length)</span></div>
+  <div class="checklist-item"><span class="checkbox-box">☐</span> <span>Clinical triage done (vitals, MSE, comorbidities)</span></div>
+  <div class="checklist-item"><span class="checkbox-box">☐</span> <span>Socioeconomic classification set</span></div>
+  <div class="checklist-item"><span class="checkbox-box">☐</span> <span>4 consent forms signed (Service Agreement, Pledge of Commitment, Data Privacy, General Medical)</span></div>
+  <div class="checklist-item"><span class="checkbox-box">☐</span> <span>Program orientation date set</span></div>
+  <div class="checklist-item"><span class="checkbox-box">☐</span> <span>Admission date set</span></div>
+  <div class="checklist-item"><span class="checkbox-box">☐</span> <span>Case manager assigned</span></div>
+  <div class="checklist-item"><span class="checkbox-box">☐</span> <span>Patient enrolled → status becomes <strong>active</strong></span></div>
+  <div class="checklist-item"><span class="checkbox-box">☐</span> <span>Enrollment certificate generated</span></div>
+</div>
+<h3><span style="color:#2E7D32;">✔</span> Session/Attendance Checklist (Case Manager)</h3>
+<div class="checklist-container">
+  <div class="checklist-item"><span class="checkbox-box">☐</span> <span>Session type selected</span></div>
+  <div class="checklist-item"><span class="checkbox-box">☐</span> <span>Topic and facilitator recorded</span></div>
+  <div class="checklist-item"><span class="checkbox-box">☐</span> <span>Session date set</span></div>
+  <div class="checklist-item"><span class="checkbox-box">☐</span> <span>All patients marked (present/absent/late/excused)</span></div>
+  <div class="checklist-item"><span class="checkbox-box">☐</span> <span>Drug test result recorded for each present patient (Positive/Negative)</span></div>
+  <div class="checklist-item"><span class="checkbox-box">☐</span> <span>If positive: specific substances checked (THC, METH, ECS)</span></div>
+  <div class="checklist-item"><span class="checkbox-box">☐</span> <span>Relapse risk assessed for each patient</span></div>
+  <div class="checklist-item"><span class="checkbox-box">☐</span> <span>Family attendance noted (for conjoint sessions)</span></div>
+  <div class="checklist-item"><span class="checkbox-box">☐</span> <span>Chairperson designated (for SHGM sessions)</span></div>
+  <div class="checklist-item"><span class="checkbox-box">☐</span> <span>Remarks added if needed</span></div>
+  <div class="checklist-item"><span class="checkbox-box">☐</span> <span>Attendance submitted</span></div>
+</div>
+<h3><span style="color:#2E7D32;">✔</span> Case Management Checklist (Case Manager)</h3>
+<div class="checklist-container">
+  <div class="checklist-item"><span class="checkbox-box">☐</span> <span>SOAP progress notes written after sessions</span></div>
+  <div class="checklist-item"><span class="checkbox-box">☐</span> <span>Drug test results logged</span></div>
+  <div class="checklist-item"><span class="checkbox-box">☐</span> <span>CBT-E evaluations conducted (CBTE-1 at start, CBTE-2 at midpoint, CBTE-3 at end)</span></div>
+  <div class="checklist-item"><span class="checkbox-box">☐</span> <span>Individualized Treatment Plan (ITP) created and updated</span></div>
+  <div class="checklist-item"><span class="checkbox-box">☐</span> <span>Clinical milestones recorded as they occur</span></div>
+  <div class="checklist-item"><span class="checkbox-box">☐</span> <span>Court progress reports generated (Initial, Midterm, Final)</span></div>
+  <div class="checklist-item"><span class="checkbox-box">☐</span> <span>Follow-ups scheduled and resolved</span></div>
+  <div class="checklist-item"><span class="checkbox-box">☐</span> <span>Attention flags reviewed daily (consecutive absences, positive tests, PDC readiness)</span></div>
+</div>
+<h3><span style="color:#2E7D32;">✔</span> Completion/Discharge Checklist (Case Manager)</h3>
+<div class="checklist-container">
+  <div class="checklist-item"><span class="checkbox-box">☐</span> <span>43 core sessions completed (28 CBT + 12 PE + 3 CBT-E)</span></div>
+  <div class="checklist-item"><span class="checkbox-box">☐</span> <span>7 months elapsed since admission</span></div>
+  <div class="checklist-item"><span class="checkbox-box">☐</span> <span>No positive drug tests on record</span></div>
+  <div class="checklist-item"><span class="checkbox-box">☐</span> <span>All 3 CBT-E evaluations completed</span></div>
+  <div class="checklist-item"><span class="checkbox-box">☐</span> <span>Treatment plan status updated</span></div>
+  <div class="checklist-item"><span class="checkbox-box">☐</span> <span>Pre-Discharge Conference (PDC) held and dated</span></div>
+  <div class="checklist-item"><span class="checkbox-box">☐</span> <span>Final court progress report generated</span></div>
+  <div class="checklist-item"><span class="checkbox-box">☐</span> <span>Discharge form completed (date, type, reason)</span></div>
+  <div class="checklist-item"><span class="checkbox-box">☐</span> <span>Court notified (if court-mandated)</span></div>
+  <div class="checklist-item"><span class="checkbox-box">☐</span> <span>Aftercare transition decision made (transition to SIBOL?)</span></div>
+  <div class="checklist-item"><span class="checkbox-box">☐</span> <span>Completion certificate generated</span></div>
+</div>
+<h3><span style="color:#2E7D32;">✔</span> DOH Reporting Checklist (HIM Staff)</h3>
+<div class="checklist-container">
+  <div class="checklist-item"><span class="checkbox-box">☐</span> <span>Reporting period selected (quarter/year)</span></div>
+  <div class="checklist-item"><span class="checkbox-box">☐</span> <span>Form 4.1 — New Admissions generated</span></div>
+  <div class="checklist-item"><span class="checkbox-box">☐</span> <span>Form 4.2 — Census generated</span></div>
+  <div class="checklist-item"><span class="checkbox-box">☐</span> <span>Form 4.3 Parts I-VI — Demographics generated</span></div>
+  <div class="checklist-item"><span class="checkbox-box">☐</span> <span>Form 10.1 — Treatment Outcomes generated</span></div>
+  <div class="checklist-item"><span class="checkbox-box">☐</span> <span>Form 10.2 — Length of Stay generated</span></div>
+  <div class="checklist-item"><span class="checkbox-box">☐</span> <span>Form 11 — Positive Drug Test Roster generated</span></div>
+  <div class="checklist-item"><span class="checkbox-box">☐</span> <span>Program Census generated</span></div>
+  <div class="checklist-item"><span class="checkbox-box">☐</span> <span>Non-Completers list generated</span></div>
+  <div class="checklist-item"><span class="checkbox-box">☐</span> <span>Reports exported to Excel / printed as PDF</span></div>
+  <div class="checklist-item"><span class="checkbox-box">☐</span> <span>Reports submitted to DOH on time</span></div>
+</div>
+<h3><span style="color:#2E7D32;">✔</span> System Administration Checklist (ICT Admin)</h3>
+<div class="checklist-container">
+  <div class="checklist-item"><span class="checkbox-box">☐</span> <span>User accounts created for all staff</span></div>
+  <div class="checklist-item"><span class="checkbox-box">☐</span> <span>Correct roles assigned to each user</span></div>
+  <div class="checklist-item"><span class="checkbox-box">☐</span> <span>Organization settings configured (name, logo, address)</span></div>
+  <div class="checklist-item"><span class="checkbox-box">☐</span> <span>Signatory names set for certificates</span></div>
+  <div class="checklist-item"><span class="checkbox-box">☐</span> <span>Audit logs reviewed periodically</span></div>
+  <div class="checklist-item"><span class="checkbox-box">☐</span> <span>Database backed up regularly</span></div>
+  <div class="checklist-item"><span class="checkbox-box">☐</span> <span>Archived records reviewed</span></div>
+  <div class="checklist-item"><span class="checkbox-box">☐</span> <span>Inactive users deactivated</span></div>
+</div>
+<hr />
+<blockquote><strong>End of ENTREPOSE System Reviewer & Checklist</strong>  </blockquote>
+<blockquote><em>This document covers the complete system cycle, all user roles, all modules, and all clinical terminology used in ENTREPOSE.</em></blockquote>
+
+
+</body>
+</html>

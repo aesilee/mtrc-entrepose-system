@@ -1,14 +1,14 @@
 import { Router } from "express";
-import { verifyToken, requireRole } from "../middleware/auth.js";
+import { verifyToken, requireRole, requirePatientClinicalAccess } from "../middleware/auth.js";
 import * as certController from "../controllers/certificateController.js";
 
 const router = Router();
 router.use(verifyToken);
 
-// Phase 3: New End-to-End Certificates Engine Routes
-router.get("/:id/eligibility", certController.checkEligibility);
-router.post("/:id/generate", certController.generateCertificate);
-router.get("/:id/history", certController.getCertificateHistory);
+// Phase 3: New End-to-End Certificates Engine Routes (Finding 1 & 2: Clinical access & guard verification)
+router.get("/:id/eligibility", requirePatientClinicalAccess, certController.checkEligibility);
+router.post("/:id/generate", requirePatientClinicalAccess, certController.generateCertificate);
+router.get("/:id/history", requirePatientClinicalAccess, certController.getCertificateHistory);
 router.get("/:id", certController.getCertificateById);
 
 // (Legacy routes preserved if needed for archive/restore mechanisms)

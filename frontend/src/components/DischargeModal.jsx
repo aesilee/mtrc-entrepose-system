@@ -1,29 +1,37 @@
 import { useState, useEffect } from "react";
 import api from "../api/axios.js";
 
-const REASON_OPTIONS = [
-  "Completed Program",
-  "Non-compliance",
-  "Early Release",
-  "Court Order Turnover",
+export const COMPLETER_REASONS = [
+  "Completed Program (Graduated)",
+  "Completed Mandated Outpatient Duration",
+  "Early Release (Court-Granted / Cleared)",
+];
+
+export const NON_COMPLETER_REASONS = [
+  "Non-compliance / Absconded / Dropped Out",
+  "Expelled / Disciplinary Action",
+  "Referred to Residential / Other Facility",
+  "Medical Discharge / Health Reasons",
+  "Court Order Turnover / Re-arrest / Incarcerated",
   "Death",
-  "Referred to Residential",
-  "Buy-Bust / Re-arrest",
-  "Others"
+  "Others",
 ];
 
 export default function DischargeModal({ patientId, admissionDate, onClose, onSaved }) {
   const [form, setForm] = useState({
     dischargeDate: new Date().toISOString().slice(0, 10),
     status: "Completer (Graduated)",
-    reason: "Completed Program",
+    reason: COMPLETER_REASONS[0],
     treatmentDurationMonths: 0,
     interventionUponDischarge: "",
     courtNotified: false,
-    transitionToAftercare: false,
+    transitionToAftercare: true,
   });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+
+  const isCompleter = form.status === "Completer (Graduated)";
+  const currentReasonOptions = isCompleter ? COMPLETER_REASONS : NON_COMPLETER_REASONS;
 
   useEffect(() => {
     if (admissionDate && form.dischargeDate) {
@@ -31,9 +39,19 @@ export default function DischargeModal({ patientId, admissionDate, onClose, onSa
       const end = new Date(form.dischargeDate);
       let months = (end.getFullYear() - start.getFullYear()) * 12 + (end.getMonth() - start.getMonth());
       if (months < 0) months = 0;
-      update("treatmentDurationMonths", months);
+      setForm((prev) => ({ ...prev, treatmentDurationMonths: months }));
     }
   }, [admissionDate, form.dischargeDate]);
+
+  function handleStatusChange(newStatus) {
+    const isNowCompleter = newStatus === "Completer (Graduated)";
+    setForm((prev) => ({
+      ...prev,
+      status: newStatus,
+      reason: isNowCompleter ? COMPLETER_REASONS[0] : NON_COMPLETER_REASONS[0],
+      transitionToAftercare: isNowCompleter ? prev.transitionToAftercare : false,
+    }));
+  }
 
   function update(field, value) {
     setForm((prev) => ({ ...prev, [field]: value }));
@@ -45,6 +63,16 @@ export default function DischargeModal({ patientId, admissionDate, onClose, onSa
       setError("No patient ID provided.");
       return;
     }
+
+    if (isCompleter && !COMPLETER_REASONS.includes(form.reason)) {
+      setError("Please select a valid completion reason.");
+      return;
+    }
+    if (!isCompleter && !NON_COMPLETER_REASONS.includes(form.reason)) {
+      setError("Please select a valid attrition / non-completer reason.");
+      return;
+    }
+
     if (!window.confirm("Are you sure you want to formally discharge this patient? This will change their enrollment status and lock further attendance tracking.")) return;
     
     setSaving(true);
@@ -54,7 +82,7 @@ export default function DischargeModal({ patientId, admissionDate, onClose, onSa
       onSaved();
     } catch (err) {
       setError(err.response?.data?.message || "Failed to process discharge.");
-      setSaving(false); // only reset on error so modal doesn't flash if onSaved unmounts it
+      setSaving(false);
     }
   }
 
@@ -74,16 +102,16 @@ export default function DischargeModal({ patientId, admissionDate, onClose, onSa
               <input type="date" required style={styles.input} value={form.dischargeDate} onChange={(e) => update("dischargeDate", e.target.value)} disabled={saving} />
             </label>
             <label style={styles.label}>
-              Status
-              <select required style={styles.input} value={form.status} onChange={(e) => update("status", e.target.value)} disabled={saving}>
+              Discharge Classification Status
+              <select required style={styles.input} value={form.status} onChange={(e) => handleStatusChange(e.target.value)} disabled={saving}>
                 <option value="Completer (Graduated)">Completer (Graduated)</option>
-                <option value="Non-Completer">Non-Completer</option>
+                <option value="Non-Completer">Non-Completer (Attrition / Withdrawn)</option>
               </select>
             </label>
             <label style={styles.label}>
-              Discharge Reason
+              Discharge Reason ({isCompleter ? "Completion" : "Attrition Category"})
               <select required style={styles.input} value={form.reason} onChange={(e) => update("reason", e.target.value)} disabled={saving}>
-                {REASON_OPTIONS.map(r => <option key={r} value={r}>{r}</option>)}
+                {currentReasonOptions.map((r) => <option key={r} value={r}>{r}</option>)}
               </select>
             </label>
             <label style={styles.label}>
@@ -92,7 +120,7 @@ export default function DischargeModal({ patientId, admissionDate, onClose, onSa
             </label>
             <label style={{ ...styles.label, gridColumn: "1 / -1" }}>
               Intervention / Remarks Upon Discharge
-              <textarea style={styles.textarea} value={form.interventionUponDischarge} onChange={(e) => update("interventionUponDischarge", e.target.value)} disabled={saving} />
+              <textarea style={styles.textarea} value={form.interventionUponDischarge} onChange={(e) => update("interventionUponDischarge", e.target.value)} disabled={saving} placeholder="Clinical summary, referral status, or discharge disposition notes..." />
             </label>
             
             <div style={{ ...styles.checkboxGroup, gridColumn: "1 / -1" }}>
@@ -100,9 +128,19 @@ export default function DischargeModal({ patientId, admissionDate, onClose, onSa
                 <input type="checkbox" checked={form.courtNotified} onChange={(e) => update("courtNotified", e.target.checked)} disabled={saving} />
                 Court Notified (Progress Report / Clearance Transmitted to RTC)
               </label>
-              <label style={styles.checkboxLabel}>
-                <input type="checkbox" checked={form.transitionToAftercare} onChange={(e) => update("transitionToAftercare", e.target.checked)} disabled={saving} />
-                Transition to Aftercare Program (9-Month OP-ACP)
+              <label style={{ ...styles.checkboxLabel, opacity: isCompleter ? 1 : 0.5 }}>
+                <input 
+                  type="checkbox" 
+                  checked={form.transitionToAftercare} 
+                  disabled={!isCompleter || saving} 
+                  onChange={(e) => update("transitionToAftercare", e.target.checked)} 
+                />
+                Endorsed / Referred to Aftercare Program (9-Month OP-ACP)
+                {!isCompleter && (
+                  <span style={{ fontSize: 11, color: "#718096", marginLeft: 6 }}>
+                    (Only program completers are endorsed to aftercare)
+                  </span>
+                )}
               </label>
             </div>
           </div>

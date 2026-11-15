@@ -250,10 +250,18 @@ export function Form41View({ data, periodLabel }) {
 
           <div className="formula-card">
             <p className="formula-title"><strong>PERFORMANCE INDICATOR COMPUTATION (OUTPATIENT SERVICE):</strong></p>
-            <p className="formula-math">
-              <strong>Formula:</strong> (Total Outpatient Cases Managed within Rating Period [{op.grand_total.total}] / Total Outpatient Cases Managed within Rating Period [{op.grand_total.total}]) &times; 100% = <strong>100.00%</strong>
+            {op.grand_total.total > 0 ? (
+              <p className="formula-math">
+                <strong>Formula:</strong> (Total Outpatient Cases Managed within Rating Period [{op.grand_total.total}] / Total Outpatient Cases Managed within Rating Period [{op.grand_total.total}]) &times; 100% = <strong>100.00%</strong>
+              </p>
+            ) : (
+              <p className="formula-math" style={{ color: "#92400E" }}>
+                <strong>Formula:</strong> Denominator is 0 (No active outpatient cases managed in period) &rarr; Performance Indicator: <strong>N/A</strong>
+              </p>
+            )}
+            <p className="formula-note">
+              <strong>HIM Reporting Notice:</strong> The source DOH statutory format defines percentage using identical numerator and denominator ('Cases Managed / Cases Managed'). This statutory measure is displayed as prescribed; HIM confirmation is required prior to adopting an alternate clinical formula.
             </p>
-            <p className="formula-note">Statutory Target: 100% of admitted outpatient drug abuse cases managed within the rated cycle.</p>
           </div>
         </div>
       )}
@@ -367,8 +375,17 @@ export function Form41View({ data, periodLabel }) {
 
           <div className="formula-card">
             <p className="formula-title"><strong>PERFORMANCE INDICATOR COMPUTATION (AFTERCARE SERVICE):</strong></p>
-            <p className="formula-math">
-              <strong>Formula:</strong> (Total Aftercare Cases Managed [{ac.grand_total.total}] / Total Aftercare Cases Managed [{ac.grand_total.total}]) &times; 100% = <strong>100.00%</strong>
+            {ac.grand_total.total > 0 ? (
+              <p className="formula-math">
+                <strong>Formula:</strong> (Total Aftercare Cases Managed [{ac.grand_total.total}] / Total Aftercare Cases Managed [{ac.grand_total.total}]) &times; 100% = <strong>100.00%</strong>
+              </p>
+            ) : (
+              <p className="formula-math" style={{ color: "#92400E" }}>
+                <strong>Formula:</strong> Denominator is 0 (No active aftercare cases managed in period) &rarr; Performance Indicator: <strong>N/A</strong>
+              </p>
+            )}
+            <p className="formula-note">
+              <strong>HIM Reporting Notice:</strong> Displayed in compliance with DOH statutory template definition. Valid denominator required; renders N/A when zero.
             </p>
           </div>
         </div>
@@ -1003,8 +1020,8 @@ export function Form101View({ data, periodLabel }) {
                   <td className="td-num">{q.actual_f}</td>
                   <td className="td-num-bold">{q.actual_total}</td>
                   <td className="td-num">{q.non_completers}</td>
-                  <td className="td-num-bold" style={{ backgroundColor: q.completion_rate >= 100 ? "#dcfce7" : "#fef3c7" }}>
-                    {q.completion_rate}%
+                  <td className="td-num-bold" style={{ backgroundColor: q.completion_rate == null ? "#f1f5f9" : q.completion_rate >= 100 ? "#dcfce7" : "#fef3c7" }}>
+                    {q.completion_rate != null ? `${q.completion_rate}%` : "N/A"}
                   </td>
                   <td style={{ fontSize: 12 }}>{q.remarks}</td>
                 </tr>
@@ -1020,7 +1037,9 @@ export function Form101View({ data, periodLabel }) {
               <td className="td-num-bold">{annualTotal.actual_f}</td>
               <td className="td-num-bold">{annualTotal.actual_total}</td>
               <td className="td-num-bold">{annualTotal.non_completers}</td>
-              <td className="td-num-bold" style={{ backgroundColor: "#dcfce7" }}>{annualTotal.completion_rate}%</td>
+              <td className="td-num-bold" style={{ backgroundColor: annualTotal.completion_rate == null ? "#f1f5f9" : "#dcfce7" }}>
+                {annualTotal.completion_rate != null ? `${annualTotal.completion_rate}%` : "N/A"}
+              </td>
               <td style={{ fontWeight: 600 }}>{annualTotal.remarks}</td>
             </tr>
           </tbody>

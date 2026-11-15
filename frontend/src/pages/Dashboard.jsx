@@ -44,11 +44,11 @@ function RowAvatar({ name, photoUrl }) {
 }
 
 const HIM_STATUS_COLORS = {
-  pending: { bg: "#FFF3D6", color: "#9A6B00" },
-  active: { bg: "var(--color-primary-tint)", color: "var(--color-primary-dark)" },
-  completed: { bg: "#E1F0FF", color: "#0B5FA5" },
-  dropped: { bg: "#FDE2E2", color: "#B3261E" },
-  transferred: { bg: "#EDEAFB", color: "#5B3EC9" },
+  pending: { bg: "#F1F7E6", color: "#476A30" },
+  active: { bg: "#E8F5EC", color: "#357648" },
+  completed: { bg: "#ECF4EF", color: "#243B12" },
+  dropped: { bg: "#EFF3EC", color: "#5C6B57" },
+  transferred: { bg: "#EAF4E4", color: "#5C8D47" },
 };
 
 function StatusPill({ status }) {
@@ -61,9 +61,9 @@ function StatusPill({ status }) {
 }
 
 const REPORT_TYPE_STYLES = {
-  Attendance: { bg: "#E1F0FF", color: "#0B5FA5" },
-  Monthly: { bg: "#EDEAFB", color: "#5B3EC9" },
-  Program: { bg: "var(--color-primary-tint)", color: "var(--color-primary-dark)" },
+  Attendance: { bg: "#E8F5EC", color: "#357648" },
+  Monthly: { bg: "#F1F7E6", color: "#5C8D47" },
+  Program: { bg: "#ECF4EF", color: "#243B12" },
 };
 
 function getReportType(title) {
@@ -111,21 +111,289 @@ const QUICK_ACTIONS = [
   { key: "permissions", label: "Manage Permissions", description: "Configure roles and access levels.", icon: ICONS.permissions, path: "/settings" },
 ];
 
-const QUICK_ACTION_COLORS = ["#2FBF8F", "#2F80ED", "#F2994A", "#7C5CFC", "#EB5757", "#0BA5A5"];
+const QUICK_ACTION_COLORS = ["#357648", "#8FB361", "#5C8D47", "#739E82", "#476A30", "#243B12"];
+const QUICK_ACTION_TINTS = ["#E8F5EC", "#F1F7E6", "#EEF6E9", "#ECF4EF", "#EAF2E5", "#EDF2EA"];
+
+const titleAccentBarStyle = {
+  width: 3.5,
+  height: 16,
+  borderRadius: 999,
+  background: "#26653B",
+  flexShrink: 0,
+};
+
+function DashboardOverviewBanner({
+  badge,
+  secondaryBadge = "43-Session Outpatient Program",
+  title,
+  subtitle,
+  metrics = [],
+  onRefresh,
+  refreshing = false,
+  isCompact = false,
+}) {
+  return (
+    <div
+      style={{
+        ...overviewBannerStyles.bar,
+        flexDirection: isCompact ? "column" : "row",
+        alignItems: isCompact ? "flex-start" : "center",
+        padding: isCompact ? "18px 20px" : "22px 28px",
+        minHeight: isCompact ? "auto" : 112,
+      }}
+    >
+      {/* Subtle Botanical Two-Leaf SVG Watermark */}
+      <svg
+        viewBox="0 0 180 120"
+        style={{
+          position: "absolute",
+          right: isCompact ? 16 : "26%",
+          bottom: -10,
+          width: 170,
+          height: 115,
+          pointerEvents: "none",
+          zIndex: 0,
+          opacity: 0.75,
+        }}
+        aria-hidden="true"
+      >
+        <path
+          d="M72 115 C 62 72, 95 24, 148 10 C 142 62, 108 98, 72 115 Z"
+          fill="rgba(143, 179, 97, 0.18)"
+        />
+        <path
+          d="M72 115 C 94 78, 118 44, 148 10"
+          fill="none"
+          stroke="rgba(53, 118, 72, 0.18)"
+          strokeWidth="1.5"
+        />
+        <path
+          d="M65 118 C 36 86, 22 50, 32 16 C 68 38, 78 78, 65 118 Z"
+          fill="rgba(53, 118, 72, 0.13)"
+        />
+        <path
+          d="M65 118 C 52 84, 42 52, 32 16"
+          fill="none"
+          stroke="rgba(53, 118, 72, 0.16)"
+          strokeWidth="1.3"
+        />
+      </svg>
+
+      <div style={overviewBannerStyles.left}>
+        <div style={overviewBannerStyles.badgeRow}>
+          <span style={overviewBannerStyles.scopePill}>
+            <span style={overviewBannerStyles.liveDot} />
+            {badge}
+          </span>
+          {secondaryBadge && (
+            <span style={overviewBannerStyles.standardBadge}>{secondaryBadge}</span>
+          )}
+        </div>
+        <div style={overviewBannerStyles.title}>{title}</div>
+        <div style={overviewBannerStyles.subtitle}>{subtitle}</div>
+      </div>
+
+      <div
+        style={{
+          ...overviewBannerStyles.right,
+          width: isCompact ? "100%" : "auto",
+          justifyContent: isCompact ? "space-between" : "flex-end",
+        }}
+      >
+        {metrics.length > 0 && (
+          <div style={overviewBannerStyles.metricsGroup}>
+            {metrics.map((m, idx) => (
+              <div key={m.label} style={{ display: "flex", alignItems: "center", gap: 14 }}>
+                {idx > 0 && <div style={overviewBannerStyles.metricDivider} />}
+                <div style={overviewBannerStyles.metricChip}>
+                  <span style={{ ...overviewBannerStyles.metricNum, color: m.color || "#1E5A34" }}>
+                    {m.value}
+                  </span>
+                  <span style={overviewBannerStyles.metricText}>{m.label}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {onRefresh && (
+          <button
+            type="button"
+            onClick={onRefresh}
+            disabled={refreshing}
+            style={{
+              ...overviewBannerStyles.refreshBtn,
+              opacity: refreshing ? 0.75 : 1,
+            }}
+            title="Refresh dashboard data"
+          >
+            <svg
+              {...iconProps}
+              width={15}
+              height={15}
+              style={{
+                animation: refreshing ? "spin 0.9s linear infinite" : "none",
+              }}
+            >
+              <path d="M21 12a9 9 0 1 1-2.64-6.36" />
+              <polyline points="21 3 21 9 15 9" />
+            </svg>
+            <span>{refreshing ? "Updating…" : "Refresh"}</span>
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+const overviewBannerStyles = {
+  bar: {
+    position: "relative",
+    overflow: "hidden",
+    background: "linear-gradient(135deg, #FFFFFF 0%, #F5FAF5 55%, #EAF4EB 100%)",
+    borderRadius: 18,
+    padding: "22px 28px",
+    minHeight: 112,
+    border: "1px solid #D8E6D9",
+    borderLeft: "6px solid #1E5A34",
+    boxShadow: "0 2px 14px rgba(30, 90, 52, 0.05)",
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: 18,
+    boxSizing: "border-box",
+    width: "100%",
+  },
+  left: {
+    display: "flex",
+    flexDirection: "column",
+    gap: 5,
+    minWidth: 0,
+    position: "relative",
+    zIndex: 1,
+  },
+  badgeRow: {
+    display: "flex",
+    alignItems: "center",
+    gap: 8,
+    flexWrap: "wrap",
+    marginBottom: 4,
+  },
+  scopePill: {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 6,
+    background: "#E6F3E8",
+    color: "#245B32",
+    padding: "4px 12px",
+    borderRadius: 999,
+    fontSize: 11,
+    fontWeight: 800,
+    letterSpacing: "0.03em",
+    textTransform: "uppercase",
+  },
+  liveDot: {
+    width: 6,
+    height: 6,
+    borderRadius: "50%",
+    background: "#6E9940",
+    boxShadow: "0 0 0 3px rgba(110, 153, 64, 0.25)",
+  },
+  standardBadge: {
+    fontSize: 11.5,
+    fontWeight: 700,
+    color: "#476A30",
+    background: "#EEF6E8",
+    padding: "4px 11px",
+    borderRadius: 999,
+  },
+  title: {
+    fontSize: 17,
+    fontWeight: 800,
+    color: "var(--color-text, #1F2421)",
+    letterSpacing: "-0.015em",
+    lineHeight: 1.25,
+  },
+  subtitle: {
+    fontSize: 12.5,
+    color: "#5E6E62",
+    lineHeight: 1.5,
+  },
+  right: {
+    display: "flex",
+    alignItems: "center",
+    gap: 12,
+    flexWrap: "wrap",
+    flexShrink: 0,
+    position: "relative",
+    zIndex: 1,
+  },
+  metricsGroup: {
+    display: "flex",
+    alignItems: "center",
+    gap: 16,
+    background: "#FFFFFF",
+    border: "1px solid #DCE7DC",
+    borderRadius: 14,
+    padding: "8px 18px",
+    boxShadow: "0 1px 4px rgba(30, 90, 52, 0.04)",
+  },
+  metricChip: {
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "center",
+    gap: 2,
+  },
+  metricNum: {
+    fontSize: 17,
+    fontWeight: 800,
+    color: "#1E5A34",
+    lineHeight: 1.15,
+  },
+  metricText: {
+    fontSize: 10.5,
+    fontWeight: 600,
+    color: "#5E6E62",
+    whiteSpace: "nowrap",
+  },
+  metricDivider: {
+    width: 1,
+    height: 24,
+    background: "#DCE7DC",
+  },
+  refreshBtn: {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 7,
+    background: "#1E5A34",
+    color: "#FFFFFF",
+    border: "none",
+    borderRadius: 12,
+    padding: "10px 18px",
+    fontSize: 13,
+    fontWeight: 700,
+    cursor: "pointer",
+    transition: "all 0.18s ease",
+    boxShadow: "0 2px 8px rgba(30, 90, 52, 0.22)",
+  },
+};
 
 function QuickActionsCard({ title = "Quick Actions", actions, seeAllPath, navigate, cols }) {
   return (
-    <div style={quickActionStyles.card}>
+    <div className="mtrc-dash-card" style={quickActionStyles.card}>
       <div style={quickActionStyles.header}>
-        <span style={quickActionStyles.title}>{title}</span>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <span style={titleAccentBarStyle} />
+          <span style={quickActionStyles.title}>{title}</span>
+        </div>
         {seeAllPath && (
           <button type="button" style={quickActionStyles.seeAll} onClick={() => navigate(seeAllPath)}>See all</button>
         )}
       </div>
       <div style={{ ...quickActionStyles.grid, gridTemplateColumns: cols ? `repeat(${cols}, 1fr)` : quickActionStyles.grid.gridTemplateColumns }}>
         {actions.map((action, i) => (
-          <button key={action.key} type="button" style={quickActionStyles.item} onClick={action.onClick} disabled={action.disabled}>
-            <span style={{ ...quickActionStyles.icon, color: QUICK_ACTION_COLORS[i % QUICK_ACTION_COLORS.length] }}>
+          <button key={action.key} type="button" className="mtrc-quick-action" style={quickActionStyles.item} onClick={action.onClick} disabled={action.disabled}>
+            <span style={{ ...quickActionStyles.icon, color: QUICK_ACTION_COLORS[i % QUICK_ACTION_COLORS.length], background: QUICK_ACTION_TINTS[i % QUICK_ACTION_TINTS.length], width: 32, height: 32, borderRadius: "50%", display: "inline-flex", alignItems: "center", justifyContent: "center" }}>
               {action.icon}
             </span>
             <span style={quickActionStyles.itemTitle}>{action.label}</span>
@@ -138,31 +406,34 @@ function QuickActionsCard({ title = "Quick Actions", actions, seeAllPath, naviga
 }
 
 const quickActionStyles = {
-  card: { background: "#fff", borderRadius: 16, padding: 14, boxShadow: "0 2px 10px rgba(20,20,40,0.05)", boxSizing: "border-box", width: "100%" },
-  header: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 },
-  title: { fontSize: 14, fontWeight: 700, color: "var(--color-text)" },
-  seeAll: { fontSize: 12.5, fontWeight: 700, color: "var(--color-primary-dark)", background: "none", border: "none", cursor: "pointer", padding: 0 },
-  grid: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 8 },
+  card: { background: "#FFFFFF", border: "1px solid #DCE7DC", borderRadius: 18, padding: 16, boxShadow: "0 2px 10px rgba(20,20,40,0.04)", boxSizing: "border-box", width: "100%" },
+  header: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 },
+  title: { fontSize: 14, fontWeight: 800, color: "var(--color-text)" },
+  seeAll: { fontSize: 12.5, fontWeight: 700, color: "#26653B", background: "none", border: "none", cursor: "pointer", padding: 0 },
+  grid: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 10 },
   item: {
-    display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 4, padding: "10px 12px",
-    background: "#fff", border: "1px solid var(--color-border)", borderRadius: 12,
+    display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 5, padding: "11px 13px",
+    background: "#FFFFFF", border: "1px solid #E1ECE2", borderRadius: 13,
     cursor: "pointer", textAlign: "left", minWidth: 0,
   },
   icon: { width: 18, height: 18, flexShrink: 0 },
   itemTitle: { fontSize: 13, fontWeight: 700, color: "var(--color-text)" },
-  itemDesc: { fontSize: 11.5, color: "var(--color-text-muted)", lineHeight: 1.3 },
+  itemDesc: { fontSize: 11.5, color: "var(--color-text-muted)", lineHeight: 1.35 },
 };
 
 function IctAdminDashboard() {
   const navigate = useNavigate();
   const { isMobile, isTablet } = useViewport();
+  const isCompact = isMobile || isTablet;
   const statCols = isMobile ? 1 : isTablet ? 2 : 5;
   const [stats, setStats] = useState(null);
   const [recentActivity, setRecentActivity] = useState([]);
   const [systemNotifications, setSystemNotifications] = useState([]);
   const [dashboardExtrasLoading, setDashboardExtrasLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
 
-  useEffect(() => {
+  function fetchIctDashboard(isManual = false) {
+    if (isManual) setRefreshing(true);
     api.get("/dashboard/stats").then(({ data }) => setStats(data)).catch(() => {});
 
     Promise.allSettled([
@@ -182,7 +453,12 @@ function IctAdminDashboard() {
         setSystemNotifications(filtered);
       }
       setDashboardExtrasLoading(false);
+      setRefreshing(false);
     });
+  }
+
+  useEffect(() => {
+    fetchIctDashboard(false);
   }, []);
 
   const statCards = [
@@ -194,11 +470,26 @@ function IctAdminDashboard() {
   ];
 
   return (
-    <div style={styles.grid}>
+    <div className="mtrc-page-enter" style={styles.grid}>
+      <DashboardOverviewBanner
+        badge="System Administration"
+        secondaryBadge="MTRC Enterprise Core"
+        title="System Operations, Security & User Activity Overview"
+        subtitle="Real-time monitoring of active staff accounts, patient registry volume, and platform health."
+        metrics={[
+          { label: "Total Users", value: stats?.totalUsers ?? 0 },
+          { label: "Online Now", value: stats?.onlineUsers ?? 0, color: "#476A30" },
+          { label: "Total Patients", value: stats?.totalPatients ?? 0 },
+        ]}
+        onRefresh={() => fetchIctDashboard(true)}
+        refreshing={refreshing}
+        isCompact={isCompact}
+      />
+
       <div style={{ ...styles.statsRow, gridTemplateColumns: `repeat(${statCols}, 1fr)` }}>
         {statCards.map((card) => (
-          <div key={card.key} style={styles.statCard}>
-            <div style={styles.statIcon}>{card.icon}</div>
+          <div key={card.key} className="mtrc-kpi-card" style={styles.statCard}>
+            <div className="mtrc-kpi-icon" style={styles.statIcon}>{card.icon}</div>
             <div>
               <div style={styles.statValue}>{card.value}</div>
               <div style={styles.statLabel}>{card.label}</div>
@@ -215,8 +506,11 @@ function IctAdminDashboard() {
 
       {/* Row 3: Recent User Activity, System Health, System Notifications */}
       <div style={{ ...styles.twoColRow, flexDirection: isMobile ? "column" : "row" }}>
-        <div style={styles.card}>
-          <div style={styles.cardTitle}>Recent User Activity</div>
+        <div className="mtrc-dash-card" style={styles.card}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <span style={titleAccentBarStyle} />
+            <div style={styles.cardTitle}>Recent User Activity</div>
+          </div>
           <div style={styles.boxList}>
             {recentActivity && recentActivity.length ? (
               recentActivity.map((item, i) => (
@@ -230,13 +524,16 @@ function IctAdminDashboard() {
                 </div>
               ))
             ) : (
-              <div style={styles.mutedText}>No recent activity yet</div>
+              <DashboardEmptyState loading={dashboardExtrasLoading} emptyText="No recent activity yet." />
             )}
           </div>
         </div>
 
-        <div style={styles.card}>
-          <div style={styles.cardTitle}>System Health</div>
+        <div className="mtrc-dash-card" style={styles.card}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <span style={titleAccentBarStyle} />
+            <div style={styles.cardTitle}>System Health</div>
+          </div>
           <div style={styles.boxList}>
             {SYSTEM_HEALTH.map((item) => (
               <div key={item.label} style={styles.healthItem}>
@@ -247,8 +544,11 @@ function IctAdminDashboard() {
           </div>
         </div>
 
-        <div style={styles.card}>
-          <div style={styles.cardTitle}>System Notifications</div>
+        <div className="mtrc-dash-card" style={styles.card}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <span style={titleAccentBarStyle} />
+            <div style={styles.cardTitle}>System Notifications</div>
+          </div>
           <div style={styles.boxList}>
             {systemNotifications && systemNotifications.length ? (
               systemNotifications.map((item, i) => (
@@ -258,7 +558,7 @@ function IctAdminDashboard() {
                 </div>
               ))
             ) : (
-              <div style={styles.mutedText}>No notifications yet.</div>
+              <DashboardEmptyState loading={dashboardExtrasLoading} emptyText="No notifications yet." />
             )}
           </div>
         </div>
@@ -291,7 +591,7 @@ function timeAgo(dateStr) {
  * cosmetic margin. Actual breathing room from the card edge should be
  * controlled by the parent card's own padding, not by inflating these.
  */
-function DashboardMonthlyAdmissionsChart({ data, color = "#2FBF8F", suffix = "" }) {
+function DashboardMonthlyAdmissionsChart({ data, color = "#357648", suffix = "" }) {
   const containerRef = useRef(null);
   const [width, setWidth] = useState(0);
   const height = 115;
@@ -353,7 +653,7 @@ function DashboardMonthlyAdmissionsChart({ data, color = "#2FBF8F", suffix = "" 
           const value = Math.round(max - (max / gridLines) * i);
           return (
             <g key={i}>
-              <line x1={padLeft} y1={y} x2={resolvedWidth - padRight} y2={y} stroke="#EEEDF6" strokeWidth="1" strokeDasharray="4 4" />
+              <line x1={padLeft} y1={y} x2={resolvedWidth - padRight} y2={y} stroke="#EAE6DF" strokeWidth="1" strokeDasharray="4 4" />
               {/* Label sits just inside the gridline (not to the left of padLeft) so padLeft can stay tiny */}
               <text x={padLeft + 3} y={y - 3} textAnchor="start" fontSize="8" fill="var(--color-text-muted)">
                 {value}{suffix}
@@ -397,11 +697,20 @@ function HimStaffDashboard() {
   const [himStats, setHimStats] = useState(null);
   const [monthlyAdmissions, setMonthlyAdmissions] = useState([]);
 
+  const [refreshing, setRefreshing] = useState(false);
+
+  function loadHimDashboard(isManual = false) {
+    if (isManual) setRefreshing(true);
+    Promise.allSettled([
+      api.get("/analytics/overview").then(({ data }) => setOverview(data)),
+      api.get("/reports").then(({ data }) => setRecentReports((data.reports || []).slice(0, 5))),
+      api.get("/dashboard/him-stats").then(({ data }) => setHimStats(data)),
+      api.get("/analytics/monthly-admissions").then(({ data }) => setMonthlyAdmissions(data.data || [])),
+    ]).finally(() => setRefreshing(false));
+  }
+
   useEffect(() => {
-    api.get("/analytics/overview").then(({ data }) => setOverview(data));
-    api.get("/reports").then(({ data }) => setRecentReports((data.reports || []).slice(0, 5)));
-    api.get("/dashboard/him-stats").then(({ data }) => setHimStats(data));
-    api.get("/analytics/monthly-admissions").then(({ data }) => setMonthlyAdmissions(data.data || []));
+    loadHimDashboard(false);
   }, []);
 
   const totalPatients = overview?.patientStatus?.reduce((sum, s) => sum + s.value, 0) ?? null;
@@ -418,7 +727,22 @@ function HimStaffDashboard() {
   ];
 
   return (
-    <div style={himStyles.page}>
+    <div className="mtrc-page-enter" style={himStyles.page}>
+      <DashboardOverviewBanner
+        badge="Institutional Surveillance"
+        secondaryBadge="DOH Outpatient Registry"
+        title="Facility-Wide Patient Records & Program Overview"
+        subtitle="Live surveillance of outpatient census, monthly admissions, certificates, and DOH reporting."
+        metrics={[
+          { label: "Total Cohort", value: totalPatients ?? 0 },
+          { label: "Active", value: activePatients ?? 0, color: "#476A30" },
+          { label: "Graduated", value: graduatedPatients ?? 0 },
+        ]}
+        onRefresh={() => loadHimDashboard(true)}
+        refreshing={refreshing}
+        isCompact={isCompact}
+      />
+
       {/* Row 1: KPI Cards */}
       <div style={{ ...himStyles.kpiRow, gridTemplateColumns: `repeat(${kpiCols}, 1fr)` }}>
         <HimKpiCard label="Total Patients" value={totalPatients ?? "—"} suffix="" icon={HIM_KPI_ICONS.patients} />
@@ -445,7 +769,7 @@ function HimStaffDashboard() {
        <HimCard title="Monthly Admissions" span={2} maxSpan={gridCols}>
          {monthlyAdmissions.length ? (
            <div style={himStyles.monthlyChartWrap}>
-             <DashboardMonthlyAdmissionsChart data={monthlyAdmissions} color="#2FBF8F" suffix="" />
+             <DashboardMonthlyAdmissionsChart data={monthlyAdmissions} color="#357648" suffix="" />
            </div>
          ) : (
            <div style={himStyles.emptyText}>No data yet.</div>
@@ -546,6 +870,7 @@ function HimCard({ title, span, maxSpan, center, isMobile, scrollable, compact, 
   const navigate = useNavigate();
   return (
     <div
+      className="mtrc-dash-card"
       style={{
         ...himStyles.card,
         ...(compact ? himStyles.cardCompact : {}),
@@ -554,9 +879,12 @@ function HimCard({ title, span, maxSpan, center, isMobile, scrollable, compact, 
       }}
     >
       <div style={himStyles.cardTitleRow}>
-        <div style={himStyles.cardTitle}>{title}</div>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <span style={titleAccentBarStyle} />
+          <div style={himStyles.cardTitle}>{title}</div>
+        </div>
         {viewAllPath && (
-          <button style={himStyles.viewAllLink} onClick={() => navigate(viewAllPath)}>View all</button>
+          <button style={himStyles.viewAllLink} onClick={() => navigate(viewAllPath)}>View all →</button>
         )}
       </div>
       <div
@@ -577,8 +905,8 @@ function HimCard({ title, span, maxSpan, center, isMobile, scrollable, compact, 
 
 function HimKpiCard({ label, value, suffix, icon }) {
   return (
-    <div style={himStyles.kpiCard}>
-      <div style={himStyles.kpiIcon}>{icon}</div>
+    <div className="mtrc-kpi-card" style={himStyles.kpiCard}>
+      <div className="mtrc-kpi-icon" style={himStyles.kpiIcon}>{icon}</div>
       <div>
         <div style={himStyles.kpiValue}>{value}{value !== "—" ? suffix : ""}</div>
         <div style={himStyles.kpiLabel}>{label}</div>
@@ -663,11 +991,11 @@ function CaseManagerDashboard() {
   }
 
   const statusOverview = [
-    { key: "active", label: "Active", value: stats?.caseStatusOverview?.active || 0, color: "#2F855A", tint: "#D8F5E9" },
-    { key: "followUp", label: "Follow-up", value: stats?.caseStatusOverview?.followUp || 0, color: "#B7791F", tint: "#FFF3D6" },
-    { key: "completed", label: "Completed", value: stats?.caseStatusOverview?.completed || 0, color: "#2B6CB0", tint: "#E1F0FF" },
-    { key: "dropped", label: "Dropped", value: stats?.caseStatusOverview?.dropped || 0, color: "#B3261E", tint: "#FDE2E2" },
-    { key: "transferred", label: "Transferred", value: stats?.caseStatusOverview?.transferred || 0, color: "#5B3EC9", tint: "#EDEAFB" },
+    { key: "active", label: "Active", value: stats?.caseStatusOverview?.active || 0, color: "#357648", tint: "#E8F5EC" },
+    { key: "followUp", label: "Follow-up", value: stats?.caseStatusOverview?.followUp || 0, color: "#8FB361", tint: "#F1F7E6" },
+    { key: "completed", label: "Completed", value: stats?.caseStatusOverview?.completed || 0, color: "#5C8D47", tint: "#EEF6E9" },
+    { key: "dropped", label: "Dropped", value: stats?.caseStatusOverview?.dropped || 0, color: "#739E82", tint: "#ECF4EF" },
+    { key: "transferred", label: "Transferred", value: stats?.caseStatusOverview?.transferred || 0, color: "#243B12", tint: "#EAEDE6" },
   ];
   const statusTotal = statusOverview.reduce((total, item) => total + Number(item.value), 0);
 
@@ -678,32 +1006,32 @@ function CaseManagerDashboard() {
       name: "Phase 1: Early Stabilization",
       range: "Sessions 1–14",
       count: stats?.curriculumPhases?.phase1 || 0,
-      color: "#2563EB",
-      tint: "#DBEAFE",
+      color: "#739E82",
+      tint: "#ECF4EF",
     },
     {
       key: "phase2",
       name: "Phase 2: Core CBT & Psychoeducation",
       range: "Sessions 15–28",
       count: stats?.curriculumPhases?.phase2 || 0,
-      color: "#7C3AED",
-      tint: "#EDE9FE",
+      color: "#8FB361",
+      tint: "#F1F7E6",
     },
     {
       key: "phase3",
       name: "Phase 3: Relapse Prevention & Reintegration",
       range: "Sessions 29–42",
       count: stats?.curriculumPhases?.phase3 || 0,
-      color: "#D97706",
-      tint: "#FEF3C7",
+      color: "#5C8D47",
+      tint: "#EEF6E9",
     },
     {
       key: "pdcReady",
       name: "PDC Ready (Graduation Track)",
       range: "43+ Sessions",
       count: stats?.curriculumPhases?.pdcReady || 0,
-      color: "#059669",
-      tint: "#D1FAE5",
+      color: "#357648",
+      tint: "#E8F5EC",
     },
   ];
 
@@ -783,13 +1111,28 @@ function CaseManagerDashboard() {
   });
 
   return (
-    <div style={cmStyles.page} aria-busy={loading}>
+    <div className="mtrc-page-enter" style={cmStyles.page} aria-busy={loading}>
       {loadError && (
         <div role="alert" style={cmStyles.errorBanner}>
           <span>{loadError}</span>
           <button type="button" style={cmStyles.retryBtn} onClick={loadStats}>Retry</button>
         </div>
       )}
+
+      <DashboardOverviewBanner
+        badge="Caseload Scope"
+        secondaryBadge="43-Session Outpatient Program"
+        title="Assigned Caseload Clinical & Attendance Overview"
+        subtitle="Live progression across your assigned patients, today's sessions, and clinical follow-ups."
+        metrics={[
+          { label: "Assigned", value: stats?.assignedPatients ?? 0 },
+          { label: "Active", value: stats?.caseStatusOverview?.active ?? 0, color: "#476A30" },
+          { label: "PDC Ready", value: stats?.curriculumPhases?.pdcReady ?? 0 },
+        ]}
+        onRefresh={loadStats}
+        refreshing={loading}
+        isCompact={isCompact}
+      />
 
       <div style={{ ...cmStyles.kpiRow, gridTemplateColumns: `repeat(${kpiCols}, 1fr)` }}>
         <CmKpiCard label="Assigned Patients" value={stats?.assignedPatients ?? "—"} icon={HIM_KPI_ICONS.patients} />
@@ -798,7 +1141,7 @@ function CaseManagerDashboard() {
         <CmKpiCard label="Follow-ups Needed" value={stats?.followUpsNeeded ?? "—"} icon={HIM_KPI_ICONS.reports} />
         <CmKpiCard 
           label="Attendance Rate" 
-          value={`${stats?.attendanceRate ?? 100}%`} 
+          value={stats?.attendanceRate != null ? `${stats.attendanceRate}%` : "N/A"} 
           subtitle="DOH Target: ≥80%" 
           icon={HIM_KPI_ICONS.online} 
         />
@@ -824,15 +1167,15 @@ function CaseManagerDashboard() {
                 <button
                   key={`${p.patient_id}-${p.issue}-${i}`}
                   type="button"
-                  style={cmStyles.attentionRow}
+                  className="mtrc-dash-row" style={cmStyles.attentionRow}
                   onClick={() => navigate(`/patients/${p.patient_id}`)}
                 >
                   <PatientAvatar name={p.full_name} photoUrl={p.photo_url} style={cmStyles.patientAvatar} />
                   <span style={cmStyles.rowMain}>{p.full_name}</span>
                   <span style={{ 
                     ...cmStyles.issueBadge, 
-                    backgroundColor: p.color === "red" ? "#FDE2E2" : p.color === "blue" ? "#E1F0FF" : "#FFF3D6",
-                    color: p.color === "red" ? "#C53030" : p.color === "blue" ? "#0B5FA5" : "#9A6B00"
+                    backgroundColor: p.color === "red" ? "#EAF2E5" : p.color === "blue" ? "#E8F5EC" : "#F1F7E6",
+                    color: p.color === "red" ? "#243B12" : p.color === "blue" ? "#357648" : "#476A30"
                   }}>{p.issue}</span>
                   <span aria-hidden="true" style={cmStyles.rowChevron}>›</span>
                 </button>
@@ -903,7 +1246,7 @@ function CaseManagerDashboard() {
                       key={filter.key}
                       type="button"
                       aria-pressed={selected}
-                      style={{ ...cmStyles.patientFilterBtn, ...(selected ? cmStyles.patientFilterBtnActive : {}) }}
+                      className="mtrc-filter-pill" style={{ ...cmStyles.patientFilterBtn, ...(selected ? cmStyles.patientFilterBtnActive : {}) }}
                       onClick={() => setPatientFilter(filter.key)}
                     >
                       {filter.label} · {filter.count}
@@ -932,7 +1275,7 @@ function CaseManagerDashboard() {
                       <button
                         key={patient.id}
                         type="button"
-                        style={{ ...cmStyles.patientRow, ...(isMobile ? cmStyles.patientRowMobile : {}) }}
+                        className="mtrc-dash-row" style={{ ...cmStyles.patientRow, ...(isMobile ? cmStyles.patientRowMobile : {}) }}
                         onClick={() => navigate(`/patients/${patient.id}`)}
                       >
                         {isMobile ? (
@@ -989,7 +1332,7 @@ function CaseManagerDashboard() {
                 <button
                   key={note.id}
                   type="button"
-                  style={cmStyles.progressNoteRow}
+                  className="mtrc-dash-row" style={cmStyles.progressNoteRow}
                   onClick={() => navigate(`/patients/${note.patient_id}`)}
                 >
                   <PatientAvatar name={note.patient_name} photoUrl={note.patient_photo_url} style={cmStyles.patientAvatar} />
@@ -1081,7 +1424,7 @@ function CaseManagerDashboard() {
                 <button
                   key={activity.activity_id}
                   type="button"
-                  style={cmStyles.activityRow}
+                  className="mtrc-dash-row" style={cmStyles.activityRow}
                   onClick={() => navigate(`/patients/${activity.patient_id}`)}
                 >
                   <span style={cmStyles.activityMarker} />
@@ -1114,21 +1457,42 @@ function CaseManagerDashboard() {
 }
 
 function DashboardEmptyState({ loading, emptyText }) {
-  return <div style={cmStyles.emptyText}>{loading ? "Loading dashboard…" : emptyText}</div>;
+  return (
+    <div style={cmStyles.emptyText}>
+      <svg
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="#8CA291"
+        strokeWidth="1.7"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        style={{ width: 22, height: 22, marginBottom: 6, opacity: 0.85 }}
+      >
+        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+        <polyline points="14 2 14 8 20 8" />
+        <line x1="8" y1="13" x2="16" y2="13" />
+        <line x1="8" y1="17" x2="13" y2="17" />
+      </svg>
+      <div>{loading ? "Loading dashboard…" : emptyText}</div>
+    </div>
+  );
 }
 
 function CmCard({ title, span = 1, maxSpan, center, height, highlight, headerAction, children }) {
   const effectiveSpan = maxSpan ? Math.min(span, maxSpan) : span;
   return (
-    <div style={{
+    <div className="mtrc-dash-card" style={{
       ...cmStyles.card,
       gridColumn: `span ${effectiveSpan}`,
       height,
       overflow: "hidden",
-      borderColor: highlight ? "var(--color-primary)" : "var(--color-border)"
+      borderColor: highlight ? "#357648" : "#DCE7DC"
     }}>
       <div style={cmStyles.cardHeader}>
-        <div style={cmStyles.cardTitle}>{title}</div>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <span style={titleAccentBarStyle} />
+          <div style={cmStyles.cardTitle}>{title}</div>
+        </div>
         {headerAction}
       </div>
       <div style={{ ...cmStyles.cardBody, justifyContent: center ? "center" : "flex-start" }}>
@@ -1140,8 +1504,8 @@ function CmCard({ title, span = 1, maxSpan, center, height, highlight, headerAct
 
 function CmKpiCard({ label, value, icon, subtitle }) {
   return (
-    <div style={cmStyles.kpiCard}>
-      <div style={cmStyles.kpiIcon}>{icon}</div>
+    <div className="mtrc-kpi-card" style={cmStyles.kpiCard}>
+      <div className="mtrc-kpi-icon" style={cmStyles.kpiIcon}>{icon}</div>
       <div>
         <div style={cmStyles.kpiValue}>{value}</div>
         <div style={cmStyles.kpiLabel}>{label}</div>
@@ -1152,11 +1516,11 @@ function CmKpiCard({ label, value, icon, subtitle }) {
 }
 
 const STATUS_BADGE_COLORS = {
-  pending:     { bg: "#FFF3D6", color: "#9A6B00" },
-  active:      { bg: "#D8F5E9", color: "#1A7F4B" },
-  completed:   { bg: "#E1F0FF", color: "#0B5FA5" },
-  dropped:     { bg: "#FDE2E2", color: "#B3261E" },
-  transferred: { bg: "#EDEAFB", color: "#5B3EC9" },
+  pending:     { bg: "#F1F7E6", color: "#476A30" },
+  active:      { bg: "#E8F5EC", color: "#357648" },
+  completed:   { bg: "#ECF4EF", color: "#243B12" },
+  dropped:     { bg: "#EFF3EC", color: "#5C6B57" },
+  transferred: { bg: "#EAF4E4", color: "#5C8D47" },
 };
 
 function AdmittingDashboard() {
@@ -1171,14 +1535,18 @@ function AdmittingDashboard() {
 
   const [stats, setStats] = useState(null);
   const [loadError, setLoadError] = useState("");
+  const [refreshing, setRefreshing] = useState(false);
 
   async function loadStats() {
     setLoadError("");
+    setRefreshing(true);
     try {
       const { data } = await api.get("/dashboard/admitting-stats");
       setStats(data);
     } catch (err) {
       setLoadError(err.response?.data?.message || "Could not load the admitting dashboard.");
+    } finally {
+      setRefreshing(false);
     }
   }
 
@@ -1284,10 +1652,10 @@ function AdmittingDashboard() {
   ];
 
   const registrationSegments = [
-    { key: "newRegistrations", label: "New registrations", color: "#2F80ED" },
-    { key: "completed", label: "Completed", color: "#27AE60" },
-    { key: "pending", label: "Pending", color: "#F2C94C" },
-    { key: "incomplete", label: "Incomplete", color: "#EB5757" },
+    { key: "newRegistrations", label: "New registrations", color: "#357648" },
+    { key: "completed", label: "Completed", color: "#8FB361" },
+    { key: "pending", label: "Pending", color: "#739E82" },
+    { key: "incomplete", label: "Incomplete", color: "#243B12" },
   ].map((segment) => ({
     ...segment,
     value: Number(stats?.registrationProcess?.[segment.key] || 0),
@@ -1314,18 +1682,34 @@ function AdmittingDashboard() {
   }
 
   return (
-    <div style={apStyles.page}>
+    <div className="mtrc-page-enter" style={apStyles.page}>
       {loadError && (
         <div role="alert" style={apStyles.errorBanner}>
           <span>{loadError}</span>
           <button type="button" style={apStyles.retryBtn} onClick={loadStats}>Retry</button>
         </div>
       )}
+
+      <DashboardOverviewBanner
+        badge="Intake & Admissions Scope"
+        secondaryBadge="Outpatient Enrollment Track"
+        title="Patient Registration & Admission Triage Overview"
+        subtitle="Live tracking of new patient intakes, pending registrations, DDE triage, and enrollment certificates."
+        metrics={[
+          { label: "Registered", value: stats?.totalPatients ?? 0 },
+          { label: "Today's Intake", value: stats?.todayAdmissions ?? 0, color: "#476A30" },
+          { label: "Pending", value: stats?.pendingRegistrations ?? 0 },
+        ]}
+        onRefresh={loadStats}
+        refreshing={refreshing}
+        isCompact={isCompact}
+      />
+
       {/* KPI row */}
       <div style={{ ...apStyles.kpiRow, gridTemplateColumns: `repeat(${kpiCols}, 1fr)` }}>
         {kpiCards.map((card) => (
-          <div key={card.key} style={apStyles.kpiCard}>
-            <div style={apStyles.kpiIcon}>{card.icon}</div>
+          <div key={card.key} className="mtrc-kpi-card" style={apStyles.kpiCard}>
+            <div className="mtrc-kpi-icon" style={apStyles.kpiIcon}>{card.icon}</div>
             <div>
               <div style={apStyles.kpiValue}>{card.value}</div>
               <div style={apStyles.kpiLabel}>{card.label}</div>
@@ -1339,9 +1723,12 @@ function AdmittingDashboard() {
         <QuickActionsCard actions={quickActions} navigate={navigate} cols={1} />
 
         {/* Pending Registrations */}
-        <div style={{ ...apStyles.card, height: "100%", overflow: "hidden" }}>
+        <div className="mtrc-dash-card" style={{ ...apStyles.card, height: "100%", overflow: "hidden" }}>
           <div style={apStyles.cardHeader}>
-            <span style={apStyles.cardTitle}>Pending Registrations</span>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <span style={titleAccentBarStyle} />
+              <span style={apStyles.cardTitle}>Pending Registrations</span>
+            </div>
             {!!stats?.pendingRegistrationRecords?.length && (
               <span style={apStyles.warnBadge}>{stats.pendingRegistrations} pending</span>
             )}
@@ -1355,7 +1742,7 @@ function AdmittingDashboard() {
                 <button
                   key={patient.id}
                   type="button"
-                  style={apStyles.pendingRow}
+                  className="mtrc-dash-row" style={apStyles.pendingRow}
                   onClick={() => navigate(registrationPath(patient))}
                 >
                   <PatientAvatar name={patient.full_name} photoUrl={patient.photo_url} style={apStyles.pendingAvatar} />
@@ -1377,15 +1764,18 @@ function AdmittingDashboard() {
             <div style={apStyles.compactInsights}>
         {/* Row 3: Recent Admissions (left) + Incomplete Records (right) */}
         <div style={{ ...apStyles.gridRow, gridTemplateColumns: isCompact ? "1fr" : "1.6fr 1fr" }}>
-          <div style={{ ...apStyles.card, height: insightPanelHeight, overflow: "hidden" }}>
+          <div className="mtrc-dash-card" style={{ ...apStyles.card, height: insightPanelHeight, overflow: "hidden" }}>
             <div style={apStyles.cardHeader}>
-              <span style={apStyles.cardTitle}>Recent Admissions</span>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <span style={titleAccentBarStyle} />
+                <span style={apStyles.cardTitle}>Recent Admissions</span>
+              </div>
               <button
                 type="button"
                 style={apStyles.linkBtn}
                 onClick={() => navigate("/patients")}
               >
-                View all
+                View all →
               </button>
             </div>
 
@@ -1408,7 +1798,7 @@ function AdmittingDashboard() {
                       return (
                         <tr
                           key={p.id}
-                          style={apStyles.tr}
+                          className="mtrc-dash-row" style={apStyles.tr}
                           onClick={() => navigate(`/patients/${p.id}`)}
                         >
                           <td style={apStyles.td}>
@@ -1433,9 +1823,12 @@ function AdmittingDashboard() {
             )}
           </div>
 
-          <div style={{ ...apStyles.card, height: insightPanelHeight, overflow: "hidden" }}>
+          <div className="mtrc-dash-card" style={{ ...apStyles.card, height: insightPanelHeight, overflow: "hidden" }}>
             <div style={apStyles.cardHeader}>
-              <span style={apStyles.cardTitle}>Incomplete Records</span>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <span style={titleAccentBarStyle} />
+                <span style={apStyles.cardTitle}>Incomplete Records</span>
+              </div>
               {!!stats?.incompleteRecords?.length && (
                 <span style={apStyles.warnBadge}>{stats.incompleteRecords.length} pending</span>
               )}
@@ -1449,7 +1842,7 @@ function AdmittingDashboard() {
                   <button
                     key={p.id}
                     type="button"
-                    style={apStyles.incompleteRow}
+                    className="mtrc-dash-row" style={apStyles.incompleteRow}
                     onClick={() => navigate(registrationPath(p))}
                   >
                     <PatientAvatar name={p.full_name} photoUrl={p.photo_url} style={apStyles.incompleteAvatar} />
@@ -1467,8 +1860,11 @@ function AdmittingDashboard() {
 
         {/* Row 4: Registration Process (left) + Today's Admission Activity (right) */}
         <div style={{ ...apStyles.gridRow, gridTemplateColumns: isCompact ? "1fr" : "minmax(0, 1fr) minmax(0, 1fr)" }}>
-          <div style={{ ...apStyles.card, height: activityPanelHeight, overflow: "hidden" }}>
-            <div style={apStyles.cardTitle}>Registration Process</div>
+          <div className="mtrc-dash-card" style={{ ...apStyles.card, height: activityPanelHeight, overflow: "hidden" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <span style={titleAccentBarStyle} />
+              <div style={apStyles.cardTitle}>Registration Process</div>
+            </div>
             <div style={{ ...apStyles.processContent, ...apStyles.boxList, flexDirection: "row", alignItems: "center", justifyContent: "center", height: "100%", gap: 24, boxSizing: "border-box" }}>
               <div
                 style={{ ...apStyles.donut, width: 136, height: 136, background: processChart, flexShrink: 0 }}
@@ -1491,8 +1887,11 @@ function AdmittingDashboard() {
             </div>
           </div>
 
-          <div style={{ ...apStyles.card, ...apStyles.activityCard, height: activityPanelHeight, overflow: "hidden" }}>
-            <div style={apStyles.cardTitle}>Today's Admission Activity</div>
+          <div className="mtrc-dash-card" style={{ ...apStyles.card, ...apStyles.activityCard, height: activityPanelHeight, overflow: "hidden" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <span style={titleAccentBarStyle} />
+              <div style={apStyles.cardTitle}>Today's Admission Activity</div>
+            </div>
 
           {!stats?.todayAdmissionActivity?.length ? (
             <div style={apStyles.emptyText}>No admission activity recorded today.</div>
@@ -1502,7 +1901,7 @@ function AdmittingDashboard() {
                 <button
                   key={activity.activity_id}
                   type="button"
-                  style={apStyles.timelineRow}
+                  className="mtrc-dash-row" style={apStyles.timelineRow}
                   onClick={() => activity.patient_id && navigate(`/patients/${activity.patient_id}`)}
                 >
                   <span style={apStyles.timelineTrack}>
@@ -1566,20 +1965,21 @@ const styles = {
     gap: 16,
   },
   statCard: {
-  display: "flex",
-  alignItems: "center",
-  gap: 14,
-  background: "var(--color-surface)",
-  border: "1px solid var(--color-border)",
-  borderRadius: "var(--radius-lg)",
-  padding: 20,
+    display: "flex",
+    alignItems: "center",
+    gap: 14,
+    background: "#FFFFFF",
+    border: "1.5px solid #DCE8DD",
+    borderRadius: 16,
+    padding: "16px 18px",
+    boxShadow: "0 2px 10px rgba(38, 101, 59, 0.04), inset 0 0 0 2px rgba(230, 243, 232, 0.45)",
   },
   statIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: "var(--radius-sm)",
-    background: "var(--color-primary-tint)",
-    color: "var(--color-primary-dark)",
+    width: 40,
+    height: 40,
+    borderRadius: "50%",
+    background: "#E6F3E8",
+    color: "#26653B",
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
@@ -1710,16 +2110,16 @@ const himStyles = {
   kpiRow: { display: "grid", gap: 10 },
   gridRow: { display: "grid", gap: 10, alignItems: "stretch" },
   card: {
-    background: "#fff", borderRadius: 16, padding: 12, boxShadow: "0 2px 10px rgba(20,20,40,0.05)",
+    background: "#FFFFFF", border: "1px solid #DCE7DC", borderRadius: 18, padding: 14, boxShadow: "0 2px 10px rgba(20,20,40,0.04)",
     display: "flex", flexDirection: "column", gap: 8, minHeight: 90,
   },
   cardCompact: {
-    padding: 10,
+    padding: 12,
     gap: 6,
     minHeight: 72,
   },
-  cardTitle: { fontSize: 12.5, fontWeight: 700, color: "var(--color-text)" },
-  emptyText: { color: "var(--color-text-muted)", fontSize: 12.5, textAlign: "center", padding: "16px 0" },
+  cardTitle: { fontSize: 13, fontWeight: 800, color: "var(--color-text)" },
+  emptyText: { color: "var(--color-text-muted)", fontSize: 12.5, fontWeight: 600, textAlign: "center", padding: "18px 12px", width: "100%", background: "#EEF3EE", borderRadius: 12, border: "1px solid #E1EBE1", boxSizing: "border-box" },
   chartWrapCompact: {
     width: "100%",
     display: "flex",
@@ -1786,8 +2186,8 @@ const himStyles = {
     background: "var(--color-border)", color: "var(--color-text-muted)",
     display: "flex", alignItems: "center", justifyContent: "center",
   },
-  kpiCard: { display: "flex", alignItems: "center", gap: 12, background: "#fff", borderRadius: 18, padding: 14, boxShadow: "0 2px 10px rgba(20,20,40,0.05)" },
-  kpiIcon: { width: 36, height: 36, borderRadius: "var(--radius-sm)", background: "var(--color-primary-tint)", color: "var(--color-primary-dark)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 },
+  kpiCard: { display: "flex", alignItems: "center", gap: 12, background: "#FFFFFF", border: "1.5px solid #DCE8DD", borderRadius: 16, padding: 14, boxShadow: "0 2px 10px rgba(38, 101, 59, 0.04), inset 0 0 0 2px rgba(230, 243, 232, 0.45)" },
+  kpiIcon: { width: 40, height: 40, borderRadius: "50%", background: "#E6F3E8", color: "#26653B", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 },
   kpiValue: { fontSize: 20, fontWeight: 800, color: "var(--color-text)" },
   kpiLabel: { fontSize: 11, color: "var(--color-text-muted)", marginTop: 2 },
 };
@@ -1807,9 +2207,9 @@ const cmStyles = {
   gridRow: { display: "grid", gap: 16, alignItems: "stretch", width: "100%", minWidth: 0 },
   patientNotesRow: { display: "grid", gap: 16, alignItems: "stretch", width: "100%", minWidth: 0 },
   card: {
-    background: "var(--color-surface)",
-    border: "1px solid var(--color-border)",
-    borderRadius: "var(--radius-lg)",
+    background: "#FFFFFF",
+    border: "1px solid #DCE7DC",
+    borderRadius: 18,
     padding: "18px 20px",
     display: "flex",
     flexDirection: "column",
@@ -1818,9 +2218,10 @@ const cmStyles = {
     minWidth: 0,
     width: "100%",
     boxSizing: "border-box",
+    boxShadow: "0 2px 10px rgba(20, 20, 40, 0.04)",
   },
   cardHeader: { display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, minWidth: 0 },
-  cardTitle: { fontSize: 14, fontWeight: 700, color: "var(--color-text)" },
+  cardTitle: { fontSize: 14, fontWeight: 800, color: "var(--color-text)" },
   cardBody: {
     display: "flex",
     alignItems: "stretch",
@@ -1829,7 +2230,22 @@ const cmStyles = {
     minWidth: 0,
     width: "100%",
   },
-  emptyText: { color: "var(--color-text-muted)", fontSize: 13, textAlign: "center", padding: "20px 0", width: "100%" },
+  emptyText: {
+    color: "var(--color-text-muted)",
+    fontSize: 12.5,
+    fontWeight: 600,
+    textAlign: "center",
+    padding: "24px 16px",
+    width: "100%",
+    background: "#EEF3EE",
+    borderRadius: 12,
+    border: "1px solid #E1EBE1",
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "center",
+    justifyContent: "center",
+    boxSizing: "border-box",
+  },
   list: { display: "flex", flexDirection: "column", gap: 0, width: "100%", minWidth: 0 },
   scrollArea: { flex: 1, minHeight: 0, overflowY: "auto", paddingRight: 6 },
   boxList: { border: "1px solid var(--color-border)", borderRadius: 10, padding: 12 },
@@ -2037,7 +2453,7 @@ const cmStyles = {
   statusDot: { width: 8, height: 8, borderRadius: "50%", flexShrink: 0 },
   statusCount: { color: "var(--color-text-muted)", fontSize: 11, whiteSpace: "nowrap" },
   statusTrack: { height: 10, width: "100%", borderRadius: 999, overflow: "hidden" },
-  statusFill: { height: "100%", minWidth: 0, borderRadius: 999, transition: "width 0.25s ease" },
+  statusFill: { height: "100%", minWidth: 0, borderRadius: 999, transition: "width 0.55s cubic-bezier(0.22, 1, 0.36, 1)" },
   activityRow: {
     display: "flex",
     alignItems: "center",
@@ -2096,21 +2512,22 @@ const cmStyles = {
     display: "flex",
     alignItems: "center",
     gap: 14,
-    background: "var(--color-surface)",
-    border: "1px solid var(--color-border)",
-    borderRadius: "var(--radius-lg)",
+    background: "#FFFFFF",
+    border: "1.5px solid #DCE8DD",
+    borderRadius: 16,
     padding: "16px 18px",
     height: 86,
     minWidth: 0,
     width: "100%",
     boxSizing: "border-box",
+    boxShadow: "0 2px 10px rgba(38, 101, 59, 0.04), inset 0 0 0 2px rgba(230, 243, 232, 0.45)",
   },
   kpiIcon: {
-    width: 38,
-    height: 38,
-    borderRadius: "var(--radius-sm)",
-    background: "var(--color-primary-tint)",
-    color: "var(--color-primary-dark)",
+    width: 40,
+    height: 40,
+    borderRadius: "50%",
+    background: "#E6F3E8",
+    color: "#26653B",
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
@@ -2127,9 +2544,9 @@ const apStyles = {
   compactInsights: { display: "flex", flexDirection: "column", gap: 14, width: "100%" },  activityCard: { maxWidth: 920, marginRight: "auto" },
   quickActionsCard: { width: "min(900px, 100%)", margin: "0 auto", minHeight: 0 },
   card: {
-    background: "var(--color-surface)",
-    border: "1px solid var(--color-border)",
-    borderRadius: "var(--radius-lg)",
+    background: "#FFFFFF",
+    border: "1px solid #DCE7DC",
+    borderRadius: 18,
     padding: "16px 18px",
     display: "flex",
     flexDirection: "column",
@@ -2138,6 +2555,7 @@ const apStyles = {
     minWidth: 0,
     width: "100%",
     boxSizing: "border-box",
+    boxShadow: "0 2px 10px rgba(20, 20, 40, 0.04)",
   },
   cardHeader: {
     display: "flex",
@@ -2145,8 +2563,8 @@ const apStyles = {
     alignItems: "center",
     marginBottom: 4,
   },
-  cardTitle: { fontSize: 14, fontWeight: 700, color: "var(--color-text)" },
-  emptyText: { flex: 1, display: "flex", alignItems: "center", justifyContent: "center", color: "var(--color-text-muted)", fontSize: 13, textAlign: "center", padding: "12px 0" },
+  cardTitle: { fontSize: 14, fontWeight: 800, color: "var(--color-text)" },
+  emptyText: { flex: 1, display: "flex", alignItems: "center", justifyContent: "center", color: "var(--color-text-muted)", fontSize: 12.5, fontWeight: 600, textAlign: "center", padding: "16px 12px", background: "#EEF3EE", borderRadius: 12, border: "1px solid #E1EBE1", boxSizing: "border-box" },
   list: { display: "flex", flexDirection: "column", gap: 0, width: "100%", minWidth: 0 },
   scrollArea: { flex: 1, minHeight: 0, overflowY: "auto", paddingRight: 6 },
   boxList: { border: "1px solid var(--color-border)", borderRadius: 10, padding: 12 },
@@ -2156,21 +2574,22 @@ const apStyles = {
     display: "flex",
     alignItems: "center",
     gap: 14,
-    background: "var(--color-surface)",
-    border: "1px solid var(--color-border)",
-    borderRadius: "var(--radius-lg)",
+    background: "#FFFFFF",
+    border: "1.5px solid #DCE8DD",
+    borderRadius: 16,
     padding: "14px 16px",
     height: 80,
     minWidth: 0,
     width: "100%",
     boxSizing: "border-box",
+    boxShadow: "0 2px 10px rgba(38, 101, 59, 0.04), inset 0 0 0 2px rgba(230, 243, 232, 0.45)",
   },
   kpiIcon: {
     width: 40,
     height: 40,
-    borderRadius: "var(--radius-sm)",
-    background: "var(--color-primary-tint)",
-    color: "var(--color-primary-dark)",
+    borderRadius: "50%",
+    background: "#E6F3E8",
+    color: "#26653B",
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
@@ -2215,8 +2634,8 @@ const apStyles = {
     fontWeight: 700,
     padding: "3px 9px",
     borderRadius: 999,
-    background: "#FFF3D6",
-    color: "#9A6B00",
+    background: "#F1F7E6",
+    color: "#476A30",
     whiteSpace: "nowrap",
   },
   pendingList: { display: "flex", flexDirection: "column", width: "100%", minWidth: 0 },
@@ -2252,8 +2671,8 @@ const apStyles = {
     fontWeight: 600,
     padding: "3px 8px",
     borderRadius: 999,
-    background: "#FDE2E2",
-    color: "#B3261E",
+    background: "#ECF4EF",
+    color: "#243B12",
     maxWidth: "45%",
     overflow: "hidden",
     textOverflow: "ellipsis",

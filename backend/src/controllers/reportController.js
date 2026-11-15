@@ -1,5 +1,6 @@
 import pool from "../config/db.js";
 import { notifyIctAdmins, notifyRoles } from "../utils/notify.js";
+import { getUnifiedPatientProgress, getBulkUnifiedPatientProgress } from "../utils/curriculumProgress.js";
 
 async function buildAttendanceReport({ dateFrom, dateTo, caseManagerId, programStatus, patientId }) {
   const where = [];
@@ -50,24 +51,42 @@ async function buildPatientReport({ patientId }) {
   );
   if (!patient) throw Object.assign(new Error("Patient not found."), { status: 404 });
 
-  const [attendance] = await pool.query(`SELECT status FROM attendance WHERE patient_id = ?`, [patientId]);
+  const [attendance] = await pool.query(`SELECT status FROM attendance WHERE patient_id = ? AND status != 'cancelled'`, [patientId]);
   const total = attendance.length;
-  const present = attendance.filter((a) => a.status === "present").length;
+  const present = attendance.filter((a) => a.status === "present" || a.status === "late").length;
   const attendanceRate = total ? Math.round((present / total) * 100) : 0;
-  const completionPct = patient.sessions_required ? Math.round((present / patient.sessions_required) * 100) : null;
+
+  const progress = await getUnifiedPatientProgress(pool, patientId);
+  const completionPct = progress.components.totalCore.percentage;
 
   return {
     title: `Patient Report — ${patient.full_name}`,
-    description: `Detailed profile and program progress for ${patient.full_name} (${patient.patient_code}).`,
+    description: `Detailed profile and unified 43-core curriculum progress (28 CBT, 3 CBT-E, 12 PE) for ${patient.full_name} (${patient.patient_code}).`,
     dateRangeLabel: "As of today",
     stats: {
-      admissionDate: patient.admission_date, currentStatus: patient.current_status || patient.enrollment_status,
-      caseManager: patient.case_manager_name || "Unassigned", completionPct, attendanceRate, totalSessions: total, presentSessions: present,
+      admissionDate: patient.admission_date,
+      currentStatus: patient.current_status || patient.enrollment_status,
+      caseManager: patient.case_manager_name || "Unassigned",
+      completionPct,
+      coreCompleted: `${progress.components.totalCore.completed} / 43`,
+      cbtProgress: `${progress.components.cbt.completed} / 28`,
+      cbteProgress: `${progress.components.cbte.completed} / 3`,
+      peProgress: `${progress.components.pe.completed} / 12`,
+      attendanceRate,
+      totalSessions: total,
+      presentSessions: present,
     },
-    chart: { type: "pie", data: [{ label: "Present", value: present }, { label: "Missed", value: total - present }] },
-    rows: [{ patientCode: patient.patient_code, name: patient.full_name, program: patient.program_name || "—",
-      admissionDate: patient.admission_date, status: patient.enrollment_status,
-      caseManager: patient.case_manager_name || "Unassigned", attendanceRate: `${attendanceRate}%` }],
+    chart: { type: "pie", data: [{ label: "Present / Late", value: present }, { label: "Missed / Excused", value: Math.max(0, total - present) }] },
+    rows: [{
+      patientCode: patient.patient_code,
+      name: patient.full_name,
+      program: patient.program_name || "—",
+      admissionDate: patient.admission_date,
+      status: patient.enrollment_status,
+      caseManager: patient.case_manager_name || "Unassigned",
+      coreProgress: `${progress.components.totalCore.completed}/43 (CBT ${progress.components.cbt.completed}/28 · CBT-E ${progress.components.cbte.completed}/3 · PE ${progress.components.pe.completed}/12)`,
+      attendanceRate: `${attendanceRate}%`,
+    }],
   };
 }
 
@@ -79,16 +98,18 @@ async function buildProgramReport({ dateFrom, dateTo, caseManagerId }) {
   const whereSql = `WHERE ${where.join(" AND ")}`;
 
   const [patients] = await pool.query(
-    `SELECT p.enrollment_status, p.sessions_required,
-            (SELECT COUNT(*) FROM attendance a WHERE a.patient_id = p.id) AS total_sessions,
-            (SELECT COUNT(*) FROM attendance a WHERE a.patient_id = p.id AND a.status = 'present') AS present_sessions
+    `SELECT p.id, p.enrollment_status, p.sessions_required,
+            (SELECT COUNT(*) FROM attendance a WHERE a.patient_id = p.id AND a.status != 'cancelled') AS total_sessions,
+            (SELECT COUNT(*) FROM attendance a WHERE a.patient_id = p.id AND a.status IN ('present', 'late')) AS present_sessions
      FROM patients p ${whereSql}`, params
   );
+
+  const progressMap = await getBulkUnifiedPatientProgress(pool, patients.map((p) => p.id));
 
   const counts = { active: 0, completed: 0, dropped: 0, transferred: 0, pending: 0 };
   patients.forEach((p) => { counts[p.enrollment_status] = (counts[p.enrollment_status] || 0) + 1; });
 
-  const completionRates = patients.filter((p) => p.sessions_required).map((p) => (p.present_sessions / p.sessions_required) * 100);
+  const completionRates = patients.map((p) => progressMap.get(Number(p.id))?.components?.totalCore?.percentage ?? 0);
   const avgCompletion = completionRates.length ? Math.round(completionRates.reduce((a, b) => a + b, 0) / completionRates.length) : 0;
   const attendanceRates = patients.filter((p) => p.total_sessions > 0).map((p) => (p.present_sessions / p.total_sessions) * 100);
   const avgAttendance = attendanceRates.length ? Math.round(attendanceRates.reduce((a, b) => a + b, 0) / attendanceRates.length) : 0;
@@ -111,7 +132,7 @@ async function buildMonthlyReport({ dateFrom, dateTo }) {
   const [[{ graduatedPatients }]] = await pool.query(
     `SELECT COUNT(DISTINCT d.patient_id) AS graduatedPatients 
      FROM discharges d 
-     WHERE (d.discharge_type LIKE '%complet%' OR d.discharge_type LIKE '%graduat%') 
+     WHERE (d.outcome = 'COMPLETER' OR (d.outcome IS NULL AND d.discharge_type NOT LIKE '%Non%' AND d.discharge_type NOT LIKE '%non_%' AND (d.discharge_type LIKE '%complet%' OR d.discharge_type LIKE '%graduat%'))) 
        AND d.discharge_date BETWEEN ? AND ?`, 
     [from, to]
   );
@@ -139,8 +160,23 @@ export async function generateReport(req, res) {
   const builder = BUILDERS[reportType];
   if (!builder) return res.status(400).json({ message: "Invalid report type." });
 
+  // Finding 1: Strict role & assigned-patient authorization for exports and reports
+  let effectiveCmId = caseManagerId;
+  if (req.user.role === "case_manager") {
+    effectiveCmId = req.user.id;
+    if (patientId) {
+      const [[patient]] = await pool.query(
+        "SELECT assigned_case_manager_id FROM patients WHERE id = ?",
+        [patientId]
+      );
+      if (patient && patient.assigned_case_manager_id && patient.assigned_case_manager_id !== req.user.id) {
+        return res.status(403).json({ message: "Access denied. You are not the assigned case manager for this patient." });
+      }
+    }
+  }
+
   try {
-    const report = await builder({ dateFrom, dateTo, caseManagerId, programStatus, patientId });
+    const report = await builder({ dateFrom, dateTo, caseManagerId: effectiveCmId, programStatus, patientId });
 
     const [result] = await pool.query(
       `INSERT INTO generated_reports
@@ -148,7 +184,7 @@ export async function generateReport(req, res) {
          case_manager_id, program_status, patient_id, stats_json, chart_json, rows_json, generated_by)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [reportType, report.title, report.description, report.dateRangeLabel, dateFrom || null, dateTo || null,
-        caseManagerId || null, programStatus || null, patientId || null,
+        effectiveCmId || null, programStatus || null, patientId || null,
         JSON.stringify(report.stats), JSON.stringify(report.chart), JSON.stringify(report.rows), req.user.id]
     );
 
@@ -170,10 +206,17 @@ export async function listReports(req, res) {
   const where = ["gr.is_archived = FALSE"];
   const params = [];
 
+  if (req.user.role === "case_manager") {
+    where.push("(gr.case_manager_id = ? OR gr.generated_by = ?)");
+    params.push(req.user.id, req.user.id);
+  } else if (caseManagerId) {
+    where.push("gr.case_manager_id = ?");
+    params.push(caseManagerId);
+  }
+
   if (reportType) { where.push("gr.report_type = ?"); params.push(reportType); }
   if (dateFrom) { where.push("gr.created_at >= ?"); params.push(dateFrom); }
   if (dateTo) { where.push("gr.created_at <= DATE_ADD(?, INTERVAL 1 DAY)"); params.push(dateTo); }
-  if (caseManagerId) { where.push("gr.case_manager_id = ?"); params.push(caseManagerId); }
   if (programStatus) { where.push("gr.program_status = ?"); params.push(programStatus); }
   if (patientId) { where.push("gr.patient_id = ?"); params.push(patientId); }
   if (search) { where.push("gr.title LIKE ?"); params.push(`%${search}%`); }

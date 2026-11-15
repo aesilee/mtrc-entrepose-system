@@ -4,6 +4,9 @@ import AppShell from "../components/AppShell.jsx";
 import api from "../api/axios.js";
 import { exportOpCmTrackerWorkbook } from "../utils/opCmTrackerExport.js";
 import { useAuth } from "../context/AuthContext.jsx";
+import ReportDefinitionsModal from "../components/opCmTracker/ReportDefinitionsModal.jsx";
+import AttendanceTraceabilityModal from "../components/opCmTracker/AttendanceTraceabilityModal.jsx";
+import IssueSnapshotModal from "../components/opCmTracker/IssueSnapshotModal.jsx";
 
 const iconProps = {
   viewBox: "0 0 24 24",
@@ -149,11 +152,58 @@ function fmtCell(row, col) {
   if (col.key === "pwudCode") {
     return <span style={styles.codeBadge}>{row.pwudCode || "—"}</span>;
   }
-  if (col.key === "newEnrollee" || col.key === "interventionsConductedInMonth") {
+  if (col.key === "newEnrollee") {
     return Number(row[col.key]) === 1 ? (
       <span style={styles.yesBadge}>Yes</span>
     ) : (
       <span style={styles.noMuted}>No</span>
+    );
+  }
+  if (col.key === "interventionsConductedInMonth") {
+    const isYes = Number(row[col.key]) === 1;
+    const summaryText = row.interventionSummaryText || "";
+    return isYes ? (
+      <span
+        style={{
+          ...styles.yesBadge,
+          display: "inline-flex",
+          alignItems: "center",
+          gap: 4,
+          cursor: summaryText ? "help" : "default",
+        }}
+        title={summaryText ? `Services Conducted: ${summaryText}` : "Interventions conducted in month"}
+      >
+        <span>Yes</span>
+        {row.interventionTotalServices > 1 && (
+          <span style={{ fontSize: 10, background: "#166534", color: "#FFF", borderRadius: 9999, padding: "0 4px" }}>
+            {row.interventionTotalServices}
+          </span>
+        )}
+      </span>
+    ) : (
+      <span style={styles.noMuted} title="No attendance or clinical interventions in reporting month">
+        No
+      </span>
+    );
+  }
+  if (col.key === "consultTypeWithinMtrc") {
+    const v = row[col.key];
+    if (!v || v === "—") return <span style={styles.zeroMuted}>—</span>;
+    return (
+      <span
+        style={{
+          display: "inline-block",
+          padding: "2px 6px",
+          borderRadius: 4,
+          fontSize: 11,
+          fontWeight: 700,
+          background: "#E0F2FE",
+          color: "#0369A1",
+        }}
+        title={`Internal Consultations: ${v}`}
+      >
+        {v}
+      </span>
     );
   }
   const v = row[col.key];
@@ -187,6 +237,12 @@ export default function OpCmTracker() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
+  const [definitionsModalOpen, setDefinitionsModalOpen] = useState(false);
+  const [traceabilityModalOpen, setTraceabilityModalOpen] = useState(false);
+  const [traceabilityContext, setTraceabilityContext] = useState(null);
+  const [performanceModality, setPerformanceModality] = useState("all"); // "all" | "cbt" | "pe"
+  const [snapshotModalOpen, setSnapshotModalOpen] = useState(false);
+  const isHimOrAdmin = user?.role === "him_staff" || user?.role === "ict_admin";
 
   useEffect(() => {
     if (!isCaseManager) {
@@ -227,6 +283,24 @@ export default function OpCmTracker() {
   const rawGrid = report?.grid || [];
   const summaries = report?.summaries;
 
+  const traceabilityRecords = useMemo(() => {
+    const att = report?.traceability?.attendanceRecords || [];
+    const unres = report?.traceability?.unresolvedRecords || [];
+    const cbte = report?.traceability?.cbteRecords || [];
+    return [...att, ...unres, ...cbte];
+  }, [report]);
+
+  function openTraceability(caseManager, metric, metricTitle, modality = "all") {
+    setTraceabilityContext({
+      caseManager,
+      metric,
+      title: metricTitle,
+      modality,
+      periodLabel: `${selectedMonthName} ${year}`,
+    });
+    setTraceabilityModalOpen(true);
+  }
+
   const filteredGrid = useMemo(() => {
     if (!searchQuery.trim()) return rawGrid;
     const q = searchQuery.toLowerCase().trim();
@@ -243,7 +317,7 @@ export default function OpCmTracker() {
   const dischargesCount = summaries?.discharges?.grandTotal ?? summaries?.discharges?.subtotal?.total ?? 0;
   const positiveDtCount = summaries?.positiveDrugTests?.length ?? 0;
   const facilityPerf = summaries?.attendancePerformance?.facilityTotal;
-  const facilityRate = facilityPerf?.attendanceRatePercent != null ? `${facilityPerf.attendanceRatePercent}%` : "0%";
+  const facilityRate = facilityPerf?.attendanceRatePercent != null ? `${facilityPerf.attendanceRatePercent}%` : "N/A";
 
   const selectedMonthName = MONTHS.find((m) => m.value === month)?.label || "";
 
@@ -257,14 +331,35 @@ export default function OpCmTracker() {
       description="MTRC Outpatient Monthly Intervention Overview — Longitudinal Caseload Progress, Census, Discharges, and Drug-Test Surveillance."
     >
       <div style={styles.pageWrapper}>
-        {/* Top Breadcrumb Navigation */}
-        <div style={styles.topNav}>
+        {/* Top Breadcrumb Navigation & HIM Codebook Action */}
+        <div style={{ ...styles.topNav, display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10 }}>
           <Link to="/reports" style={styles.backLink}>
             <svg {...iconProps} width="15" height="15">
               <path d="M19 12H5M12 19l-7-7 7-7" />
             </svg>
             Back to DOH Reports
           </Link>
+
+          <button
+            type="button"
+            onClick={() => setDefinitionsModalOpen(true)}
+            style={{
+              background: "#FFFFFF",
+              border: "1px solid #CBD5E1",
+              borderRadius: 6,
+              padding: "5px 12px",
+              fontSize: 12,
+              fontWeight: 700,
+              color: "var(--color-primary-dark, #1E3A2F)",
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
+              boxShadow: "0 1px 2px rgba(0,0,0,0.03)",
+            }}
+          >
+            <span>📘</span> HIM Definitions & Traceability Guide
+          </button>
         </div>
 
         {/* Filter Card */}
@@ -284,9 +379,20 @@ export default function OpCmTracker() {
                 <span style={styles.metaChip}>
                   Period: <strong>{selectedMonthName} {year}</strong>
                 </span>
-                <span style={styles.metaChip}>
-                  Active Caseload: <strong>{rawGrid.length} clients</strong>
+                <span style={styles.metaChip} title="Unique patients actively managed during any point in this calendar month">
+                  Cases Managed: <strong>{rawGrid.length} clients</strong>
                 </span>
+                <span style={{ ...styles.metaChip, background: "#ECFDF5", color: "#065F46", border: "1px solid #A7F3D0" }} title="Patients actively enrolled as of the end of the month (excluding month discharges)">
+                  Month-End Census: <strong>{activeCensusCount} active</strong>
+                </span>
+                {report.officialSnapshot && (
+                  <span
+                    style={{ ...styles.metaChip, background: "#DCFCE7", color: "#166534", border: "1px solid #86EFAC" }}
+                    title={`Official statutory snapshot v${report.officialSnapshot.version} issued by ${report.officialSnapshot.issuedByName} on ${fmtDate(report.officialSnapshot.issuedAt)}`}
+                  >
+                    🟢 <strong>Official Snapshot v{report.officialSnapshot.version}</strong>
+                  </span>
+                )}
               </div>
             )}
           </div>
@@ -367,47 +473,107 @@ export default function OpCmTracker() {
                 </svg>
                 Export Excel (.xlsx)
               </button>
+              {isHimOrAdmin && (
+                <button
+                  type="button"
+                  onClick={() => setSnapshotModalOpen(true)}
+                  disabled={!report || loading}
+                  style={{ ...styles.secondaryBtn, opacity: !report || loading ? 0.6 : 1, color: "#1E3A2F" }}
+                  title="Lock an official point-in-time statutory snapshot for DOH/court reporting"
+                >
+                  <svg {...iconProps} width="15" height="15" style={{ color: "#2563EB" }}>
+                    <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
+                    <polyline points="17 21 17 13 7 13 7 21" />
+                    <polyline points="7 3 7 8 15 8" />
+                  </svg>
+                  {report?.officialSnapshot ? "Re-Issue Snapshot" : "Issue Snapshot"}
+                </button>
+              )}
             </div>
           </div>
         </div>
 
         {error && <div style={styles.errorBox}>{error}</div>}
 
-        {/* Executive KPI Cards — Clean White Surface with Green Accent */}
-        {report && (
-          <div style={styles.kpiGrid}>
-            <div style={styles.kpiCard}>
-              <span style={styles.kpiLabel}>ACTIVE CENSUS</span>
-              <div style={styles.kpiValue}>{activeCensusCount}</div>
-              <div style={styles.kpiSub}>active cases</div>
+        {/* Audit Notice Banner when Live Recalculated Data Differs from Officially Issued Snapshot */}
+        {report?.officialSnapshot && !report.officialSnapshot.isIdentical && (
+          <div
+            style={{
+              background: "#FFFBEB",
+              border: "1px solid #FCD34D",
+              borderRadius: 8,
+              padding: "10px 14px",
+              marginBottom: 14,
+              fontSize: 12,
+              color: "#92400E",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              flexWrap: "wrap",
+              gap: 8,
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <span>⚠️</span>
+              <strong>Audit Notice (Live Data Differs from Official Snapshot v{report.officialSnapshot.version}):</strong>
+              <span>{report.officialSnapshot.differences?.join(" · ")}</span>
             </div>
-
-            <div style={styles.kpiCard}>
-              <span style={styles.kpiLabel}>ADMISSIONS</span>
-              <div style={styles.kpiValue}>{enrollmentsCount}</div>
-              <div style={styles.kpiSub}>new this month</div>
-            </div>
-
-            <div style={styles.kpiCard}>
-              <span style={styles.kpiLabel}>DISCHARGES</span>
-              <div style={styles.kpiValue}>{dischargesCount}</div>
-              <div style={styles.kpiSub}>completers + attrition</div>
-            </div>
-
-            <div style={styles.kpiCard}>
-              <span style={styles.kpiLabel}>POSITIVE DTS</span>
-              <div style={{ ...styles.kpiValue, color: positiveDtCount > 0 ? "#b91c1c" : "var(--color-primary-dark, #234F39)" }}>
-                {positiveDtCount}
-              </div>
-              <div style={styles.kpiSub}>flagged this month</div>
-            </div>
-
-            <div style={styles.kpiCard}>
-              <span style={styles.kpiLabel}>ATTENDANCE</span>
-              <div style={styles.kpiValue}>{facilityRate}</div>
-              <div style={styles.kpiSub}>CBT + PE combined</div>
-            </div>
+            <span style={{ fontSize: 11, color: "#78350F" }}>
+              Snapshot issued on {fmtDate(report.officialSnapshot.issuedAt)} by {report.officialSnapshot.issuedByName}
+            </span>
           </div>
+        )}
+
+        {/* Executive KPI Cards & Traceability Triggers */}
+        {report && (
+          <>
+            <div style={{ ...styles.kpiGrid, gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))" }}>
+              <div style={styles.kpiCard} title="All unique patients active or receiving services during the calendar month">
+                <span style={styles.kpiLabel}>CASES MANAGED</span>
+                <div style={styles.kpiValue}>{rawGrid.length}</div>
+                <div style={styles.kpiSub}>total caseload in month</div>
+              </div>
+
+              <div style={styles.kpiCard} title="Active enrolled patients remaining as of the final day of the month (excluding discharges)">
+                <span style={styles.kpiLabel}>MONTH-END CENSUS</span>
+                <div style={{ ...styles.kpiValue, color: "#166534" }}>{activeCensusCount}</div>
+                <div style={styles.kpiSub}>active as of period end</div>
+              </div>
+
+              <div style={styles.kpiCard} title="First-time admissions occurring in this reporting month">
+                <span style={styles.kpiLabel}>ADMISSIONS</span>
+                <div style={styles.kpiValue}>{enrollmentsCount}</div>
+                <div style={styles.kpiSub}>new this month</div>
+              </div>
+
+              <div style={styles.kpiCard} title="Patients discharged in period (completers + attrition)">
+                <span style={styles.kpiLabel}>DISCHARGES</span>
+                <div style={styles.kpiValue}>{dischargesCount}</div>
+                <div style={styles.kpiSub}>completers + attrition</div>
+              </div>
+
+              <div style={styles.kpiCard} title="Urine drug screens positive for any tested substance">
+                <span style={styles.kpiLabel}>POSITIVE DTS</span>
+                <div style={{ ...styles.kpiValue, color: positiveDtCount > 0 ? "#b91c1c" : "var(--color-primary-dark, #234F39)" }}>
+                  {positiveDtCount}
+                </div>
+                <div style={styles.kpiSub}>flagged this month</div>
+              </div>
+
+              <div
+                style={{ ...styles.kpiCard, cursor: "pointer" }}
+                onClick={() => openTraceability("FACILITY TOTAL", "all", "Facility-Wide Attendance Records")}
+                title="Click to inspect all session attendance records for this month"
+              >
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <span style={styles.kpiLabel}>ATTENDANCE RATE</span>
+                  <span style={{ fontSize: 10, color: "#2563EB", fontWeight: 700 }}>Inspect ↗</span>
+                </div>
+                <div style={styles.kpiValue}>{facilityRate}</div>
+                <div style={styles.kpiSub}>CBT + PE (Click to view)</div>
+              </div>
+            </div>
+          </>
         )}
 
         {/* Minimalist Segmented Navigation Tabs */}
@@ -525,12 +691,14 @@ export default function OpCmTracker() {
                   </div>
                 ) : (
                   filteredGrid.map((row, idx) => {
-                    const rowId = row.pwudCode || `client-${idx}`;
+                    const rowId = row.id ? `patient-${row.id}` : (row.pwudCode && row.pwudCode !== "—" ? row.pwudCode : `client-${idx}`);
                     const isExpanded = expandedCardId === rowId;
                     const initials = getInitials(row.clientName);
 
-                    // Calculate completed milestones count
-                    const completedMilestones = MILESTONES_CONFIG.filter((m) => Boolean(row[m.key])).length;
+                    // Calculate completed milestones count (using lifetime milestones if available)
+                    const completedMilestones = MILESTONES_CONFIG.filter((m) =>
+                      Boolean(row.lifetimeMilestones ? row.lifetimeMilestones[m.key] : row[m.key])
+                    ).length;
 
                     // Drug test surveillance status
                     const isPositive = summaries?.positiveDrugTests?.some(
@@ -544,19 +712,22 @@ export default function OpCmTracker() {
 
                     // Status attention tag
                     let statusTag = null;
-                    if (row.newEnrollee === 1) {
-                      statusTag = { text: "Recent enrollee", bg: "#fef3c7", color: "#92400e" };
+                    if (row.isArchived) {
+                      statusTag = { text: `Archived (${row.archivedAt || "Preserved"})`, bg: "#FEE2E2", color: "#991B1B" };
+                    } else if (row.newEnrollee === 1) {
+                      statusTag = { text: "Recent enrollee", bg: "#fef3c7", color: "#92400e", isLive: true };
                     } else if (row.dateOfDischarge) {
                       statusTag = { text: "Discharged", bg: "#f1f5f9", color: "#475569" };
                     } else if (completedMilestones < 3) {
-                      statusTag = { text: "New admission", bg: "#e0f2fe", color: "#0369a1" };
+                      statusTag = { text: "New admission", bg: "#e0f2fe", color: "#0369a1", isLive: true };
                     } else {
-                      statusTag = { text: "Active", bg: "var(--color-primary-tint, #E7F2EC)", color: "var(--color-primary-dark, #234F39)" };
+                      statusTag = { text: "Active", bg: "var(--color-primary-tint, #E7F2EC)", color: "var(--color-primary-dark, #234F39)", isLive: true };
                     }
 
                     return (
                       <div
                         key={rowId}
+                        className={`opcm-caseload-card ${isExpanded ? "is-expanded" : ""}`}
                         style={{
                           ...styles.clientCard,
                           ...(isExpanded ? styles.clientCardExpanded : {}),
@@ -564,6 +735,7 @@ export default function OpCmTracker() {
                       >
                         {/* Summary Header Row (Clickable) */}
                         <div
+                          className="opcm-card-header"
                           style={styles.clientCardHeader}
                           onClick={() => toggleCard(rowId)}
                           role="button"
@@ -588,12 +760,30 @@ export default function OpCmTracker() {
                           {/* Col 3: Case Manager & Category */}
                           <div style={styles.cmCategoryCol}>
                             <span style={styles.cmNameText}>{row.cmFullName || row.cm}</span>
+                            {row.isReassigned && (
+                              <span
+                                style={{
+                                  fontSize: 10,
+                                  color: "#9A3412",
+                                  background: "#FFEDD5",
+                                  border: "1px solid #FED7AA",
+                                  padding: "1px 5px",
+                                  borderRadius: 4,
+                                  display: "inline-block",
+                                  marginTop: 2,
+                                  fontWeight: 600,
+                                }}
+                                title={`Managed by ${row.cmFullName || row.cm} during this reporting month; currently assigned to ${row.currentCaseManager}`}
+                              >
+                                Reassigned (Now: {row.currentCaseManager})
+                              </span>
+                            )}
                             <span style={styles.categoryPill}>{row.category}</span>
                           </div>
 
-                          {/* Col 4: 12 Milestone Visual Dots Indicator */}
+                          {/* Col 4: 12 Milestone Visual Dots Indicator with connecting rail */}
                           <div style={styles.milestoneDotsCol}>
-                            <div style={styles.dotsRow}>
+                            <div className="opcm-dots-track" style={styles.dotsRow}>
                               {MILESTONES_CONFIG.map((m, mIdx) => {
                                 const isDone = Boolean(row[m.key]);
                                 return (
@@ -603,6 +793,7 @@ export default function OpCmTracker() {
                                     style={{
                                       ...styles.milestoneDot,
                                       ...(isDone ? styles.milestoneDotDone : styles.milestoneDotPending),
+                                      zIndex: 1,
                                     }}
                                   />
                                 );
@@ -613,14 +804,58 @@ export default function OpCmTracker() {
                             </span>
                           </div>
 
-                          {/* Col 5: Session Quick Progress */}
+                          {/* Col 5: Session Quick Progress (Monthly vs. Lifetime Core) */}
                           <div style={styles.sessionsQuickCol}>
-                            <span style={styles.sessionQuickText}>
-                              CBT <strong>{row.attendedCbtSessions}</strong> / {row.scheduledCbtSessions || 28}
+                            <span
+                              style={styles.sessionQuickText}
+                              title="Monthly Attended / Scheduled (Reporting Month)"
+                            >
+                              Month: CBT <strong>{row.attendedCbtSessions}</strong>/{row.scheduledCbtSessions || 0} · PE <strong>{row.attendedPeSessions}</strong>/{row.scheduledPeSessions || 0}
                             </span>
-                            <span style={styles.sessionQuickText}>
-                              PE <strong>{row.attendedPeSessions}</strong> / {row.scheduledPeSessions || 12}
-                            </span>
+                            {row.lifetimeCurriculum && (
+                              <span
+                                style={{ ...styles.sessionQuickText, fontSize: 10.5, color: "#166534" }}
+                                title={`Lifetime Core Curriculum: CBT ${row.lifetimeCurriculum.cbtCompleted}/28, CBT-E ${row.lifetimeCurriculum.cbteCompleted}/3, PE ${row.lifetimeCurriculum.peCompleted}/12 · Duration: ${row.durationSummary?.elapsedMonths ?? 0}/${row.durationSummary?.totalRequiredMonths ?? 7} months`}
+                              >
+                                Core: <strong>{row.lifetimeCurriculum.totalCoreCompleted}</strong>/43 ({row.lifetimeCurriculum.cbtCompleted}·{row.lifetimeCurriculum.cbteCompleted}·{row.lifetimeCurriculum.peCompleted})
+                                {row.durationSummary && (
+                                  <span style={{ marginLeft: 4, color: (row.durationSummary.totalRequiredMonths || 7) > 7 ? "#B45309" : "#475569", fontWeight: 700 }}>
+                                    · {row.durationSummary.elapsedMonths ?? 0}/{row.durationSummary.totalRequiredMonths ?? 7}m
+                                  </span>
+                                )}
+                              </span>
+                            )}
+                            {row.unresolvedSessions > 0 && (
+                              <span
+                                style={{
+                                  fontSize: 10,
+                                  fontWeight: 700,
+                                  color: "#92400E",
+                                  background: "#FEF3C7",
+                                  padding: "1px 6px",
+                                  borderRadius: 999,
+                                  border: "1px solid #FCD34D",
+                                }}
+                                title="Expected session attendance that has not yet been encoded"
+                              >
+                                ⚠️ {row.unresolvedSessions} Unresolved
+                              </span>
+                            )}
+                            {row.pendingReviewSessions > 0 && (
+                              <span
+                                style={{
+                                  fontSize: 10,
+                                  fontWeight: 700,
+                                  color: "#B45309",
+                                  background: "#FEF3C7",
+                                  padding: "1px 6px",
+                                  borderRadius: 999,
+                                  border: "1px solid #FDE68A",
+                                }}
+                              >
+                                ⏳ {row.pendingReviewSessions} Review
+                              </span>
+                            )}
                           </div>
 
                           {/* Col 6: Drug Test Status */}
@@ -646,8 +881,17 @@ export default function OpCmTracker() {
                                   ...styles.statusChip,
                                   background: statusTag.bg,
                                   color: statusTag.color,
+                                  display: "inline-flex",
+                                  alignItems: "center",
+                                  gap: 5,
                                 }}
                               >
+                                {statusTag.isLive && (
+                                  <span
+                                    className="opcm-pulse-dot"
+                                    style={{ background: statusTag.color }}
+                                  />
+                                )}
                                 {statusTag.text}
                               </span>
                             )}
@@ -665,210 +909,494 @@ export default function OpCmTracker() {
                           </div>
                         </div>
 
-                        {/* Expandable Accordion Body (Reveals Clinical Timeline, Sessions, DT, Comorbidities) */}
-                        {isExpanded && (
-                          <div style={styles.clientCardBody}>
-                            <div style={styles.detailsGrid}>
-                              {/* Sub-Panel 1: Milestone Timeline */}
-                              <div style={styles.detailSection}>
-                                <div style={styles.detailSectionTitle}>
-                                  <svg {...iconProps} width="14" height="14" style={{ color: "var(--color-primary, #2F6F4F)" }}>
-                                    <polyline points="20 6 9 17 4 12" />
-                                  </svg>
-                                  <span>MILESTONE TIMELINE</span>
-                                </div>
-                                <div style={styles.timelineList}>
-                                  {MILESTONES_CONFIG.map((m) => {
-                                    const dateVal = row[m.key];
-                                    const isDone = Boolean(dateVal);
-                                    return (
-                                      <div key={m.key} style={styles.timelineItem}>
-                                        <div
-                                          style={{
-                                            ...styles.timelineMarker,
-                                            background: isDone ? "var(--color-primary, #2F6F4F)" : "#ffffff",
-                                            borderColor: isDone ? "var(--color-primary, #2F6F4F)" : "#cbd5e1",
-                                          }}
-                                        />
-                                        <div style={styles.timelineTextWrap}>
-                                          <span style={styles.timelineLabel}>{m.label}</span>
-                                          <span
+                        {/* Expandable Accordion Body with Smooth CSS Grid Height Transition */}
+                        <div className={`opcm-accordion-wrapper ${isExpanded ? "is-open" : ""}`}>
+                          <div className="opcm-accordion-inner">
+                            <div style={styles.clientCardBody}>
+                              <div style={styles.detailsGrid}>
+                                {/* Sub-Panel 1: Milestone Timeline */}
+                                <div style={styles.detailSection}>
+                                  <div style={styles.detailSectionTitle}>
+                                    <svg {...iconProps} width="14" height="14" style={{ color: "var(--color-primary, #2F6F4F)" }}>
+                                      <polyline points="20 6 9 17 4 12" />
+                                    </svg>
+                                    <span>MILESTONE TIMELINE</span>
+                                  </div>
+                                  <div className="opcm-timeline-track" style={styles.timelineList}>
+                                    {MILESTONES_CONFIG.map((m) => {
+                                      const dateVal = row.lifetimeMilestones ? row.lifetimeMilestones[m.key] : row[m.key];
+                                      const isDone = Boolean(dateVal);
+                                      return (
+                                        <div key={m.key} style={styles.timelineItem}>
+                                          <div
                                             style={{
-                                              ...styles.timelineDate,
-                                              color: isDone ? "var(--color-primary-dark, #234F39)" : "var(--color-text-muted)",
-                                              fontWeight: isDone ? 600 : 400,
+                                              ...styles.timelineMarker,
+                                              background: isDone ? "var(--color-primary, #2F6F4F)" : "#ffffff",
+                                              borderColor: isDone ? "var(--color-primary, #2F6F4F)" : "#cbd5e1",
+                                              color: "#ffffff",
+                                              display: "flex",
+                                              alignItems: "center",
+                                              justifyContent: "center",
+                                              fontSize: 7,
+                                              fontWeight: 900,
+                                              boxShadow: isDone ? "0 0 0 2px rgba(47, 111, 79, 0.2)" : "none",
                                             }}
                                           >
-                                            {isDone ? fmtDate(dateVal) : "Pending"}
-                                          </span>
+                                            {isDone ? "✓" : ""}
+                                          </div>
+                                          <div style={styles.timelineTextWrap}>
+                                            <span
+                                              style={{
+                                                ...styles.timelineLabel,
+                                                fontWeight: isDone ? 600 : 400,
+                                                color: isDone ? "var(--color-text, #1f2421)" : "var(--color-text-muted, #6b7268)",
+                                              }}
+                                            >
+                                              {m.label}
+                                            </span>
+                                            <span
+                                              style={{
+                                                ...styles.timelineDate,
+                                                color: isDone ? "var(--color-primary-dark, #234F39)" : "var(--color-text-muted)",
+                                                background: isDone ? "var(--color-primary-tint, #E7F2EC)" : "transparent",
+                                                padding: isDone ? "1px 7px" : "0",
+                                                borderRadius: isDone ? 4 : 0,
+                                                fontWeight: isDone ? 700 : 400,
+                                              }}
+                                            >
+                                              {isDone ? fmtDate(dateVal) : "Pending"}
+                                            </span>
+                                          </div>
                                         </div>
-                                      </div>
-                                    );
-                                  })}
-                                </div>
-                              </div>
-
-                              {/* Sub-Panel 2: Sessions — Scheduled / Attended */}
-                              <div style={styles.detailSection}>
-                                <div style={styles.detailSectionTitle}>
-                                  <svg {...iconProps} width="14" height="14" style={{ color: "var(--color-primary, #2F6F4F)" }}>
-                                    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
-                                    <circle cx="9" cy="7" r="4" />
-                                  </svg>
-                                  <span>SESSIONS — SCHEDULED / ATTENDED</span>
-                                </div>
-                                <div style={styles.sessionsTable}>
-                                  <div style={styles.sessionRow}>
-                                    <span style={styles.sessionRowLabel}>CBT (Group Counseling)</span>
-                                    <span style={styles.sessionRowVal}>
-                                      <strong>{row.attendedCbtSessions}</strong> / {row.scheduledCbtSessions || 28}
-                                    </span>
-                                  </div>
-                                  <div style={styles.progressBarWrap}>
-                                    <div
-                                      style={{
-                                        ...styles.progressBarFill,
-                                        width: `${Math.min(100, Math.round((row.attendedCbtSessions / (row.scheduledCbtSessions || 28)) * 100))}%`,
-                                      }}
-                                    />
-                                  </div>
-
-                                  <div style={styles.sessionRow}>
-                                    <span style={styles.sessionRowLabel}>Psycho-Education (PE)</span>
-                                    <span style={styles.sessionRowVal}>
-                                      <strong>{row.attendedPeSessions}</strong> / {row.scheduledPeSessions || 12}
-                                    </span>
-                                  </div>
-                                  <div style={styles.progressBarWrap}>
-                                    <div
-                                      style={{
-                                        ...styles.progressBarFill,
-                                        width: `${Math.min(100, Math.round((row.attendedPeSessions / (row.scheduledPeSessions || 12)) * 100))}%`,
-                                      }}
-                                    />
-                                  </div>
-
-                                  <div style={styles.sessionRow}>
-                                    <span style={styles.sessionRowLabel}>SHGM (Self-Help Meetings)</span>
-                                    <span style={styles.sessionRowVal}>
-                                      <strong>{row.attendedShgmSessions}</strong> / 6
-                                    </span>
-                                  </div>
-
-                                  <div style={styles.sessionRow}>
-                                    <span style={styles.sessionRowLabel}>Individual Counseling (ICA)</span>
-                                    <span style={styles.sessionRowVal}>
-                                      <strong>{row.individualCounselingSessions}</strong> / 26
-                                    </span>
-                                  </div>
-
-                                  <div style={styles.sessionRow}>
-                                    <span style={styles.sessionRowLabel}>Conjoint Family Sessions</span>
-                                    <span style={styles.sessionRowVal}>
-                                      <strong>{row.conjointFamilySessions}</strong> / —
-                                    </span>
+                                      );
+                                    })}
                                   </div>
                                 </div>
-                              </div>
 
-                              {/* Sub-Panel 3: Drug Test Log, Discharge & Comorbidities */}
-                              <div style={styles.detailSection}>
-                                {/* Drug Test Log */}
-                                <div style={styles.detailSectionTitle}>
-                                  <svg {...iconProps} width="14" height="14" style={{ color: "var(--color-primary, #2F6F4F)" }}>
-                                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                                  </svg>
-                                  <span>DRUG TEST SURVEILLANCE LOG</span>
-                                </div>
-                                <div style={styles.subDetailBox}>
-                                  {row.drugTestsConducted > 0 ? (
-                                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                                      <span style={{ fontSize: 12 }}>
-                                        Tests Conducted: <strong>{row.drugTestsConducted}</strong>
+                                {/* Sub-Panel 2: Monthly Service Counts vs. Lifetime Curriculum */}
+                                <div style={styles.detailSection}>
+                                  <div style={styles.detailSectionTitle}>
+                                    <svg {...iconProps} width="14" height="14" style={{ color: "var(--color-primary, #2F6F4F)" }}>
+                                      <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+                                      <circle cx="9" cy="7" r="4" />
+                                    </svg>
+                                    <span>MONTHLY SERVICES — SCHEDULED / CREDITED</span>
+                                  </div>
+                                  <div style={styles.sessionsTable}>
+                                    <div style={styles.sessionRow}>
+                                      <span style={styles.sessionRowLabel}>
+                                        CBT (Monthly Meetings)
+                                        {row.rawAttendedCbtSessions != null && row.rawAttendedCbtSessions !== row.attendedCbtSessions && (
+                                          <span style={{ fontSize: 10.5, color: "#64748B", marginLeft: 6 }}>
+                                            ({row.rawAttendedCbtSessions} attended)
+                                          </span>
+                                        )}
                                       </span>
-                                      <span
+                                      <span style={styles.sessionRowVal}>
+                                        <strong>{row.attendedCbtSessions}</strong> / {row.scheduledCbtSessions || 0}
+                                        {row.scheduledCbtSessions > 0 && (
+                                          <span style={styles.progressPercentPill}>
+                                            {Math.min(100, Math.round((row.attendedCbtSessions / row.scheduledCbtSessions) * 100))}%
+                                          </span>
+                                        )}
+                                      </span>
+                                    </div>
+                                    <div style={styles.progressBarWrap}>
+                                      <div
                                         style={{
-                                          ...styles.dtBadge,
-                                          color: dtStatus.color,
-                                          background: dtStatus.bg,
-                                          borderColor: dtStatus.border,
+                                          ...styles.progressBarFill,
+                                          width: `${row.scheduledCbtSessions > 0 ? Math.min(100, Math.round((row.attendedCbtSessions / row.scheduledCbtSessions) * 100)) : 0}%`,
+                                          background: "linear-gradient(90deg, #2F6F4F 0%, #476A30 100%)",
+                                        }}
+                                      />
+                                    </div>
+
+                                    <div style={styles.sessionRow}>
+                                      <span style={styles.sessionRowLabel}>
+                                        PE Meetings (Monthly)
+                                        {row.rawAttendedPeSessions != null && row.rawAttendedPeSessions !== row.attendedPeSessions && (
+                                          <span style={{ fontSize: 10.5, color: "#64748B", marginLeft: 6 }}>
+                                            ({row.rawAttendedPeSessions} attended)
+                                          </span>
+                                        )}
+                                      </span>
+                                      <span style={styles.sessionRowVal}>
+                                        <strong>{row.attendedPeSessions}</strong> / {row.scheduledPeSessions || 0}
+                                        {row.scheduledPeSessions > 0 && (
+                                          <span style={styles.progressPercentPill}>
+                                            {Math.min(100, Math.round((row.attendedPeSessions / row.scheduledPeSessions) * 100))}%
+                                          </span>
+                                        )}
+                                      </span>
+                                    </div>
+                                    <div style={styles.progressBarWrap}>
+                                      <div
+                                        style={{
+                                          ...styles.progressBarFill,
+                                          width: `${row.scheduledPeSessions > 0 ? Math.min(100, Math.round((row.attendedPeSessions / row.scheduledPeSessions) * 100)) : 0}%`,
+                                          background: "linear-gradient(90deg, #2F6F4F 0%, #6E9940 100%)",
+                                        }}
+                                      />
+                                    </div>
+
+                                    <div style={styles.sessionRow}>
+                                      <span style={styles.sessionRowLabel}>SHGM (Supplementary)</span>
+                                      <span style={styles.sessionRowVal}>
+                                        <strong>{row.attendedShgmSessions}</strong> in month
+                                        {row.lifetimeCurriculum?.supplementary?.shgm != null && (
+                                          <span style={{ fontSize: 10.5, color: "#64748B", marginLeft: 6 }}>
+                                            ({row.lifetimeCurriculum.supplementary.shgm} / 6 total)
+                                          </span>
+                                        )}
+                                      </span>
+                                    </div>
+
+                                    <div style={styles.sessionRow}>
+                                      <span style={styles.sessionRowLabel}>Individual Counseling (Supplementary)</span>
+                                      <span style={styles.sessionRowVal}>
+                                        <strong>{row.individualCounselingSessions}</strong> in month
+                                        {row.lifetimeCurriculum?.supplementary?.indCounseling != null && (
+                                          <span style={{ fontSize: 10.5, color: "#64748B", marginLeft: 6 }}>
+                                            ({row.lifetimeCurriculum.supplementary.indCounseling} / 26 total)
+                                          </span>
+                                        )}
+                                      </span>
+                                    </div>
+
+                                    <div style={styles.sessionRow}>
+                                      <span style={styles.sessionRowLabel}>Conjoint Family (Supplementary)</span>
+                                      <span style={styles.sessionRowVal}>
+                                        <strong>{row.conjointFamilySessions}</strong> in month
+                                        {row.lifetimeCurriculum?.supplementary?.conjointFamily != null && (
+                                          <span style={{ fontSize: 10.5, color: "#64748B", marginLeft: 6 }}>
+                                            ({row.lifetimeCurriculum.supplementary.conjointFamily} total)
+                                          </span>
+                                        )}
+                                      </span>
+                                    </div>
+
+                                    {row.lifetimeCurriculum && (
+                                      <div
+                                        style={{
+                                          marginTop: 8,
+                                          padding: "8px 10px",
+                                          borderRadius: 8,
+                                          background: row.lifetimeCurriculum.isCoreComplete ? "#F0FDF4" : "#F8FAFC",
+                                          border: row.lifetimeCurriculum.isCoreComplete ? "1px solid #86EFAC" : "1px solid #E2E8F0",
                                         }}
                                       >
-                                        <span style={{ ...styles.dtDot, background: dtStatus.color }} />
-                                        {dtStatus.label}
+                                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 11, fontWeight: 800, color: "#1E293B", marginBottom: 4 }}>
+                                          <span>LIFETIME CORE CURRICULUM</span>
+                                          <span style={{ color: row.lifetimeCurriculum.isCoreComplete ? "#166534" : "#0F172A" }}>
+                                            {row.lifetimeCurriculum.totalCoreCompleted} / 43
+                                          </span>
+                                        </div>
+                                        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", fontSize: 10.5, fontWeight: 700, color: "#475569" }}>
+                                          <span>CBT: {row.lifetimeCurriculum.cbtCompleted}/28</span>
+                                          <span>·</span>
+                                          <span>CBT-E: {row.lifetimeCurriculum.cbteCompleted}/3</span>
+                                          <span>·</span>
+                                          <span>PE Topics: {row.lifetimeCurriculum.peCompleted}/12</span>
+                                        </div>
+                                        <div style={{ fontSize: 9.5, color: "#64748B", marginTop: 3 }}>
+                                          Monthly tracker counts PE meetings; curriculum progress tracks required content.
+                                        </div>
+                                      </div>
+                                    )}
+
+                                    {/* Participation & Completion Status Breakdown Pills */}
+                                    {(row.unresolvedSessions > 0 ||
+                                      row.pendingReviewSessions > 0 ||
+                                      row.makeupCreditedSessions > 0 ||
+                                      row.repeatTopicSessions > 0 ||
+                                      row.lateSessions > 0 ||
+                                      row.excusedSessions > 0 ||
+                                      row.absentSessions > 0 ||
+                                      row.cancelledSessions > 0) && (
+                                      <div
+                                        style={{
+                                          display: "flex",
+                                          flexWrap: "wrap",
+                                          gap: 5,
+                                          marginTop: 8,
+                                          paddingTop: 8,
+                                          borderTop: "1px dashed #E2E8F0",
+                                        }}
+                                      >
+                                        {row.unresolvedSessions > 0 && (
+                                          <span
+                                            style={{
+                                              fontSize: 10.5,
+                                              fontWeight: 700,
+                                              padding: "2px 7px",
+                                              borderRadius: 999,
+                                              background: "#FEF3C7",
+                                              color: "#92400E",
+                                              border: "1px solid #FCD34D",
+                                            }}
+                                            title="Scheduled session attendance not yet encoded (retained in denominator)"
+                                          >
+                                            ⚠️ {row.unresolvedSessions} Unresolved Roster
+                                          </span>
+                                        )}
+                                        {row.pendingReviewSessions > 0 && (
+                                          <span
+                                            style={{
+                                              fontSize: 10.5,
+                                              fontWeight: 700,
+                                              padding: "2px 7px",
+                                              borderRadius: 999,
+                                              background: "#FEF3C7",
+                                              color: "#92400E",
+                                              border: "1px solid #FDE68A",
+                                            }}
+                                          >
+                                            ⏳ {row.pendingReviewSessions} Pending Review
+                                          </span>
+                                        )}
+                                        {row.makeupCreditedSessions > 0 && (
+                                          <span
+                                            style={{
+                                              fontSize: 10.5,
+                                              fontWeight: 700,
+                                              padding: "2px 7px",
+                                              borderRadius: 999,
+                                              background: "#EFF6FF",
+                                              color: "#1D4ED8",
+                                              border: "1px solid #BFDBFE",
+                                            }}
+                                          >
+                                            🔄 {row.makeupCreditedSessions} Makeup Credited
+                                          </span>
+                                        )}
+                                        {row.repeatTopicSessions > 0 && (
+                                          <span
+                                            style={{
+                                              fontSize: 10.5,
+                                              fontWeight: 700,
+                                              padding: "2px 7px",
+                                              borderRadius: 999,
+                                              background: "#FFFBEB",
+                                              color: "#B45309",
+                                              border: "1px solid #FDE68A",
+                                            }}
+                                          >
+                                            🔁 {row.repeatTopicSessions} Repeat (No Dup Credit)
+                                          </span>
+                                        )}
+                                        {row.lateSessions > 0 && (
+                                          <span
+                                            style={{
+                                              fontSize: 10.5,
+                                              fontWeight: 600,
+                                              padding: "2px 7px",
+                                              borderRadius: 999,
+                                              background: "#FFF3D6",
+                                              color: "#9A6B00",
+                                            }}
+                                          >
+                                            ⏰ {row.lateSessions} Late
+                                          </span>
+                                        )}
+                                        {row.excusedSessions > 0 && (
+                                          <span
+                                            style={{
+                                              fontSize: 10.5,
+                                              fontWeight: 600,
+                                              padding: "2px 7px",
+                                              borderRadius: 999,
+                                              background: "#EDEAFB",
+                                              color: "#5B3EC9",
+                                            }}
+                                          >
+                                            📋 {row.excusedSessions} Excused (Outstanding)
+                                          </span>
+                                        )}
+                                        {row.absentSessions > 0 && (
+                                          <span
+                                            style={{
+                                              fontSize: 10.5,
+                                              fontWeight: 600,
+                                              padding: "2px 7px",
+                                              borderRadius: 999,
+                                              background: "#FDE2E2",
+                                              color: "#B3261E",
+                                            }}
+                                          >
+                                            ✕ {row.absentSessions} Absent
+                                          </span>
+                                        )}
+                                        {row.cancelledSessions > 0 && (
+                                          <span
+                                            style={{
+                                              fontSize: 10.5,
+                                              fontWeight: 600,
+                                              padding: "2px 7px",
+                                              borderRadius: 999,
+                                              background: "#F1F5F9",
+                                              color: "#475569",
+                                            }}
+                                          >
+                                            🚫 {row.cancelledSessions} Center Cancelled
+                                          </span>
+                                        )}
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+
+                                {/* Sub-Panel 3: Drug Test Log, Discharge & Comorbidities */}
+                                <div style={styles.detailSection}>
+                                  {/* Drug Test Log */}
+                                  <div style={styles.detailSectionTitle}>
+                                    <svg {...iconProps} width="14" height="14" style={{ color: "var(--color-primary, #2F6F4F)" }}>
+                                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                                    </svg>
+                                    <span>DRUG TEST SURVEILLANCE LOG</span>
+                                  </div>
+                                  <div style={styles.subDetailBox}>
+                                    {row.drugTestsConducted > 0 ? (
+                                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                                        <span style={{ fontSize: 12 }}>
+                                          Tests Conducted: <strong>{row.drugTestsConducted}</strong>
+                                        </span>
+                                        <span
+                                          style={{
+                                            ...styles.dtBadge,
+                                            color: dtStatus.color,
+                                            background: dtStatus.bg,
+                                            borderColor: dtStatus.border,
+                                          }}
+                                        >
+                                          <span style={{ ...styles.dtDot, background: dtStatus.color }} />
+                                          {dtStatus.label}
+                                        </span>
+                                      </div>
+                                    ) : (
+                                      <span style={{ fontSize: 12, color: "var(--color-text-muted)" }}>
+                                        No drug test recorded this reporting period.
                                       </span>
-                                    </div>
-                                  ) : (
-                                    <span style={{ fontSize: 12, color: "var(--color-text-muted)" }}>
-                                      No drug test recorded this reporting period.
-                                    </span>
-                                  )}
-                                </div>
+                                    )}
+                                  </div>
 
-                                {/* Discharge Box */}
-                                <div style={{ ...styles.detailSectionTitle, marginTop: 14 }}>
-                                  <svg {...iconProps} width="14" height="14" style={{ color: "var(--color-primary, #2F6F4F)" }}>
-                                    <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
-                                    <polyline points="16 17 21 12 16 7" />
-                                    <line x1="21" y1="12" x2="9" y2="12" />
-                                  </svg>
-                                  <span>DISCHARGE & DISPOSITION</span>
-                                </div>
-                                <div style={styles.subDetailBox}>
-                                  {row.dateOfDischarge ? (
-                                    <div>
-                                      <div style={{ fontSize: 12, fontWeight: 600, color: "var(--color-text)" }}>
-                                        Discharged on {fmtDate(row.dateOfDischarge)}
-                                      </div>
-                                      <div style={{ fontSize: 11, color: "var(--color-text-muted)", marginTop: 2 }}>
-                                        Status: {row.statusOfDischarge || "Completer"}
-                                      </div>
-                                      {row.remarks && (
-                                        <div style={{ fontSize: 11, color: "var(--color-text-muted)", marginTop: 2 }}>
-                                          Remarks: {row.remarks}
-                                        </div>
-                                      )}
-                                    </div>
-                                  ) : (
-                                    <span style={{ fontSize: 12, color: "var(--color-text-muted)" }}>
-                                      Active case — no discharge recorded.
-                                    </span>
-                                  )}
-                                </div>
-
-                                {/* Comorbidities Box */}
-                                <div style={{ ...styles.detailSectionTitle, marginTop: 14 }}>
-                                  <svg {...iconProps} width="14" height="14" style={{ color: "var(--color-primary, #2F6F4F)" }}>
-                                    <circle cx="12" cy="12" r="10" />
-                                    <line x1="12" y1="8" x2="12" y2="12" />
-                                    <line x1="12" y1="16" x2="12.01" y2="16" />
-                                  </svg>
-                                  <span>COMORBIDITIES & CONSULTATIONS</span>
-                                </div>
-                                <div style={styles.subDetailBox}>
-                                  {row.comorbidityDetails || row.consultTypeWithinMtrc ? (
-                                    <div>
-                                      {row.comorbidityDetails && (
+                                  {/* Discharge Box */}
+                                  <div style={{ ...styles.detailSectionTitle, marginTop: 14 }}>
+                                    <svg {...iconProps} width="14" height="14" style={{ color: "var(--color-primary, #2F6F4F)" }}>
+                                      <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+                                      <polyline points="16 17 21 12 16 7" />
+                                      <line x1="21" y1="12" x2="9" y2="12" />
+                                    </svg>
+                                    <span>DISCHARGE & DISPOSITION</span>
+                                  </div>
+                                  <div style={styles.subDetailBox}>
+                                    {row.dateOfDischarge ? (
+                                      <div>
                                         <div style={{ fontSize: 12, fontWeight: 600, color: "var(--color-text)" }}>
-                                          {row.comorbidityDetails}
+                                          Discharged on {fmtDate(row.dateOfDischarge)}
                                         </div>
-                                      )}
-                                      {row.consultTypeWithinMtrc && (
                                         <div style={{ fontSize: 11, color: "var(--color-text-muted)", marginTop: 2 }}>
-                                          Internal Consult: {row.consultTypeWithinMtrc}
+                                          Status: {row.statusOfDischarge || "Completer"}
                                         </div>
-                                      )}
-                                    </div>
-                                  ) : (
-                                    <span style={{ fontSize: 12, color: "var(--color-text-muted)" }}>
-                                      None recorded
-                                    </span>
-                                  )}
+                                        {row.remarks && (
+                                          <div style={{ fontSize: 11, color: "var(--color-text-muted)", marginTop: 2 }}>
+                                            Remarks: {row.remarks}
+                                          </div>
+                                        )}
+                                      </div>
+                                    ) : (
+                                      <span style={{ fontSize: 12, color: "var(--color-text-muted)" }}>
+                                        Active case — no discharge recorded.
+                                      </span>
+                                    )}
+                                  </div>
+
+                                  {/* Comorbidities & Consultations Box */}
+                                  <div style={{ ...styles.detailSectionTitle, marginTop: 14 }}>
+                                    <svg {...iconProps} width="14" height="14" style={{ color: "var(--color-primary, #2F6F4F)" }}>
+                                      <circle cx="12" cy="12" r="10" />
+                                      <line x1="12" y1="8" x2="12" y2="12" />
+                                      <line x1="12" y1="16" x2="12.01" y2="16" />
+                                    </svg>
+                                    <span>COMORBIDITIES & CONSULTATIONS</span>
+                                  </div>
+                                  <div style={styles.subDetailBox}>
+                                    {row.comorbidityDetails || row.consultTypeWithinMtrc ? (
+                                      <div>
+                                        {row.comorbidityDetails && (
+                                          <div style={{ fontSize: 12, fontWeight: 600, color: "var(--color-text)" }}>
+                                            {row.comorbidityDetails}
+                                          </div>
+                                        )}
+                                        {row.consultTypeWithinMtrc && (
+                                          <div style={{ fontSize: 11, color: "#0369A1", fontWeight: 700, marginTop: 3 }}>
+                                            Internal Consult: {row.consultTypeWithinMtrc}
+                                          </div>
+                                        )}
+                                        {row.consultDetailsList && row.consultDetailsList.length > 0 && (
+                                          <div style={{ fontSize: 10.5, color: "var(--color-text-muted)", marginTop: 2 }}>
+                                            {row.consultDetailsList.map((c) => `${c.type} on ${fmtDate(c.date)}`).join(" • ")}
+                                          </div>
+                                        )}
+                                      </div>
+                                    ) : (
+                                      <span style={{ fontSize: 12, color: "var(--color-text-muted)" }}>
+                                        None recorded
+                                      </span>
+                                    )}
+                                  </div>
+
+                                  {/* Interventions in Month Box */}
+                                  <div style={{ ...styles.detailSectionTitle, marginTop: 14 }}>
+                                    <svg {...iconProps} width="14" height="14" style={{ color: "var(--color-primary, #2F6F4F)" }}>
+                                      <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+                                      <polyline points="22 4 12 14.01 9 11.01" />
+                                    </svg>
+                                    <span>MONTHLY INTERVENTIONS CONDUCTED</span>
+                                  </div>
+                                  <div style={styles.subDetailBox}>
+                                    {Number(row.interventionsConductedInMonth) === 1 ? (
+                                      <div>
+                                        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                                          <span style={{ ...styles.yesBadge, fontSize: 11 }}>✓ Yes — Intervention Documented</span>
+                                          {row.interventionTotalServices > 1 && (
+                                            <span style={{ fontSize: 11, fontWeight: 700, color: "#166534" }}>
+                                              ({row.interventionTotalServices} total clinical services)
+                                            </span>
+                                          )}
+                                        </div>
+                                        {row.interventionSummaryText && (
+                                          <div style={{ fontSize: 11, color: "var(--color-text)", marginTop: 4, lineHeight: 1.4 }}>
+                                            <strong>Breakdown:</strong> {row.interventionSummaryText}
+                                          </div>
+                                        )}
+                                      </div>
+                                    ) : (
+                                      <span style={{ fontSize: 12, color: "var(--color-text-muted)" }}>
+                                        No session attendance or clinical intervention documented in this month.
+                                      </span>
+                                    )}
+                                  </div>
                                 </div>
                               </div>
+
+                              {/* Card Action Footer */}
+                              {row.id && (
+                                <div style={styles.cardFooterActions}>
+                                  <Link
+                                    to={`/patients/${row.id}`}
+                                    style={styles.viewPatientProfileLink}
+                                    onClick={(e) => e.stopPropagation()}
+                                  >
+                                    <span>Open Full Patient Profile & Case Management</span>
+                                    <svg {...iconProps} width="14" height="14">
+                                      <path d="M5 12h14M12 5l7 7-7 7" />
+                                    </svg>
+                                  </Link>
+                                </div>
+                              )}
                             </div>
                           </div>
-                        )}
+                        </div>
                       </div>
                     );
                   })
@@ -1021,9 +1549,9 @@ export default function OpCmTracker() {
                       <tr><td colSpan={5} style={styles.emptyTd}>No active case manager records for this period.</td></tr>
                     ) : (
                       summaries.activeCensus.rows.map((row, idx) => {
-                        const volTotal = (row.Voluntary?.Male || 0) + (row.Voluntary?.Female || 0);
-                        const lguTotal = (row["LGU-Referred"]?.Male || 0) + (row["LGU-Referred"]?.Female || 0);
-                        const courtTotal = (row["Court-mandated"]?.Male || 0) + (row["Court-mandated"]?.Female || 0);
+                        const volTotal = (row.Voluntary?.Male || 0) + (row.Voluntary?.Female || 0) + (row.Voluntary?.Unspecified || 0);
+                        const lguTotal = (row["LGU-Referred"]?.Male || 0) + (row["LGU-Referred"]?.Female || 0) + (row["LGU-Referred"]?.Unspecified || 0);
+                        const courtTotal = (row["Court-mandated"]?.Male || 0) + (row["Court-mandated"]?.Female || 0) + (row["Court-mandated"]?.Unspecified || 0);
                         return (
                           <tr key={row.caseManager} style={{ ...styles.tr, background: idx % 2 === 1 ? "#fafaf9" : "#ffffff" }}>
                             <td style={{ ...styles.td, fontWeight: 600, color: "var(--color-text)" }}>{row.caseManager}</td>
@@ -1041,13 +1569,13 @@ export default function OpCmTracker() {
                       <tr style={styles.subtotalRow}>
                         <td style={{ ...styles.td, fontWeight: 800 }}>All case managers</td>
                         <td style={{ ...styles.td, textAlign: "center", fontWeight: 800 }}>
-                          {(summaries.activeCensus.subtotal.Voluntary?.Male || 0) + (summaries.activeCensus.subtotal.Voluntary?.Female || 0)}
+                          {(summaries.activeCensus.subtotal.Voluntary?.Male || 0) + (summaries.activeCensus.subtotal.Voluntary?.Female || 0) + (summaries.activeCensus.subtotal.Voluntary?.Unspecified || 0)}
                         </td>
                         <td style={{ ...styles.td, textAlign: "center", fontWeight: 800 }}>
-                          {(summaries.activeCensus.subtotal["LGU-Referred"]?.Male || 0) + (summaries.activeCensus.subtotal["LGU-Referred"]?.Female || 0)}
+                          {(summaries.activeCensus.subtotal["LGU-Referred"]?.Male || 0) + (summaries.activeCensus.subtotal["LGU-Referred"]?.Female || 0) + (summaries.activeCensus.subtotal["LGU-Referred"]?.Unspecified || 0)}
                         </td>
                         <td style={{ ...styles.td, textAlign: "center", fontWeight: 800 }}>
-                          {(summaries.activeCensus.subtotal["Court-mandated"]?.Male || 0) + (summaries.activeCensus.subtotal["Court-mandated"]?.Female || 0)}
+                          {(summaries.activeCensus.subtotal["Court-mandated"]?.Male || 0) + (summaries.activeCensus.subtotal["Court-mandated"]?.Female || 0) + (summaries.activeCensus.subtotal["Court-mandated"]?.Unspecified || 0)}
                         </td>
                         <td style={{ ...styles.td, textAlign: "center", fontWeight: 800, color: "var(--color-primary-dark, #234F39)" }}>
                           {activeCensusCount}
@@ -1267,22 +1795,121 @@ export default function OpCmTracker() {
           </div>
         )}
 
-        {/* TAB 5: STAFF PERFORMANCE (Matching Image 5) */}
+        {/* TAB 5: STAFF PERFORMANCE & TRACEABILITY (CBT vs PE vs CBT-E) */}
         {tab === "performance" && summaries && (
           <div style={styles.stackedCards}>
             <div style={styles.card}>
-              <div style={styles.cardHeader}>
+              <div style={{ ...styles.cardHeader, alignItems: "flex-start", flexWrap: "wrap", gap: 12 }}>
                 <div>
                   <h3 style={styles.cardTitle}>
                     ATTENDANCE RATE — TARGET VS. ACTUAL, BY CASE MANAGER
                   </h3>
                   <p style={styles.cardSubtitle}>
-                    Attendance Rate (%) = [Actual Attended (CBT + PE) ÷ Target Scheduled (CBT + PE)] × 100
+                    Attendance Performance tracks scheduled sessions versus verified completions. Click any count to inspect underlying records.
                   </p>
                 </div>
-                <div style={styles.totalBadge}>
-                  <span style={styles.totalBadgeLabel}>Facility Average:</span>
-                  <span style={styles.totalBadgeValue}>{facilityRate}</span>
+                <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+                  <div style={styles.totalBadge}>
+                    <span style={styles.totalBadgeLabel}>Facility Average:</span>
+                    <span style={styles.totalBadgeValue}>{facilityRate}</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => openTraceability("FACILITY TOTAL", "actualAttended", "Facility-Wide Actual Attended Sessions")}
+                    style={{
+                      background: "#FFFFFF",
+                      border: "1px solid #CBD5E1",
+                      borderRadius: 6,
+                      padding: "6px 12px",
+                      fontSize: 12,
+                      fontWeight: 700,
+                      color: "#1E293B",
+                      cursor: "pointer",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 4,
+                    }}
+                  >
+                    <span>🔎</span> Inspect All Records
+                  </button>
+                </div>
+              </div>
+
+              {/* Modality View Selector Bar */}
+              <div
+                style={{
+                  padding: "10px 18px",
+                  background: "#F8FAFC",
+                  borderBottom: "1px solid #E2E8F0",
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  flexWrap: "wrap",
+                  gap: 10,
+                }}
+              >
+                <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                  <span style={{ fontSize: 12, fontWeight: 700, color: "#475569" }}>
+                    Attendance Breakdown:
+                  </span>
+                  {[
+                    { id: "all", label: "All Core Modalities (CBT + PE)" },
+                    { id: "cbt", label: "CBT Topics Only (Sessions 1–28)" },
+                    { id: "pe", label: "Psycho-Education (PE 1–12) Only" },
+                  ].map((m) => {
+                    const active = performanceModality === m.id;
+                    return (
+                      <button
+                        key={m.id}
+                        type="button"
+                        onClick={() => setPerformanceModality(m.id)}
+                        style={{
+                          background: active ? "var(--color-primary-dark, #1E3A2F)" : "#FFFFFF",
+                          color: active ? "#FFFFFF" : "#334155",
+                          border: active ? "1px solid var(--color-primary-dark, #1E3A2F)" : "1px solid #CBD5E1",
+                          borderRadius: 6,
+                          padding: "4px 10px",
+                          fontSize: 11.5,
+                          fontWeight: 700,
+                          cursor: "pointer",
+                        }}
+                      >
+                        {m.label}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <span
+                    style={{
+                      fontSize: 11.5,
+                      fontWeight: 700,
+                      background: "#EFF6FF",
+                      color: "#1D4ED8",
+                      padding: "3px 8px",
+                      borderRadius: 6,
+                      border: "1px solid #BFDBFE",
+                    }}
+                    title="CBT Clinical Evaluations recorded at key milestone stages (Weeks 5, 13, and Month 6-7)"
+                  >
+                    CBT-E Evaluations in Period: <strong>{summaries.attendancePerformance?.facilityTotal?.cbteConducted ?? 0}</strong>
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setDefinitionsModalOpen(true)}
+                    style={{
+                      background: "none",
+                      border: "none",
+                      color: "var(--color-primary, #2F6F4F)",
+                      fontSize: 12,
+                      fontWeight: 700,
+                      cursor: "pointer",
+                      textDecoration: "underline",
+                    }}
+                  >
+                    Methodology & Definitions ℹ️
+                  </button>
                 </div>
               </div>
 
@@ -1290,10 +1917,32 @@ export default function OpCmTracker() {
                 <table style={styles.cleanTable}>
                   <thead>
                     <tr>
-                      <th style={{ ...styles.th, width: "35%" }}>CASE MANAGER</th>
-                      <th style={{ ...styles.th, textAlign: "center", width: "20%" }}>TARGET SESSIONS</th>
-                      <th style={{ ...styles.th, textAlign: "center", width: "20%" }}>ACTUAL SESSIONS</th>
-                      <th style={{ ...styles.th, width: "25%" }}>RATE</th>
+                      <th style={{ ...styles.th, width: "26%" }}>CASE MANAGER</th>
+                      <th style={{ ...styles.th, textAlign: "center", width: "16%" }}>
+                        {performanceModality === "cbt"
+                          ? "CBT TARGET"
+                          : performanceModality === "pe"
+                          ? "PE TARGET"
+                          : "TARGET SCHEDULED"}
+                      </th>
+                      <th style={{ ...styles.th, textAlign: "center", width: "16%" }}>
+                        {performanceModality === "cbt"
+                          ? "CBT ATTENDED"
+                          : performanceModality === "pe"
+                          ? "PE ATTENDED"
+                          : "ACTUAL ATTENDED"}
+                      </th>
+                      {performanceModality === "all" && (
+                        <th style={{ ...styles.th, textAlign: "center", width: "12%" }}>CBT-E EVALS</th>
+                      )}
+                      <th style={{ ...styles.th, textAlign: "center", width: "14%" }}>UNRESOLVED</th>
+                      <th style={{ ...styles.th, width: "16%" }}>
+                        {performanceModality === "cbt"
+                          ? "CBT RATE"
+                          : performanceModality === "pe"
+                          ? "PE RATE"
+                          : "RATE"}
+                      </th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1301,40 +1950,351 @@ export default function OpCmTracker() {
                       ? summaries.attendancePerformance
                       : summaries.attendancePerformance?.rows || []
                     ).map((row, idx) => {
-                      const rate = row.attendanceRatePercent ?? 0;
-                      const hasRate = row.targetScheduled > 0;
+                      const target =
+                        performanceModality === "cbt"
+                          ? row.cbtTarget ?? 0
+                          : performanceModality === "pe"
+                          ? row.peTarget ?? 0
+                          : row.targetScheduled ?? 0;
+
+                      const actual =
+                        performanceModality === "cbt"
+                          ? row.cbtActual ?? 0
+                          : performanceModality === "pe"
+                          ? row.peActual ?? 0
+                          : row.actualAttended ?? 0;
+
+                      const unresolved =
+                        performanceModality === "cbt"
+                          ? row.cbtUnresolved ?? 0
+                          : performanceModality === "pe"
+                          ? row.peUnresolved ?? 0
+                          : row.unresolvedSessions ?? 0;
+
+                      const rate =
+                        performanceModality === "cbt"
+                          ? row.cbtRate
+                          : performanceModality === "pe"
+                          ? row.peRate
+                          : row.attendanceRatePercent;
+
+                      const hasValidDenominator = target > 0;
+                      const metricTargetKey =
+                        performanceModality === "cbt"
+                          ? "cbtTarget"
+                          : performanceModality === "pe"
+                          ? "peTarget"
+                          : "targetScheduled";
+
+                      const metricActualKey =
+                        performanceModality === "cbt"
+                          ? "cbtActual"
+                          : performanceModality === "pe"
+                          ? "peActual"
+                          : "actualAttended";
+
                       return (
                         <tr key={row.caseManager} style={{ ...styles.tr, background: idx % 2 === 1 ? "#fafaf9" : "#ffffff" }}>
                           <td style={{ ...styles.td, fontWeight: 600 }}>{row.caseManager}</td>
-                          <td style={{ ...styles.td, textAlign: "center" }}>{row.targetScheduled}</td>
-                          <td style={{ ...styles.td, textAlign: "center" }}>{row.actualAttended}</td>
+
+                          {/* Target Scheduled Button */}
+                          <td style={{ ...styles.td, textAlign: "center" }}>
+                            <button
+                              type="button"
+                              onClick={() => openTraceability(row.caseManager, metricTargetKey, `${row.caseManager} · Scheduled Target`, performanceModality === "cbt" ? "CBT_GROUP" : performanceModality === "pe" ? "PSYCHO_EDUCATION" : "all")}
+                              style={{
+                                background: "#F1F5F9",
+                                border: "1px solid #E2E8F0",
+                                color: "#0F172A",
+                                fontWeight: 700,
+                                fontSize: 12.5,
+                                padding: "2px 8px",
+                                borderRadius: 6,
+                                cursor: "pointer",
+                              }}
+                              title="Click to inspect scheduled session records"
+                            >
+                              {target}
+                            </button>
+                          </td>
+
+                          {/* Actual Attended Button */}
+                          <td style={{ ...styles.td, textAlign: "center" }}>
+                            <button
+                              type="button"
+                              onClick={() => openTraceability(row.caseManager, metricActualKey, `${row.caseManager} · Actual Attended`, performanceModality === "cbt" ? "CBT_GROUP" : performanceModality === "pe" ? "PSYCHO_EDUCATION" : "all")}
+                              style={{
+                                background: actual > 0 ? "#DCFCE7" : "#F8FAFC",
+                                border: actual > 0 ? "1px solid #86EFAC" : "1px solid #E2E8F0",
+                                color: actual > 0 ? "#166534" : "#64748B",
+                                fontWeight: 700,
+                                fontSize: 12.5,
+                                padding: "2px 8px",
+                                borderRadius: 6,
+                                cursor: "pointer",
+                              }}
+                              title="Click to inspect verified attended session records"
+                            >
+                              {actual}
+                            </button>
+                          </td>
+
+                          {/* CBT-E Evals Button (in All view) */}
+                          {performanceModality === "all" && (
+                            <td style={{ ...styles.td, textAlign: "center" }}>
+                              <button
+                                type="button"
+                                onClick={() => openTraceability(row.caseManager, "cbteConducted", `${row.caseManager} · CBT-E Clinical Evaluations`, "CBTE")}
+                                style={{
+                                  background: (row.cbteConducted || 0) > 0 ? "#EDEAFB" : "#F8FAFC",
+                                  border: (row.cbteConducted || 0) > 0 ? "1px solid #C4B5FD" : "1px solid #E2E8F0",
+                                  color: (row.cbteConducted || 0) > 0 ? "#5B21B6" : "#64748B",
+                                  fontWeight: 700,
+                                  fontSize: 12,
+                                  padding: "2px 8px",
+                                  borderRadius: 6,
+                                  cursor: "pointer",
+                                }}
+                                title="Click to inspect CBT-E clinical evaluation records"
+                              >
+                                {row.cbteConducted || 0}
+                              </button>
+                            </td>
+                          )}
+
+                          {/* Unresolved Sessions Button */}
+                          <td style={{ ...styles.td, textAlign: "center" }}>
+                            {unresolved > 0 ? (
+                              <button
+                                type="button"
+                                onClick={() => openTraceability(row.caseManager, "unresolvedSessions", `${row.caseManager} · Unresolved Expected Sessions`, performanceModality === "cbt" ? "CBT_GROUP" : performanceModality === "pe" ? "PSYCHO_EDUCATION" : "all")}
+                                style={{
+                                  background: "#FEF3C7",
+                                  color: "#92400E",
+                                  border: "1px solid #FCD34D",
+                                  borderRadius: 6,
+                                  padding: "2px 8px",
+                                  fontSize: 12,
+                                  fontWeight: 700,
+                                  cursor: "pointer",
+                                }}
+                                title="Click to inspect expected sessions awaiting attendance encoding"
+                              >
+                                ⚠️ {unresolved}
+                              </button>
+                            ) : (
+                              <span style={{ color: "#166534", fontSize: "12px", fontWeight: 600 }}>0</span>
+                            )}
+                          </td>
+
+                          {/* Rate Column */}
                           <td style={styles.td}>
-                            {hasRate ? (
+                            {hasValidDenominator && rate != null ? (
                               <div style={styles.rateColWrap}>
                                 <div style={styles.rateBarContainer}>
                                   <div
                                     style={{
                                       ...styles.rateBarFill,
                                       width: `${Math.min(100, rate)}%`,
-                                      background: rate >= 75 ? "var(--color-primary, #2F6F4F)" : "#d97706",
+                                      background: rate >= 80 ? "var(--color-primary, #2F6F4F)" : "#d97706",
                                     }}
                                   />
                                 </div>
                                 <span style={styles.ratePercentText}>{rate}%</span>
                               </div>
                             ) : (
-                              <span style={styles.zeroMuted}>N/A</span>
+                              <span
+                                style={{
+                                  fontSize: 11,
+                                  fontWeight: 700,
+                                  color: "#64748B",
+                                  background: "#F1F5F9",
+                                  padding: "2px 6px",
+                                  borderRadius: 4,
+                                }}
+                                title="Target is 0; rate is N/A per reporting standard"
+                              >
+                                N/A
+                              </span>
                             )}
                           </td>
                         </tr>
                       );
                     })}
+
+                    {/* Facility Total Row */}
+                    {summaries.attendancePerformance?.facilityTotal && (() => {
+                      const ft = summaries.attendancePerformance.facilityTotal;
+                      const target =
+                        performanceModality === "cbt"
+                          ? ft.cbtTarget ?? 0
+                          : performanceModality === "pe"
+                          ? ft.peTarget ?? 0
+                          : ft.targetScheduled ?? 0;
+
+                      const actual =
+                        performanceModality === "cbt"
+                          ? ft.cbtActual ?? 0
+                          : performanceModality === "pe"
+                          ? ft.peActual ?? 0
+                          : ft.actualAttended ?? 0;
+
+                      const unresolved =
+                        performanceModality === "cbt"
+                          ? ft.cbtUnresolved ?? 0
+                          : performanceModality === "pe"
+                          ? ft.peUnresolved ?? 0
+                          : ft.unresolvedSessions ?? 0;
+
+                      const rate =
+                        performanceModality === "cbt"
+                          ? ft.cbtRate
+                          : performanceModality === "pe"
+                          ? ft.peRate
+                          : ft.attendanceRatePercent;
+
+                      const metricTargetKey =
+                        performanceModality === "cbt"
+                          ? "cbtTarget"
+                          : performanceModality === "pe"
+                          ? "peTarget"
+                          : "targetScheduled";
+
+                      const metricActualKey =
+                        performanceModality === "cbt"
+                          ? "cbtActual"
+                          : performanceModality === "pe"
+                          ? "peActual"
+                          : "actualAttended";
+
+                      return (
+                        <tr style={{ ...styles.tr, background: "#F0FDF4", fontWeight: 700, borderTop: "2px solid #86EFAC" }}>
+                          <td style={{ ...styles.td, color: "#166534" }}>FACILITY TOTAL</td>
+
+                          <td style={{ ...styles.td, textAlign: "center" }}>
+                            <button
+                              type="button"
+                              onClick={() => openTraceability("FACILITY TOTAL", metricTargetKey, "Facility Total Target Scheduled", performanceModality === "cbt" ? "CBT_GROUP" : performanceModality === "pe" ? "PSYCHO_EDUCATION" : "all")}
+                              style={{
+                                background: "#FFFFFF",
+                                border: "1px solid #86EFAC",
+                                color: "#166534",
+                                fontWeight: 800,
+                                fontSize: 13,
+                                padding: "2px 8px",
+                                borderRadius: 6,
+                                cursor: "pointer",
+                              }}
+                              title="Click to inspect all scheduled sessions in facility"
+                            >
+                              {target}
+                            </button>
+                          </td>
+
+                          <td style={{ ...styles.td, textAlign: "center" }}>
+                            <button
+                              type="button"
+                              onClick={() => openTraceability("FACILITY TOTAL", metricActualKey, "Facility Total Attended Sessions", performanceModality === "cbt" ? "CBT_GROUP" : performanceModality === "pe" ? "PSYCHO_EDUCATION" : "all")}
+                              style={{
+                                background: "#DCFCE7",
+                                border: "1px solid #86EFAC",
+                                color: "#166534",
+                                fontWeight: 800,
+                                fontSize: 13,
+                                padding: "2px 8px",
+                                borderRadius: 6,
+                                cursor: "pointer",
+                              }}
+                              title="Click to inspect all attended sessions in facility"
+                            >
+                              {actual}
+                            </button>
+                          </td>
+
+                          {performanceModality === "all" && (
+                            <td style={{ ...styles.td, textAlign: "center" }}>
+                              <button
+                                type="button"
+                                onClick={() => openTraceability("FACILITY TOTAL", "cbteConducted", "Facility Total CBT-E Clinical Evaluations", "CBTE")}
+                                style={{
+                                  background: "#EDEAFB",
+                                  border: "1px solid #C4B5FD",
+                                  color: "#5B21B6",
+                                  fontWeight: 800,
+                                  fontSize: 12.5,
+                                  padding: "2px 8px",
+                                  borderRadius: 6,
+                                  cursor: "pointer",
+                                }}
+                                title="Click to inspect all CBT-E evaluations in facility"
+                              >
+                                {ft.cbteConducted ?? 0}
+                              </button>
+                            </td>
+                          )}
+
+                          <td style={{ ...styles.td, textAlign: "center" }}>
+                            {unresolved > 0 ? (
+                              <button
+                                type="button"
+                                onClick={() => openTraceability("FACILITY TOTAL", "unresolvedSessions", "Facility Total Unresolved Sessions", performanceModality === "cbt" ? "CBT_GROUP" : performanceModality === "pe" ? "PSYCHO_EDUCATION" : "all")}
+                                style={{
+                                  background: "#FEF3C7",
+                                  color: "#92400E",
+                                  border: "1px solid #FCD34D",
+                                  borderRadius: 6,
+                                  padding: "2px 8px",
+                                  fontSize: 12,
+                                  fontWeight: 800,
+                                  cursor: "pointer",
+                                }}
+                                title="Click to inspect all unresolved sessions in facility"
+                              >
+                                ⚠️ {unresolved}
+                              </button>
+                            ) : (
+                              <span style={{ color: "#166534", fontSize: "12px", fontWeight: 700 }}>0</span>
+                            )}
+                          </td>
+
+                          <td style={{ ...styles.td, color: "#166534", fontWeight: 800 }}>
+                            {rate != null ? `${rate}%` : "N/A"}
+                          </td>
+                        </tr>
+                      );
+                    })()}
                   </tbody>
                 </table>
               </div>
             </div>
           </div>
         )}
+
+        {/* Global Report Definitions Modal */}
+        <ReportDefinitionsModal
+          isOpen={definitionsModalOpen}
+          onClose={() => setDefinitionsModalOpen(false)}
+        />
+
+        {/* Global Attendance Traceability Modal */}
+        <AttendanceTraceabilityModal
+          isOpen={traceabilityModalOpen}
+          onClose={() => setTraceabilityModalOpen(false)}
+          context={traceabilityContext}
+          records={traceabilityRecords}
+        />
+
+        {/* Global Statutory Report Snapshot Modal */}
+        <IssueSnapshotModal
+          isOpen={snapshotModalOpen}
+          onClose={() => setSnapshotModalOpen(false)}
+          month={month}
+          year={year}
+          caseManagerId={caseManagerId}
+          caseManagerName={caseManagers.find((c) => String(c.id) === String(caseManagerId))?.full_name}
+          currentSummaries={report?.summaries}
+          onIssued={() => loadReport()}
+        />
       </div>
     </AppShell>
   );
@@ -1948,6 +2908,36 @@ const styles = {
     border: "1px solid #e2e8f0",
     borderRadius: 6,
     padding: "8px 12px",
+  },
+  progressPercentPill: {
+    marginLeft: 6,
+    fontSize: 10,
+    fontWeight: 700,
+    color: "var(--color-primary-dark, #234F39)",
+    background: "var(--color-primary-tint, #E7F2EC)",
+    padding: "1px 5px",
+    borderRadius: 3,
+  },
+  cardFooterActions: {
+    marginTop: 18,
+    paddingTop: 12,
+    borderTop: "1px dashed #e2e8f0",
+    display: "flex",
+    justifyContent: "flex-end",
+  },
+  viewPatientProfileLink: {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 6,
+    padding: "7px 14px",
+    borderRadius: "var(--radius-sm, 6px)",
+    background: "var(--color-primary-tint, #E7F2EC)",
+    color: "var(--color-primary-dark, #234F39)",
+    textDecoration: "none",
+    fontSize: 12,
+    fontWeight: 700,
+    transition: "all 0.15s ease",
+    border: "1px solid rgba(47, 111, 79, 0.2)",
   },
 
   // Full Matrix Spreadsheet Container

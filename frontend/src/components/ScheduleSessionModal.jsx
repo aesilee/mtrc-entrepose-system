@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
+import { createPortal } from "react-dom";
 import api from "../api/axios.js";
 import { useAuth } from "../context/AuthContext.jsx";
 import { getModalityConfig } from "../utils/modalityConfig.js";
@@ -163,261 +164,278 @@ export default function ScheduleSessionModal({ onClose, onScheduled, initialDate
     }
   };
 
-  return (
+  const modality = getModalityConfig(sessionType);
+  const selectedCount = selectedPatientIds.length;
+
+  // Rendered into <body> so page headers / sticky bars can never draw over the dialog.
+  return createPortal(
     <div style={styles.backdrop}>
-      <div style={styles.modal}>
+      <div style={styles.modal} role="dialog" aria-modal="true" aria-labelledby="schedule-session-title">
         {/* Header */}
         <div style={styles.header}>
           <div>
-            <h2 style={styles.title}>Schedule Planned Session & Roster</h2>
-            <p style={styles.subtitle}>
-              Pre-assign patients or cohorts before attendance occurs so denominators remain intact.
-            </p>
+            <h2 id="schedule-session-title" style={styles.title}>Schedule a Session</h2>
+            <p style={styles.subtitle}>Plan the session and pick who is expected to attend.</p>
           </div>
           <button type="button" style={styles.closeBtn} onClick={onClose} aria-label="Close">
             ×
           </button>
         </div>
 
-        {error && <div style={styles.errorBox}>{error}</div>}
+        <form onSubmit={handleSubmit} style={styles.form}>
+          <div style={styles.body}>
+            {error && <div style={styles.errorBox}>{error}</div>}
 
-        <form onSubmit={handleSubmit} style={styles.body}>
-          {/* Top Form Grid */}
-          <div style={styles.grid2}>
-            {/* Session Modality */}
-            <label style={styles.label}>
-              <span style={styles.labelText}>Therapeutic Modality *</span>
-              <select
-                style={styles.select}
-                value={sessionType}
-                onChange={(e) => handleSessionTypeChange(e.target.value)}
-              >
-                {SESSION_TYPE_OPTIONS.map((opt) => (
-                  <option key={opt.value} value={opt.value}>
-                    {opt.label}
-                  </option>
-                ))}
-              </select>
-              {sessionType && (() => {
-                const cfg = getModalityConfig(sessionType);
-                return (
-                  <span
-                    style={{
-                      display: "inline-block",
-                      marginTop: "6px",
-                      padding: "2px 8px",
-                      borderRadius: "4px",
-                      fontSize: "11px",
-                      fontWeight: 700,
-                      background: cfg.bg,
-                      color: cfg.text,
-                      border: `1px solid ${cfg.border}`,
-                      width: "fit-content",
+            {/* 1. Session */}
+            <section style={styles.section}>
+              <h3 style={styles.sectionTitle}>
+                <span style={styles.stepNo}>1</span> Session
+              </h3>
+              <div style={styles.grid2}>
+                <label style={styles.field}>
+                  <span style={styles.labelText}>
+                    Modality <span style={styles.req}>*</span>
+                  </span>
+                  <select
+                    style={styles.control}
+                    value={sessionType}
+                    onChange={(e) => handleSessionTypeChange(e.target.value)}
+                  >
+                    {SESSION_TYPE_OPTIONS.map((opt) => (
+                      <option key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label style={styles.field}>
+                  <span style={styles.labelText}>Curriculum topic (Annex 1)</span>
+                  <select
+                    style={styles.control}
+                    value={topicId}
+                    onChange={(e) => {
+                      setTopicId(e.target.value);
+                      if (e.target.value) setCustomTopicName("");
                     }}
                   >
-                    {cfg.label}
-                  </span>
-                );
-              })()}
-            </label>
-
-            {/* Curriculum Topic from Annex 1 */}
-            <label style={styles.label}>
-              <span style={styles.labelText}>Curriculum Topic (Annex 1)</span>
-              <select
-                style={styles.select}
-                value={topicId}
-                onChange={(e) => {
-                  setTopicId(e.target.value);
-                  if (e.target.value) setCustomTopicName("");
-                }}
-              >
-                <option value="">Select an Annex 1 topic or specify below…</option>
-                {availableTopics.map((t) => (
-                  <option key={t.id} value={t.id}>
-                    [{t.topic_code}] {t.title_tagalog}
-                  </option>
-                ))}
-              </select>
-            </label>
-          </div>
-
-          {!topicId && (
-            <label style={styles.label}>
-              <span style={styles.labelText}>Custom / Module Topic Title</span>
-              <input
-                type="text"
-                style={styles.input}
-                placeholder="e.g. Relapse Prevention and Craving Management"
-                value={customTopicName}
-                onChange={(e) => setCustomTopicName(e.target.value)}
-              />
-            </label>
-          )}
-
-          {/* Date, Time, Facilitator, Case Manager */}
-          <div style={styles.grid4}>
-            <label style={styles.label}>
-              <span style={styles.labelText}>Session Date *</span>
-              <input
-                type="date"
-                style={styles.input}
-                value={sessionDate}
-                onChange={(e) => setSessionDate(e.target.value)}
-                required
-              />
-            </label>
-
-            <label style={styles.label}>
-              <span style={styles.labelText}>Scheduled Time</span>
-              <input
-                type="time"
-                style={styles.input}
-                value={sessionTime}
-                onChange={(e) => setSessionTime(e.target.value)}
-              />
-            </label>
-
-            <label style={styles.label}>
-              <span style={styles.labelText}>Facilitator Name</span>
-              <input
-                type="text"
-                style={styles.input}
-                value={facilitatorName}
-                onChange={(e) => setFacilitatorName(e.target.value)}
-                placeholder="Facilitating staff"
-              />
-            </label>
-
-            <label style={styles.label}>
-              <span style={styles.labelText}>Assigned Case Manager</span>
-              <select
-                style={styles.select}
-                value={caseManagerId}
-                onChange={(e) => setCaseManagerId(e.target.value)}
-              >
-                <option value="">All / Case Manager in charge</option>
-                {caseManagers.map((cm) => (
-                  <option key={cm.id} value={cm.id}>
-                    {cm.full_name}
-                  </option>
-                ))}
-              </select>
-            </label>
-          </div>
-
-          {/* Expected Patient Roster Selection */}
-          <div style={styles.rosterSection}>
-            <div style={styles.rosterHeader}>
-              <div>
-                <span style={styles.rosterTitle}>Expected Patient Roster (Denominator)</span>
-                <span style={styles.rosterHint}>
-                  {isSinglePatientSession
-                    ? "Select exactly 1 client for this individual session"
-                    : `Selected: ${selectedPatientIds.length} expected patient(s)`}
-                </span>
+                    <option value="">
+                      {availableTopics.length ? "None (use a custom title)" : "No Annex 1 topics for this modality"}
+                    </option>
+                    {availableTopics.map((t) => (
+                      <option key={t.id} value={t.id}>
+                        [{t.topic_code}] {t.title_tagalog}
+                      </option>
+                    ))}
+                  </select>
+                </label>
               </div>
-              {!isSinglePatientSession && (
-                <div style={styles.rosterActions}>
-                  <button type="button" style={styles.actionLink} onClick={selectAllFiltered}>
-                    Select Visible ({filteredPatients.length})
-                  </button>
-                  <span style={{ color: "#CBD5E1" }}>|</span>
-                  <button type="button" style={styles.actionLink} onClick={clearSelection}>
-                    Clear
-                  </button>
-                </div>
-              )}
-            </div>
 
-            <div style={styles.searchRow}>
+              {!topicId && (
+                <label style={styles.field}>
+                  <span style={styles.labelText}>Custom topic title</span>
+                  <input
+                    type="text"
+                    style={styles.control}
+                    placeholder="e.g. Relapse Prevention and Craving Management"
+                    value={customTopicName}
+                    onChange={(e) => setCustomTopicName(e.target.value)}
+                  />
+                </label>
+              )}
+            </section>
+
+            {/* 2. Schedule */}
+            <section style={styles.section}>
+              <h3 style={styles.sectionTitle}>
+                <span style={styles.stepNo}>2</span> Schedule
+              </h3>
+              <div style={styles.grid2}>
+                <label style={styles.field}>
+                  <span style={styles.labelText}>
+                    Date <span style={styles.req}>*</span>
+                  </span>
+                  <input
+                    type="date"
+                    style={styles.control}
+                    value={sessionDate}
+                    onChange={(e) => setSessionDate(e.target.value)}
+                    required
+                  />
+                </label>
+                <label style={styles.field}>
+                  <span style={styles.labelText}>Time</span>
+                  <input
+                    type="time"
+                    style={styles.control}
+                    value={sessionTime}
+                    onChange={(e) => setSessionTime(e.target.value)}
+                  />
+                </label>
+                <label style={styles.field}>
+                  <span style={styles.labelText}>Facilitator</span>
+                  <input
+                    type="text"
+                    style={styles.control}
+                    value={facilitatorName}
+                    onChange={(e) => setFacilitatorName(e.target.value)}
+                    placeholder="Facilitating staff"
+                  />
+                </label>
+                <label style={styles.field}>
+                  <span style={styles.labelText}>Case manager in charge</span>
+                  <select
+                    style={styles.control}
+                    value={caseManagerId}
+                    onChange={(e) => setCaseManagerId(e.target.value)}
+                  >
+                    <option value="">All case managers</option>
+                    {caseManagers.map((cm) => (
+                      <option key={cm.id} value={cm.id}>
+                        {cm.full_name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+            </section>
+
+            {/* 3. Expected patients */}
+            <section style={styles.section}>
+              <div style={styles.rosterHeader}>
+                <h3 style={styles.sectionTitle}>
+                  <span style={styles.stepNo}>3</span> Expected patients
+                  <span style={styles.countPill}>{selectedCount} selected</span>
+                </h3>
+                {!isSinglePatientSession && (
+                  <div style={styles.rosterActions}>
+                    <button type="button" style={styles.linkBtn} onClick={selectAllFiltered}>
+                      Select all shown ({filteredPatients.length})
+                    </button>
+                    <button
+                      type="button"
+                      style={{ ...styles.linkBtn, color: "#64748B" }}
+                      onClick={clearSelection}
+                      disabled={selectedCount === 0}
+                    >
+                      Clear
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {isSinglePatientSession && (
+                <p style={styles.hint}>Individual and family sessions have exactly one patient.</p>
+              )}
+
               <input
-                type="text"
-                style={styles.rosterSearchInput}
-                placeholder="Search patient by name, code, or PWUD ID…"
+                type="search"
+                style={styles.control}
+                placeholder="Search by name, patient code, or PWUD ID"
                 value={patientSearch}
                 onChange={(e) => setPatientSearch(e.target.value)}
               />
-            </div>
 
-            <div style={styles.rosterList}>
-              {loading ? (
-                <div style={styles.rosterLoading}>Loading patients…</div>
-              ) : filteredPatients.length === 0 ? (
-                <div style={styles.rosterEmpty}>No matching patients found.</div>
-              ) : (
-                filteredPatients.map((p) => {
-                  const isChecked = selectedPatientIds.includes(String(p.id));
-                  return (
-                    <label
-                      key={p.id}
-                      style={{
-                        ...styles.patientCard,
-                        ...(isChecked ? styles.patientCardSelected : {}),
-                      }}
-                    >
-                      <input
-                        type={isSinglePatientSession ? "radio" : "checkbox"}
-                        checked={isChecked}
-                        name="expectedPatient"
-                        onChange={() => togglePatient(p.id)}
-                        style={styles.checkbox}
-                      />
-                      <div style={styles.patientInfo}>
-                        <div style={styles.patientName}>{p.full_name}</div>
-                        <div style={styles.patientMeta}>
-                          {p.pwud_code ? `PWUD: ${p.pwud_code}` : `Code: ${p.patient_code || "—"}`}
-                          {p.case_manager_name ? ` · CM: ${p.case_manager_name}` : ""}
-                        </div>
-                      </div>
-                    </label>
-                  );
-                })
-              )}
-            </div>
-          </div>
-
-          {/* Expected Summary Banner */}
-          <div style={styles.summaryBox}>
-            <div style={styles.summaryLeft}>
-              <div>
-                <strong>Expected Cohort Size: {selectedPatientIds.length} patients</strong>
-                <div style={styles.summarySub}>
-                  When attendance is encoded, unrecorded patients will be reported as{" "}
-                  <strong>Unresolved</strong> rather than assumed absent.
-                </div>
+              <div style={styles.rosterList}>
+                {loading ? (
+                  <div style={styles.rosterEmpty}>Loading patients…</div>
+                ) : filteredPatients.length === 0 ? (
+                  <div style={styles.rosterEmpty}>No matching patients.</div>
+                ) : (
+                  filteredPatients.map((p) => {
+                    const isChecked = selectedPatientIds.includes(String(p.id));
+                    return (
+                      <label
+                        key={p.id}
+                        style={{ ...styles.patientRow, ...(isChecked ? styles.patientRowSelected : {}) }}
+                      >
+                        <input
+                          type={isSinglePatientSession ? "radio" : "checkbox"}
+                          checked={isChecked}
+                          name="expectedPatient"
+                          onChange={() => togglePatient(p.id)}
+                          style={styles.checkbox}
+                        />
+                        <span style={styles.patientInfo}>
+                          <span style={styles.patientName}>{p.full_name}</span>
+                          <span style={styles.patientMeta}>
+                            {p.pwud_code || p.patient_code || "—"}
+                            {p.case_manager_name ? ` · ${p.case_manager_name}` : ""}
+                          </span>
+                        </span>
+                      </label>
+                    );
+                  })
+                )}
               </div>
-            </div>
+
+              <p style={styles.hint}>
+                Patients left unrecorded when attendance is encoded are shown as <strong>Unresolved</strong>, not
+                absent.
+              </p>
+            </section>
           </div>
 
-          {/* Footer Controls */}
+          {/* Footer */}
           <div style={styles.footer}>
-            <button type="button" style={styles.cancelBtn} onClick={onClose} disabled={saving}>
-              Cancel
-            </button>
-            <button
-              type="submit"
-              style={{
-                ...styles.submitBtn,
-                ...(saving || selectedPatientIds.length === 0 ? styles.submitBtnDisabled : {}),
-              }}
-              disabled={saving || selectedPatientIds.length === 0}
-            >
-              {saving ? "Scheduling Session…" : `Schedule Session (${selectedPatientIds.length} Expected)`}
-            </button>
+            <div style={styles.footerSummary}>
+              <span
+                style={{
+                  ...styles.modalityTag,
+                  background: modality.bg,
+                  color: modality.text,
+                  borderColor: modality.border,
+                }}
+              >
+                {modality.label}
+              </span>
+              <span>{selectedCount} expected</span>
+            </div>
+            <div style={styles.footerButtons}>
+              <button type="button" style={styles.cancelBtn} onClick={onClose} disabled={saving}>
+                Cancel
+              </button>
+              <button
+                type="submit"
+                style={{
+                  ...styles.submitBtn,
+                  ...(saving || selectedCount === 0 ? styles.submitBtnDisabled : {}),
+                }}
+                disabled={saving || selectedCount === 0}
+              >
+                {saving ? "Scheduling…" : "Schedule session"}
+              </button>
+            </div>
           </div>
         </form>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
+
+const control = {
+  width: "100%",
+  minWidth: 0,
+  boxSizing: "border-box",
+  height: "38px",
+  padding: "0 12px",
+  borderRadius: "8px",
+  border: "1px solid #CBD5E1",
+  fontSize: "13.5px",
+  color: "#0F172A",
+  background: "#ffffff",
+  outline: "none",
+  fontFamily: "inherit",
+  textOverflow: "ellipsis",
+};
 
 const styles = {
   backdrop: {
     position: "fixed",
     inset: 0,
-    background: "rgba(15, 23, 42, 0.65)",
-    backdropFilter: "blur(3px)",
+    background: "rgba(15, 23, 42, 0.55)",
+    backdropFilter: "blur(2px)",
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
@@ -428,7 +446,7 @@ const styles = {
     background: "#ffffff",
     borderRadius: "14px",
     width: "100%",
-    maxWidth: "840px",
+    maxWidth: "720px",
     maxHeight: "92vh",
     display: "flex",
     flexDirection: "column",
@@ -436,34 +454,37 @@ const styles = {
     overflow: "hidden",
   },
   header: {
-    padding: "20px 24px 16px",
+    padding: "18px 24px 14px",
     borderBottom: "1px solid #E2E8F0",
     display: "flex",
     justifyContent: "space-between",
     alignItems: "flex-start",
+    gap: "12px",
   },
-  title: {
-    margin: 0,
-    fontSize: "18px",
-    fontWeight: 700,
-    color: "#0F172A",
-  },
-  subtitle: {
-    margin: "4px 0 0",
-    fontSize: "13px",
-    color: "#64748B",
-  },
+  title: { margin: 0, fontSize: "18px", fontWeight: 700, color: "#0F172A" },
+  subtitle: { margin: "4px 0 0", fontSize: "13px", color: "#64748B" },
   closeBtn: {
     background: "none",
     border: "none",
-    fontSize: "18px",
+    fontSize: "22px",
+    lineHeight: 1,
     color: "#94A3B8",
     cursor: "pointer",
-    padding: "4px 8px",
+    padding: "2px 6px",
     borderRadius: "6px",
   },
+  form: { display: "flex", flexDirection: "column", minHeight: 0, flex: 1 },
+  body: {
+    padding: "18px 24px",
+    overflowY: "auto",
+    overflowX: "hidden",
+    display: "flex",
+    flexDirection: "column",
+    gap: "22px",
+    flex: 1,
+    minHeight: 0,
+  },
   errorBox: {
-    margin: "12px 24px 0",
     padding: "10px 14px",
     borderRadius: "8px",
     background: "#FEE2E2",
@@ -472,148 +493,100 @@ const styles = {
     fontSize: "13px",
     fontWeight: 500,
   },
-  body: {
-    padding: "20px 24px",
-    overflowY: "auto",
+  section: { display: "flex", flexDirection: "column", gap: "12px", minWidth: 0 },
+  sectionTitle: {
+    margin: 0,
     display: "flex",
-    flexDirection: "column",
-    gap: "16px",
+    alignItems: "center",
+    gap: "8px",
+    fontSize: "14px",
+    fontWeight: 700,
+    color: "#0F172A",
+  },
+  stepNo: {
+    width: "22px",
+    height: "22px",
+    borderRadius: "50%",
+    background: "#DCFCE7",
+    color: "#166534",
+    fontSize: "12px",
+    fontWeight: 700,
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    flexShrink: 0,
   },
   grid2: {
     display: "grid",
-    gridTemplateColumns: "1fr 1fr",
-    gap: "14px",
+    gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
+    gap: "12px 14px",
   },
-  grid4: {
-    display: "grid",
-    gridTemplateColumns: "1.2fr 1fr 1.2fr 1.4fr",
-    gap: "12px",
-  },
-  label: {
-    display: "flex",
-    flexDirection: "column",
-    gap: "5px",
-  },
-  labelText: {
-    fontSize: "12px",
-    fontWeight: 600,
-    color: "#334155",
-  },
-  input: {
-    padding: "8px 11px",
-    borderRadius: "8px",
-    border: "1px solid #CBD5E1",
-    fontSize: "13px",
-    color: "#0F172A",
-    outline: "none",
-    background: "#ffffff",
-  },
-  select: {
-    padding: "8px 11px",
-    borderRadius: "8px",
-    border: "1px solid #CBD5E1",
-    fontSize: "13px",
-    color: "#0F172A",
-    outline: "none",
-    background: "#ffffff",
-  },
-  rosterSection: {
-    border: "1px solid #E2E8F0",
-    borderRadius: "10px",
-    padding: "14px",
-    background: "#F8FAFC",
-  },
+  field: { display: "flex", flexDirection: "column", gap: "6px", minWidth: 0 },
+  labelText: { fontSize: "12.5px", fontWeight: 600, color: "#334155" },
+  req: { color: "#DC2626" },
+  control,
+  hint: { margin: 0, fontSize: "12px", color: "#64748B" },
   rosterHeader: {
     display: "flex",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: "10px",
+    gap: "12px",
+    flexWrap: "wrap",
   },
-  rosterTitle: {
-    fontSize: "13.5px",
-    fontWeight: 700,
-    color: "#1E293B",
-    display: "block",
-  },
-  rosterHint: {
+  countPill: {
+    marginLeft: "4px",
+    padding: "2px 10px",
+    borderRadius: "999px",
+    background: "#F1F5F9",
+    color: "#334155",
     fontSize: "12px",
-    color: "#64748B",
+    fontWeight: 600,
   },
-  rosterActions: {
-    display: "flex",
-    alignItems: "center",
-    gap: "8px",
-  },
-  actionLink: {
+  rosterActions: { display: "flex", alignItems: "center", gap: "14px" },
+  linkBtn: {
     background: "none",
     border: "none",
     color: "#166534",
-    fontSize: "12px",
+    fontSize: "12.5px",
     fontWeight: 600,
     cursor: "pointer",
     padding: 0,
   },
-  searchRow: {
-    marginBottom: "10px",
-  },
-  rosterSearchInput: {
-    width: "100%",
-    padding: "7px 11px",
-    borderRadius: "6px",
-    border: "1px solid #CBD5E1",
-    fontSize: "12.5px",
-    outline: "none",
-    boxSizing: "border-box",
-  },
   rosterList: {
-    maxHeight: "180px",
+    height: "260px",
     overflowY: "auto",
     display: "grid",
-    gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))",
-    gap: "8px",
-    background: "#ffffff",
+    gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))",
+    alignContent: "start",
+    gap: "6px",
     border: "1px solid #E2E8F0",
-    borderRadius: "8px",
+    borderRadius: "10px",
     padding: "8px",
+    background: "#F8FAFC",
   },
-  rosterLoading: {
-    padding: "20px",
+  rosterEmpty: {
+    padding: "28px",
     textAlign: "center",
     fontSize: "13px",
     color: "#64748B",
     gridColumn: "1 / -1",
   },
-  rosterEmpty: {
-    padding: "20px",
-    textAlign: "center",
-    fontSize: "13px",
-    color: "#94A3B8",
-    gridColumn: "1 / -1",
-  },
-  patientCard: {
+  patientRow: {
     display: "flex",
     alignItems: "center",
-    gap: "8px",
+    gap: "10px",
     padding: "8px 10px",
-    borderRadius: "6px",
+    borderRadius: "8px",
     border: "1px solid #E2E8F0",
     background: "#ffffff",
     cursor: "pointer",
-    transition: "all 0.15s ease",
+    minWidth: 0,
   },
-  patientCardSelected: {
-    background: "#F0FDF4",
-    borderColor: "#86EFAC",
-  },
-  checkbox: {
-    cursor: "pointer",
-    accentColor: "#166534",
-  },
-  patientInfo: {
-    overflow: "hidden",
-  },
+  patientRowSelected: { background: "#F0FDF4", borderColor: "#86EFAC" },
+  checkbox: { cursor: "pointer", accentColor: "#166534", width: "16px", height: "16px", flexShrink: 0, margin: 0 },
+  patientInfo: { display: "flex", flexDirection: "column", minWidth: 0 },
   patientName: {
-    fontSize: "12.5px",
+    fontSize: "13px",
     fontWeight: 600,
     color: "#1E293B",
     whiteSpace: "nowrap",
@@ -621,42 +594,39 @@ const styles = {
     textOverflow: "ellipsis",
   },
   patientMeta: {
-    fontSize: "11px",
+    fontSize: "11.5px",
     color: "#64748B",
     whiteSpace: "nowrap",
     overflow: "hidden",
     textOverflow: "ellipsis",
   },
-  summaryBox: {
-    background: "#ECFDF5",
-    border: "1px solid #A7F3D0",
-    borderRadius: "8px",
-    padding: "10px 14px",
+  footer: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: "12px",
+    flexWrap: "wrap",
+    padding: "14px 24px",
+    borderTop: "1px solid #E2E8F0",
+    background: "#ffffff",
   },
-  summaryLeft: {
+  footerSummary: {
     display: "flex",
     alignItems: "center",
     gap: "10px",
-    color: "#065F46",
-    fontSize: "13px",
+    fontSize: "12.5px",
+    color: "#475569",
+    minWidth: 0,
   },
-  summaryIcon: {
-    fontSize: "20px",
+  modalityTag: {
+    padding: "2px 8px",
+    borderRadius: "6px",
+    fontSize: "11.5px",
+    fontWeight: 700,
+    border: "1px solid",
+    whiteSpace: "nowrap",
   },
-  summarySub: {
-    fontSize: "12px",
-    color: "#047857",
-    marginTop: "2px",
-  },
-  footer: {
-    display: "flex",
-    justifyContent: "flex-end",
-    alignItems: "center",
-    gap: "12px",
-    marginTop: "10px",
-    paddingTop: "14px",
-    borderTop: "1px solid #E2E8F0",
-  },
+  footerButtons: { display: "flex", gap: "10px", marginLeft: "auto" },
   cancelBtn: {
     background: "#ffffff",
     border: "1px solid #CBD5E1",
@@ -676,11 +646,6 @@ const styles = {
     fontSize: "13px",
     fontWeight: 700,
     cursor: "pointer",
-    boxShadow: "0 2px 4px rgba(22, 101, 52, 0.25)",
   },
-  submitBtnDisabled: {
-    background: "#94A3B8",
-    cursor: "not-allowed",
-    boxShadow: "none",
-  },
+  submitBtnDisabled: { background: "#94A3B8", cursor: "not-allowed" },
 };

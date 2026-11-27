@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { printElement } from "../utils/printElement.js";
 import api from "../api/axios.js";
 import CertificatePreview from "./CertificatePreview.jsx";
 import { downloadElementAsPdf } from "../utils/pdf.js";
@@ -33,10 +34,14 @@ export default function CertificateViewModal({ certificateId, autoAction, onClos
     };
   }, [certificateId]);
 
+  function printCertificate() {
+    printElement(previewRef.current, { title: `certificate-${certificate?.patientCode || certificateId}`, orientation: "portrait", margin: "12mm" });
+  }
+
   useEffect(() => {
     if (!certificate || !autoAction) return;
     if (autoAction === "print") {
-      const t = setTimeout(() => window.print(), 350);
+      const t = setTimeout(() => printCertificate(), 350);
       return () => clearTimeout(t);
     }
     if (autoAction === "download") {
@@ -84,7 +89,7 @@ export default function CertificateViewModal({ certificateId, autoAction, onClos
                 <button
                   type="button"
                   style={styles.actionBtn}
-                  onClick={() => window.print()}
+                  onClick={() => printCertificate()}
                   disabled={downloading}
                 >
                   Print

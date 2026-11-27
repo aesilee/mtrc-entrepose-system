@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
+import { printElement } from "../utils/printElement.js";
 import AppShell from "../components/AppShell.jsx";
 import api from "../api/axios.js";
 import Select from "react-select";
@@ -7,6 +8,7 @@ import { useAuth } from "../context/AuthContext.jsx";
 export default function Certificates() {
   const { user } = useAuth();
   const [patients, setPatients] = useState([]);
+  const certRef = useRef(null);
   const [selectedPatient, setSelectedPatient] = useState(null);
   const [certType, setCertType] = useState("ENROLLMENT"); // ENROLLMENT | COMPLETION
   const [eligibility, setEligibility] = useState(null);
@@ -114,14 +116,14 @@ export default function Certificates() {
 
         {generatedPayload && (
           <div style={styles.actions}>
-            <button style={styles.btnPrint} onClick={() => window.print()}>🖨️ Print Certificate</button>
+            <button style={styles.btnPrint} onClick={() => printElement(certRef.current, { title: `Certificate_${generatedPayload.controlNo || "MTRC"}`, orientation: "portrait", margin: "12mm", frame: "keep" })}>🖨️ Print Certificate</button>
             <span style={{ fontSize: 13, color: 'gray' }}>Use "Save as PDF" in the print dialog to download.</span>
           </div>
         )}
       </div>
 
       {generatedPayload && (
-        <div className="print-area" style={styles.certificateCanvas}>
+        <div ref={certRef} className="print-area" style={styles.certificateCanvas}>
           <div style={styles.certHeader}>
             <h3 style={{ margin: 0 }}>REPUBLIC OF THE PHILIPPINES</h3>
             <h4 style={{ margin: '5px 0' }}>DEPARTMENT OF HEALTH</h4>

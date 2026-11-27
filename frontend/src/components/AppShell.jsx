@@ -84,8 +84,10 @@ export default function AppShell({ title, description, children }) {
             overflow: "auto",
             display: "flex",
             flexDirection: "column",
+            // No zIndex here on purpose: a zIndex would trap every dialog opened inside the page
+            // below the top bar (zIndex 20). Being positioned and after the background SVG in the
+            // DOM is enough to paint above the decoration.
             position: "relative",
-            zIndex: 1,
           }}
         >
           {children}

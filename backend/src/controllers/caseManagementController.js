@@ -424,17 +424,31 @@ export async function addDrugTest(req, res) {
     // Phase 1.3 & Phase 4 Alert: Positive Drug Test
     if (normResult === "POSITIVE" && patient) {
       if (patient.assigned_case_manager_id) {
+        // Same alert type as the attendance flow, so both entry points group together.
         await notifyUser(
           patient.assigned_case_manager_id,
           "patients",
-          "positive_drug_test",
+          "drug_test_positive",
           `Clinical Alert: Patient "${patient.full_name}" tested POSITIVE (${finalSubstanceTested}). Schedule case conference.`
         );
+        // Same-day follow-up task, exactly as when the positive is recorded from attendance.
+        try {
+          await pool.query(
+            "INSERT INTO follow_ups (patient_id, assigned_to, reason, due_date, status) VALUES (?, ?, ?, CURDATE(), 'pending')",
+            [
+              id,
+              patient.assigned_case_manager_id,
+              `Multi-3 Positive Drug Test (${finalSubstanceTested}): ${String(relatedVisit || "").trim() || testType || "Patient profile entry"} (${testDate})`,
+            ]
+          );
+        } catch (fuErr) {
+          console.error("Positive drug test follow-up creation failed:", fuErr);
+        }
       }
       await notifyRoles(
         ["ict_admin", "him_staff"],
         "patients",
-        "positive_drug_test",
+        "drug_test_positive",
         `Clinical Alert: Patient "${patient.full_name}" tested POSITIVE (${finalSubstanceTested}).`
       );
     }

@@ -11,7 +11,6 @@ import SharedEmptyState from "../components/EmptyState.jsx";
 import StatutoryCertificateModal from "../components/StatutoryCertificateModal.jsx";
 import DrugTestModal from "../components/DrugTestModal.jsx";
 import TreatmentPlanModal from "../components/TreatmentPlanModal.jsx";
-import CbteEvaluationModal from "../components/CbteEvaluationModal.jsx";
 import CourtProgressReportModal from "../components/CourtProgressReportModal.jsx";
 import DischargeModal from "../components/DischargeModal.jsx";
 import TransmittalNoticeModal from "../components/TransmittalNoticeModal.jsx";
@@ -129,8 +128,6 @@ export default function PatientProfile() {
   const [reviewAttSaving, setReviewAttSaving] = useState(false);
   const [treatmentPlanModalOpen, setTreatmentPlanModalOpen] = useState(false);
   const [treatmentPlan, setTreatmentPlan] = useState(null);
-  const [cbteModalOpen, setCbteModalOpen] = useState(false); // false | true | { evalRecord, readOnly }
-  const [cbteEvaluations, setCbteEvaluations] = useState([]);
   const [courtReportModalOpen, setCourtReportModalOpen] = useState(false);
   
   const [milestones, setMilestones] = useState(null);
@@ -246,10 +243,9 @@ export default function PatientProfile() {
       optional(api.get(`/case-management/patients/${id}/sessions/summary`), null),
       optional(api.get(`/case-management/patients/${id}/drug-tests`), { drugTests: [] }),
       api.get(`/case-management/patients/${id}/treatment-plan`).catch(() => ({ data: { treatmentPlan: null } })),
-      api.get(`/case-management/patients/${id}/cbte-evaluations`).catch(() => ({ data: { evaluations: [] } })),
       api.get(`/case-management/patients/${id}/interventions`).catch(() => ({ data: { interventions: [], summary: {} } })),
       api.get(`/patients/${id}/assignment-history`).catch(() => ({ data: { history: [] } })),
-    ]).then(([p, a, pn, c, h, fu, tl, cm, pr, ms, ss, dt, tp, cbte, interv, assignH]) => {
+    ]).then(([p, a, pn, c, h, fu, tl, cm, pr, ms, ss, dt, tp, interv, assignH]) => {
       setPatient(p.data.patient);
       setForm(toFormState(p.data.patient));
       setAttendance(a.data.attendance);
@@ -265,7 +261,6 @@ export default function PatientProfile() {
       setSessionSummary(ss.data);
       setDrugTests(dt.data.drugTests || []);
       setTreatmentPlan(tp?.data?.treatmentPlan || null);
-      setCbteEvaluations(cbte?.data?.evaluations || []);
       setInterventions(interv?.data?.interventions || []);
       setInterventionSummary(interv?.data?.summary || null);
       setAssignmentHistory(assignH?.data?.history || []);
@@ -1049,54 +1044,23 @@ export default function PatientProfile() {
                   marginBottom: 20,
                 }}
               >
-                <div style={{ background: "#F0FDF4", border: "1px solid #BBF7D0", borderRadius: 8, padding: "12px 14px" }}>
-                  <div style={{ fontSize: 11, fontWeight: 700, color: "#166534", textTransform: "uppercase", letterSpacing: "0.04em" }}>Attendance Rate</div>
-                  <div style={{ fontSize: 22, fontWeight: 800, color: "#14532D", marginTop: 2 }}>{attendancePct !== null ? `${attendancePct}%` : "—"}</div>
-                  <div style={{ fontSize: 11, color: "#15803D", marginTop: 2, fontWeight: 600 }}>DOH Target: ≥80%</div>
-                </div>
-
-                <div style={{ background: "#F8FAFC", border: "1px solid #E2E8F0", borderRadius: 8, padding: "12px 14px" }}>
-                  <div style={{ fontSize: 11, fontWeight: 700, color: "#64748B", textTransform: "uppercase", letterSpacing: "0.04em" }}>Physical Attended</div>
-                  <div style={{ fontSize: 22, fontWeight: 800, color: "#1E293B", marginTop: 2 }}>{presentCount}</div>
-                  <div style={{ fontSize: 11, color: "#64748B", marginTop: 2 }}>{lateCount ? `${lateCount} Late arrival` : "All on-time"}</div>
-                </div>
-
-                <div style={{ background: "#FFFBEB", border: "1px solid #FDE68A", borderRadius: 8, padding: "12px 14px" }}>
-                  <div style={{ fontSize: 11, fontWeight: 700, color: "#92400E", textTransform: "uppercase", letterSpacing: "0.04em" }}>Pending Review</div>
-                  <div style={{ fontSize: 22, fontWeight: 800, color: "#B45309", marginTop: 2 }}>{pendingReviewCount}</div>
-                  <div style={{ fontSize: 11, color: "#92400E", marginTop: 2 }}>Awaiting CM decision</div>
-                </div>
-
-                <div style={{ background: "#FAF5FF", border: "1px solid #E9D5FF", borderRadius: 8, padding: "12px 14px" }}>
-                  <div style={{ fontSize: 11, fontWeight: 700, color: "#6B21A8", textTransform: "uppercase", letterSpacing: "0.04em" }}>Excused Absences</div>
-                  <div style={{ fontSize: 22, fontWeight: 800, color: "#581C87", marginTop: 2 }}>{excusedCount}</div>
-                  <div style={{ fontSize: 11, color: "#7E22CE", marginTop: 2 }}>{outstandingReqCount ? `${outstandingReqCount} need makeup` : "Resolved"}</div>
-                </div>
-
-                <div style={{ background: missedCount > 0 ? "#FEF2F2" : "#F8FAFC", border: missedCount > 0 ? "1px solid #FECDD3" : "1px solid #E2E8F0", borderRadius: 8, padding: "12px 14px" }}>
-                  <div style={{ fontSize: 11, fontWeight: 700, color: missedCount > 0 ? "#991B1B" : "#64748B", textTransform: "uppercase", letterSpacing: "0.04em" }}>Unexcused Absent</div>
-                  <div style={{ fontSize: 22, fontWeight: 800, color: missedCount > 0 ? "#DC2626" : "#1E293B", marginTop: 2 }}>{missedCount}</div>
-                  <div style={{ fontSize: 11, color: missedCount > 0 ? "#B91C1C" : "#64748B", marginTop: 2 }}>{missedCount > 0 ? "Missed sessions" : "None"}</div>
-                </div>
-
-                <div style={{ background: "#EFF6FF", border: "1px solid #BFDBFE", borderRadius: 8, padding: "12px 14px" }}>
-                  <div style={{ fontSize: 11, fontWeight: 700, color: "#1E40AF", textTransform: "uppercase", letterSpacing: "0.04em" }}>Supplementary</div>
-                  <div style={{ fontSize: 22, fontWeight: 800, color: "#1D4ED8", marginTop: 2 }}>
-                    {sessionSummary?.supplementary?.totalSupplementaryCredited ?? ((sessionSummary?.shgm || 0) + (sessionSummary?.indCounseling || 0) + (sessionSummary?.conjointFamily || 0))}
-                  </div>
-                  <div style={{ fontSize: 11, color: "#2563EB", marginTop: 2 }}>SHGM · ICA · Family</div>
-                </div>
+                <StatCard tone="forest" label="Attendance Rate" value={attendancePct !== null ? `${attendancePct}%` : "—"} sub="DOH Target: ≥80%" />
+                <StatCard tone="sage" label="Physical Attended" value={presentCount} sub={lateCount ? `${lateCount} Late arrival` : "All on-time"} />
+                <StatCard tone={pendingReviewCount > 0 ? "amber" : "olive"} label="Pending Review" value={pendingReviewCount} sub={pendingReviewCount > 0 ? "Awaiting CM decision" : "Nothing to review"} />
+                <StatCard tone="moss" label="Excused Absences" value={excusedCount} sub={outstandingReqCount ? `${outstandingReqCount} need makeup` : "Resolved"} />
+                <StatCard tone={missedCount > 0 ? "clay" : "sage"} label="Unexcused Absent" value={missedCount} sub={missedCount > 0 ? "Missed sessions" : "None"} />
+                <StatCard
+                  tone="pine"
+                  label="Supplementary"
+                  value={sessionSummary?.supplementary?.totalSupplementaryCredited ?? ((sessionSummary?.shgm || 0) + (sessionSummary?.indCounseling || 0) + (sessionSummary?.conjointFamily || 0))}
+                  sub="SHGM · ICA · Family"
+                />
               </div>
 
               {sessionSummary?.components && (
                 <CurriculumCompletionPanel
                   sessionSummary={sessionSummary}
                   canManageCase={canManageCase}
-                  onOpenCbteModal={() => {
-                    setActiveSection("case-notes");
-                    setCaseSubTab("cbte");
-                    setCbteModalOpen(true);
-                  }}
                 />
               )}
 
@@ -1449,7 +1413,6 @@ export default function PatientProfile() {
                     { key: "summary", label: "Progress & Summary" },
                     { key: "interventions", label: "Interventions & Consultations" },
                     { key: "milestones", label: "Milestones" },
-                    { key: "cbte", label: "CBT-E Evaluations" },
                     { key: "drug-tests", label: "Drug Tests" },
                     { key: "notes", label: "Progress Notes" },
                     { key: "followups", label: "Follow-up Actions" },
@@ -1602,219 +1565,6 @@ export default function PatientProfile() {
                 </div>
               )}
 
-              {caseSubTab === "cbte" && (
-                <div>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-                    <div>
-                      <h3 style={{ margin: 0, fontSize: 16, color: "#2D3748" }}>CBT Clinical Evaluations (CBT-E 1, 2, 3)</h3>
-                      <p style={{ margin: "2px 0 0", fontSize: 12.5, color: "#718096" }}>
-                        Approved source worksheets: Sesyon 1 (Recovery Status), Sesyon 2 (Relapse Prevention Behaviors), and Sesyon 3 (Continuing Treatment Planning).
-                      </p>
-                    </div>
-                    {canManageCase && (
-                      <button
-                        type="button"
-                        style={styles.generateBtn}
-                        onClick={() => setCbteModalOpen({ evalRecord: null, readOnly: false })}
-                      >
-                        + Record CBT-E Evaluation
-                      </button>
-                    )}
-                  </div>
-
-                  {cbteEvaluations.length === 0 ? (
-                    <EmptyState text="No CBT-E evaluations recorded yet. Record CBT-E 1 at Week 5, CBT-E 2 at Week 13, and CBT-E 3 at Month 6–7." />
-                  ) : (
-                    <div style={styles.list}>
-                      {cbteEvaluations.map((ev) => {
-                        const ws = ev.worksheet_responses_json || {};
-                        const selfRisk = ev.self_reported_status || null;
-                        const staffRisk = ev.staff_risk_assessment || null;
-                        const basisLabel =
-                          ev.form_basis === "MTRC_APPROVED_LOCAL_ADAPTATION"
-                            ? "MTRC Approved Local Adaptation"
-                            : "Supplied ENTREPOSE Source Worksheet";
-
-                        return (
-                          <div key={ev.id} style={styles.noteCard}>
-                            <div style={styles.noteHeader}>
-                              <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                                <span
-                                  style={{
-                                    fontWeight: 800,
-                                    fontSize: 12.5,
-                                    padding: "3px 10px",
-                                    borderRadius: 6,
-                                    background:
-                                      ev.evaluation_type === "CBTE_1"
-                                        ? "#EBF8FF"
-                                        : ev.evaluation_type === "CBTE_2"
-                                        ? "#FEF3C7"
-                                        : "#ECFDF5",
-                                    color:
-                                      ev.evaluation_type === "CBTE_1"
-                                        ? "#2B6CB0"
-                                        : ev.evaluation_type === "CBTE_2"
-                                        ? "#92400E"
-                                        : "#065F46",
-                                  }}
-                                >
-                                  {ev.evaluation_type === "CBTE_1"
-                                    ? "CBT-E 1 (Sesyon 1 · Week 5)"
-                                    : ev.evaluation_type === "CBTE_2"
-                                    ? "CBT-E 2 (Sesyon 2 · Week 13)"
-                                    : "CBT-E 3 (Sesyon 3 · Month 6–7)"}
-                                </span>
-                                <span style={{ fontWeight: 700, fontSize: 13 }}>{fmtDate(ev.evaluation_date)}</span>
-                                <span
-                                  style={{
-                                    fontSize: 11,
-                                    background: "#F1F5F9",
-                                    color: "#334155",
-                                    border: "1px solid #CBD5E1",
-                                    padding: "2px 8px",
-                                    borderRadius: 999,
-                                    fontWeight: 700,
-                                  }}
-                                >
-                                  📋 {basisLabel}
-                                </span>
-                                {selfRisk && (
-                                  <span
-                                    style={{
-                                      fontSize: 11,
-                                      fontWeight: 700,
-                                      padding: "2px 8px",
-                                      borderRadius: 999,
-                                      background:
-                                        selfRisk === "USED"
-                                          ? "#FEE2E2"
-                                          : selfRisk === "NEARLY_USED"
-                                          ? "#FFEDD5"
-                                          : selfRisk === "AT_RISK"
-                                          ? "#FEF3C7"
-                                          : "#ECFDF5",
-                                      color:
-                                        selfRisk === "USED"
-                                          ? "#991B1B"
-                                          : selfRisk === "NEARLY_USED"
-                                          ? "#9A3412"
-                                          : selfRisk === "AT_RISK"
-                                          ? "#92400E"
-                                          : "#065F46",
-                                    }}
-                                  >
-                                    {selfRisk === "USED"
-                                      ? "🔴 Self: Used / Slip"
-                                      : selfRisk === "NEARLY_USED"
-                                      ? "🟠 Self: Nearly Used (Craving / No Use)"
-                                      : selfRisk === "AT_RISK"
-                                      ? "🟡 Self: At Risk (No Use)"
-                                      : "🟢 Self: Safe / Abstinent"}
-                                  </span>
-                                )}
-                                {staffRisk && (
-                                  <span
-                                    style={{
-                                      fontSize: 11,
-                                      fontWeight: 700,
-                                      padding: "2px 8px",
-                                      borderRadius: 999,
-                                      background: "#EFF6FF",
-                                      color: "#1E40AF",
-                                    }}
-                                  >
-                                    🩺 Staff Risk: {staffRisk.replace(/_/g, " ")}
-                                  </span>
-                                )}
-                                <span
-                                  style={{
-                                    fontSize: 11,
-                                    fontWeight: 700,
-                                    padding: "2px 8px",
-                                    borderRadius: 999,
-                                    background:
-                                      ev.clinical_judgment === "RECOMMEND_DISCHARGE"
-                                        ? "#ECFDF5"
-                                        : ev.clinical_judgment === "NEEDS_INTENSIFICATION"
-                                        ? "#FEF3C7"
-                                        : ev.clinical_judgment === "REFER_RESIDENTIAL"
-                                        ? "#FEE2E2"
-                                        : "#EBF8FF",
-                                    color:
-                                      ev.clinical_judgment === "RECOMMEND_DISCHARGE"
-                                        ? "#065F46"
-                                        : ev.clinical_judgment === "NEEDS_INTENSIFICATION"
-                                        ? "#92400E"
-                                        : ev.clinical_judgment === "REFER_RESIDENTIAL"
-                                        ? "#991B1B"
-                                        : "#2B6CB0",
-                                  }}
-                                >
-                                  {ev.clinical_judgment === "RECOMMEND_DISCHARGE"
-                                    ? "🎓 Discharge Ready"
-                                    : ev.clinical_judgment === "NEEDS_INTENSIFICATION"
-                                    ? "⚠️ Needs Intensification"
-                                    : ev.clinical_judgment === "REFER_RESIDENTIAL"
-                                    ? "🚨 Residential Re-eval"
-                                    : "✅ On Track"}
-                                </span>
-                              </div>
-                              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                                <span style={styles.noteMeta}>Evaluator: {ev.evaluator_name || "Case Manager"}</span>
-                                <button
-                                  type="button"
-                                  style={styles.editLink}
-                                  onClick={() => setCbteModalOpen({ evalRecord: ev, readOnly: true })}
-                                >
-                                  👁️ View Worksheet
-                                </button>
-                                {canManageCase && (
-                                  <button
-                                    type="button"
-                                    style={styles.editLink}
-                                    onClick={() => setCbteModalOpen({ evalRecord: ev, readOnly: false })}
-                                  >
-                                    Edit
-                                  </button>
-                                )}
-                              </div>
-                            </div>
-
-                            {ws.abstinence_duration && (
-                              <p style={styles.noteContent}>
-                                <strong>Reported Abstinence Duration:</strong> {ws.abstinence_duration}
-                                {ws.recovery_stage ? ` · Stage: ${ws.recovery_stage}` : ""}
-                                {ws.craving_frequency ? ` · Craving Frequency: ${ws.craving_frequency}` : ""}
-                              </p>
-                            )}
-                            {ws.life_changes_reflection && (
-                              <p style={styles.noteContent}>
-                                <strong>Observed Recovery Changes:</strong> {ws.life_changes_reflection}
-                              </p>
-                            )}
-                            {ws.effective_coping_strategies && (
-                              <p style={styles.noteContent}>
-                                <strong>Effective Relapse Prevention Strategies:</strong> {ws.effective_coping_strategies}
-                              </p>
-                            )}
-                            {ev.life_goals_text && (
-                              <p style={styles.noteContent}>
-                                <strong>Continuing Recovery Goals:</strong> {ev.life_goals_text}
-                              </p>
-                            )}
-                            {ev.evaluator_remarks && (
-                              <p style={styles.noteContent}>
-                                <strong>Evaluator Remarks:</strong> {ev.evaluator_remarks}
-                              </p>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-              )}
 
               {caseSubTab === "summary" && (
                 <div>
@@ -1851,24 +1601,6 @@ export default function PatientProfile() {
                           <button
                             type="button"
                             style={{
-                              background: "#3D7A52",
-                              color: "#FFFFFF",
-                              border: "1px solid #2C5B3C",
-                              padding: "8px 16px",
-                              borderRadius: 8,
-                              fontSize: 12.5,
-                              fontWeight: 700,
-                              cursor: "pointer",
-                              boxShadow: "0 2px 6px rgba(61, 122, 82, 0.2)",
-                              transition: "all 0.15s ease",
-                            }}
-                            onClick={() => setCbteModalOpen(true)}
-                          >
-                            + Record CBT-E
-                          </button>
-                          <button
-                            type="button"
-                            style={{
                               background: "#486B52",
                               color: "#FFFFFF",
                               border: "1px solid #36533E",
@@ -1892,7 +1624,6 @@ export default function PatientProfile() {
                       <CurriculumCompletionPanel
                         sessionSummary={sessionSummary}
                         canManageCase={canManageCase}
-                        onOpenCbteModal={() => setCbteModalOpen(true)}
                       />
                     ) : (
                       <>
@@ -2699,23 +2430,6 @@ export default function PatientProfile() {
         />
       )}
 
-      {cbteModalOpen && (
-        <CbteEvaluationModal
-          patient={patient}
-          existingEvaluation={
-            typeof cbteModalOpen === "object" ? cbteModalOpen.evalRecord : null
-          }
-          readOnly={
-            typeof cbteModalOpen === "object" ? Boolean(cbteModalOpen.readOnly) : false
-          }
-          onClose={() => setCbteModalOpen(false)}
-          onSaved={() => {
-            setCbteModalOpen(false);
-            loadAll();
-            setToast("CBT-E evaluation saved and clinical milestones synchronized.");
-          }}
-        />
-      )}
 
       {courtReportModalOpen && (
         <CourtProgressReportModal
@@ -3294,7 +3008,29 @@ function EmptyState({ text }) {
   return <SharedEmptyState title={text} />;
 }
 
-function CurriculumCompletionPanel({ sessionSummary, canManageCase, onOpenCbteModal }) {
+// Warm green palette for the attendance summary cards. Amber/clay appear only when a count needs attention.
+const STAT_TONES = {
+  forest: { bg: "#EEF5E9", border: "#C8DCBB", label: "#3D6A33", value: "#2B4F24", sub: "#4E7D42" },
+  sage: { bg: "#F5F7EF", border: "#DCE4CF", label: "#5E7552", value: "#34472C", sub: "#6B7F5F" },
+  olive: { bg: "#F6F6EA", border: "#E0DFBF", label: "#68692F", value: "#4F5023", sub: "#76773E" },
+  moss: { bg: "#F0F5EC", border: "#D2E1C8", label: "#4C6B42", value: "#33502B", sub: "#5A7A4F" },
+  pine: { bg: "#EBF4EF", border: "#C5DECF", label: "#2F6650", value: "#1F4D3B", sub: "#3D7660" },
+  amber: { bg: "#FBF4E2", border: "#EBD8A8", label: "#8A5C14", value: "#7A4F0E", sub: "#8A6524" },
+  clay: { bg: "#FBEEE7", border: "#EBCBBB", label: "#94432A", value: "#843A22", sub: "#9A5038" },
+};
+
+function StatCard({ tone, label, value, sub }) {
+  const t = STAT_TONES[tone] || STAT_TONES.sage;
+  return (
+    <div style={{ background: t.bg, border: `1px solid ${t.border}`, borderRadius: 8, padding: "12px 14px" }}>
+      <div style={{ fontSize: 11, fontWeight: 700, color: t.label, textTransform: "uppercase", letterSpacing: "0.04em" }}>{label}</div>
+      <div style={{ fontSize: 22, fontWeight: 800, color: t.value, marginTop: 2 }}>{value}</div>
+      <div style={{ fontSize: 11, color: t.sub, marginTop: 2, fontWeight: 600 }}>{sub}</div>
+    </div>
+  );
+}
+
+function CurriculumCompletionPanel({ sessionSummary, canManageCase }) {
   const [expanded, setExpanded] = useState({ cbt: false, cbte: true, pe: true });
 
   const cbt = sessionSummary?.components?.cbt || {
@@ -3671,26 +3407,6 @@ function CurriculumCompletionPanel({ sessionSummary, canManageCase, onOpenCbteMo
               </td>
               <td style={{ textAlign: "right", padding: "14px 18px" }}>
                 <div style={{ display: "inline-flex", gap: 8, alignItems: "center" }}>
-                  {canManageCase && !cbte.isComplete && onOpenCbteModal && (
-                    <button
-                      type="button"
-                      onClick={onOpenCbteModal}
-                      style={{
-                        background: "#2A6A45",
-                        border: "1px solid #1E5033",
-                        color: "#FFFFFF",
-                        borderRadius: 7,
-                        padding: "5px 12px",
-                        fontSize: 12,
-                        fontWeight: 700,
-                        cursor: "pointer",
-                        boxShadow: "0 2px 5px rgba(42, 106, 69, 0.2)",
-                        transition: "all 0.15s ease",
-                      }}
-                    >
-                      + Record CBT-E
-                    </button>
-                  )}
                   <button
                     type="button"
                     onClick={() => toggleComponent("cbte")}
@@ -3807,26 +3523,10 @@ function CurriculumCompletionPanel({ sessionSummary, canManageCase, onOpenCbteMo
                           </div>
                         </div>
 
-                        {!stage.isDone && canManageCase && onOpenCbteModal && (
-                          <button
-                            type="button"
-                            onClick={onOpenCbteModal}
-                            style={{
-                              background: "#2A6A45",
-                              border: "none",
-                              color: "#FFFFFF",
-                              borderRadius: 6,
-                              padding: "6px 12px",
-                              fontSize: 11.5,
-                              fontWeight: 700,
-                              cursor: "pointer",
-                              alignSelf: "flex-start",
-                              marginTop: 4,
-                              boxShadow: "0 2px 4px rgba(42, 106, 69, 0.2)",
-                            }}
-                          >
-                            + Record {stage.code}
-                          </button>
+                        {!stage.isDone && (
+                          <div style={{ fontSize: 11, color: "#6B7F5F", marginTop: 4, fontStyle: "italic" }}>
+                            Credited when the client's attendance at this CBT-E session is recorded. The client answers the Vol. 2A worksheet.
+                          </div>
                         )}
                       </div>
                     ))}

@@ -34,6 +34,14 @@ function computeMinutesLate(scheduledTime, arrivalTime) {
   return diff > 0 ? diff : 0;
 }
 
+// ENTREPOSE late-arrival rule (fixed, not an editable setting):
+// within 15 minutes = Credited; 16–30 minutes = Pending Review by the case manager; over 30 minutes = Not Credited.
+const LATE_ARRIVAL_RULES = {
+  lateGraceMinutes: 15,
+  maxLateForAutoReviewMinutes: 30,
+  lateDefaultDecision: "PENDING_REVIEW",
+};
+
 export default function RecordAttendanceModal({ initialPatientId, existingSession, onClose, onSaved }) {
   const { user } = useAuth();
   const defaultStaffName = user?.full_name || user?.username || "";
@@ -49,12 +57,7 @@ export default function RecordAttendanceModal({ initialPatientId, existingSessio
   const [topics, setTopics] = useState([]);
   const [creditedTopicsByPatient, setCreditedTopicsByPatient] = useState({});
   const [outstandingByPatient, setOutstandingByPatient] = useState({});
-  const [policy, setPolicy] = useState({
-    lateGraceMinutes: 15,
-    maxLateForAutoReviewMinutes: 30,
-    lateDefaultDecision: "PENDING_REVIEW",
-    approvedByTitle: "MTRC Designated Supervisor",
-  });
+  const policy = LATE_ARRIVAL_RULES;
 
   const [expectedRosterIds, setExpectedRosterIds] = useState([]);
   const [chairPatientId, setChairPatientId] = useState(null);
@@ -178,8 +181,7 @@ export default function RecordAttendanceModal({ initialPatientId, existingSessio
       api.get("/patients?forAttendance=true&limit=300").catch(() => ({ data: {} })),
       api.get("/sessions/topics").catch(() => ({ data: {} })),
       api.get("/attendance/patient-context").catch(() => ({ data: {} })),
-      api.get("/attendance/policy").catch(() => ({ data: {} })),
-    ]).then(([cmRes, ptRes, topRes, ctxRes, polRes]) => {
+    ]).then(([cmRes, ptRes, topRes, ctxRes]) => {
       if (cmRes.data?.caseManagers) setCaseManagers(cmRes.data.caseManagers);
       if (ptRes.data?.patients) {
         setPatients(ptRes.data.patients);
@@ -192,9 +194,6 @@ export default function RecordAttendanceModal({ initialPatientId, existingSessio
       }
       if (ctxRes.data?.outstandingByPatient) {
         setOutstandingByPatient(ctxRes.data.outstandingByPatient);
-      }
-      if (polRes.data?.policy) {
-        setPolicy((prev) => ({ ...prev, ...polRes.data.policy }));
       }
     });
   }, []);

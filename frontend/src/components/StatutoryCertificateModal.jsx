@@ -1,8 +1,10 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
+import { printElement } from "../utils/printElement.js";
 import api from "../api/axios.js";
 
 export default function StatutoryCertificateModal({ patient, initialType = "ENROLLMENT", reprintRecord = null, onClose, onIssued }) {
   const [certType, setCertType] = useState(reprintRecord?.certificate_type || initialType);
+  const certRef = useRef(null);
   const [eligibility, setEligibility] = useState(null);
   const [loading, setLoading] = useState(false);
   const [generating, setGenerating] = useState(false);
@@ -219,12 +221,12 @@ export default function StatutoryCertificateModal({ patient, initialType = "ENRO
               <div className="no-print" style={styles.successBar}>
                 <span>✅ Certificate issued successfully! Control No: <strong>{generatedPayload.controlNo}</strong></span>
                 <div style={{ display: 'flex', gap: 10 }}>
-                  <button type="button" style={styles.printBtn} onClick={() => window.print()}>🖨️ Print / Save PDF</button>
+                  <button type="button" style={styles.printBtn} onClick={() => printElement(certRef.current, { title: `Certificate_${generatedPayload.controlNo}`, orientation: "portrait", margin: "12mm", frame: "keep" })}>🖨️ Print / Save PDF</button>
                   <button type="button" style={styles.cancelBtn} onClick={onClose}>Done</button>
                 </div>
               </div>
 
-              <div className="print-area" style={styles.certificateCanvas}>
+              <div ref={certRef} className="print-area" style={styles.certificateCanvas}>
                 <div style={styles.certHeader}>
                   <h3 style={{ margin: 0 }}>REPUBLIC OF THE PHILIPPINES</h3>
                   <h4 style={{ margin: '5px 0' }}>DEPARTMENT OF HEALTH</h4>

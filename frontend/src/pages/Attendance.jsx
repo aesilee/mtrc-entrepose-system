@@ -4,6 +4,7 @@ import RecordAttendanceModal from "../components/RecordAttendanceModal.jsx";
 import ScheduleSessionModal from "../components/ScheduleSessionModal.jsx";
 import RescheduleSessionModal from "../components/RescheduleSessionModal.jsx";
 import EmptyState from "../components/EmptyState.jsx";
+import ArchiveConfirmModal from "../components/ArchiveConfirmModal.jsx";
 import api from "../api/axios.js";
 import useViewport from "../hooks/useViewport.js";
 import { useAuth } from "../context/AuthContext.jsx";
@@ -45,7 +46,6 @@ export default function Attendance() {
   const { isMobile, isTablet } = useViewport();
   const { user } = useAuth();
   const canManageAttendance = user?.role === "case_manager" || user?.role === "ict_admin";
-  const canApprovePolicy = user?.role === "ict_admin";
 
   const statCols = isMobile ? 1 : isTablet ? 2 : 4;
   const [stats, setStats] = useState(null);
@@ -53,7 +53,6 @@ export default function Attendance() {
   const [programs, setPrograms] = useState([]);
   const [caseManagers, setCaseManagers] = useState([]);
   const [outstandingByPatient, setOutstandingByPatient] = useState({});
-  const [policy, setPolicy] = useState(null);
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(false);
@@ -85,17 +84,6 @@ export default function Attendance() {
   const [reviewSaving, setReviewSaving] = useState(false);
   const [reviewError, setReviewError] = useState("");
 
-  // Policy Approval Modal State
-  const [policyModalOpen, setPolicyModalOpen] = useState(false);
-  const [policyForm, setPolicyForm] = useState({
-    lateGraceMinutes: 15,
-    maxLateForAutoReviewMinutes: 30,
-    lateDefaultDecision: "PENDING_REVIEW",
-    approvedByTitle: "MTRC Designated Supervisor",
-    approvedByName: "",
-    policyNotes: "",
-  });
-  const [policySaving, setPolicySaving] = useState(false);
 
   const [search, setSearch] = useState("");
   const [dateFilter, setDateFilter] = useState("");
@@ -135,17 +123,7 @@ export default function Attendance() {
       .then(({ data }) => setUnresolvedData(data || { unresolvedSessions: [], totalUnresolvedPatients: 0 }))
       .catch(() => {});
 
-    api.get("/attendance/stats").then(({ data }) => {
-      setStats(data);
-      if (data?.policy) {
-        setPolicy(data.policy);
-        setPolicyForm((prev) => ({
-          ...prev,
-          ...data.policy,
-          approvedByName: data.policy.approvedByName || user?.full_name || user?.username || "",
-        }));
-      }
-    });
+    api.get("/attendance/stats").then(({ data }) => setStats(data));
 
     api
       .get("/attendance/patient-context")
@@ -300,6 +278,48 @@ export default function Attendance() {
     setCompletionFilter("");
   }
 
+  // Edit menu on a record: cancel it (kept, shown as Session Cancelled) or archive it (moved out of all counts).
+  const [editMenu, setEditMenu] = useState(null); // { record, top, left }
+  const [editAction, setEditAction] = useState(null); // { type: "cancel" | "archive", record }
+  const [editNotice, setEditNotice] = useState("");
+
+  useEffect(() => {
+    if (!editMenu) return;
+    const close = () => setEditMenu(null);
+    const onKey = (e) => { if (e.key === "Escape") close(); };
+    window.addEventListener("scroll", close, true);
+    window.addEventListener("resize", close);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("scroll", close, true);
+      window.removeEventListener("resize", close);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [editMenu]);
+
+  useEffect(() => {
+    if (!editNotice) return;
+    const t = setTimeout(() => setEditNotice(""), 4000);
+    return () => clearTimeout(t);
+  }, [editNotice]);
+
+  function openEditMenu(e, record) {
+    const r = e.currentTarget.getBoundingClientRect();
+    const menuWidth = 230;
+    setEditMenu({ record, top: r.bottom + 6, left: Math.max(8, Math.min(r.right - menuWidth, window.innerWidth - menuWidth - 8)) });
+  }
+
+  async function confirmEditAction(reason) {
+    const { type, record } = editAction;
+    const { data } =
+      type === "cancel"
+        ? await api.put(`/attendance/${record.id}/cancel`, { reason })
+        : await api.post(`/attendance/${record.id}/archive`, { reason });
+    setEditAction(null);
+    setEditNotice(data?.message || (type === "cancel" ? "Attendance cancelled." : "Attendance archived."));
+    loadData();
+  }
+
   function openReviewModal(rec) {
     setReviewRecord(rec);
     setReviewError("");
@@ -330,50 +350,12 @@ export default function Attendance() {
     }
   }
 
-  async function handleSavePolicy(e) {
-    e.preventDefault();
-    setPolicySaving(true);
-    try {
-      const { data } = await api.put("/attendance/policy", policyForm);
-      if (data?.policy) setPolicy(data.policy);
-      setPolicyModalOpen(false);
-      loadData();
-    } catch (err) {
-      alert(err.response?.data?.message || "Could not save attendance policy.");
-    } finally {
-      setPolicySaving(false);
-    }
-  }
-
   return (
     <AppShell
       title="Attendance & Curriculum Completion"
       description="Record physical attendance separately from curriculum completion credit, review late arrivals, link makeups, and prevent duplicate credit."
     >
       <div style={styles.wrapper}>
-        {/* MTRC Approved Attendance Policy Banner */}
-        <div style={styles.policyBanner}>
-          <div style={styles.policyBannerLeft}>
-            <span style={styles.policyBadgePill}>MTRC Approved Policy</span>
-            <span style={styles.policyText}>
-              <strong>Grace Period:</strong> {policy?.lateGraceMinutes ?? 15} mins ·{" "}
-              <strong>Late Arrival Rule:</strong> Case Manager reviews participation ({policy?.lateDefaultDecision === "CREDITED" ? "Credited" : "Pending Review"} by default) ·{" "}
-              <strong>Repeat Topics:</strong> No duplicate curriculum credit ·{" "}
-              <strong>Makeups:</strong> Linked to original missed requirement (absence preserved) ·{" "}
-              <strong>Approved by:</strong> {policy?.approvedByName ? `${policy.approvedByName} (${policy?.approvedByTitle || "Supervisor"})` : policy?.approvedByTitle || "MTRC Designated Supervisor"}
-            </span>
-          </div>
-          {canApprovePolicy && (
-            <button
-              type="button"
-              style={styles.policyEditBtn}
-              onClick={() => setPolicyModalOpen(true)}
-            >
-              ⚙️ Attendance Policy
-            </button>
-          )}
-        </div>
-
         {/* Summary Stat Cards */}
         <div style={{ ...styles.statsRow, gridTemplateColumns: `repeat(${statCols}, 1fr)` }}>
           <StatCard
@@ -894,13 +876,23 @@ export default function Attendance() {
                           </div>
                         )}
                         {canManageAttendance ? (
-                          <button
-                            type="button"
-                            style={styles.reviewActionBtn}
-                            onClick={() => openReviewModal(r)}
-                          >
-                            Review
-                          </button>
+                          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                            <button
+                              type="button"
+                              style={styles.reviewActionBtn}
+                              onClick={() => openReviewModal(r)}
+                            >
+                              Review
+                            </button>
+                            <button
+                              type="button"
+                              style={styles.editActionBtn}
+                              onClick={(e) => openEditMenu(e, r)}
+                              aria-haspopup="menu"
+                            >
+                              Edit ▾
+                            </button>
+                          </div>
                         ) : (
                           !r.notes && <span style={{ color: "var(--color-text-muted)" }}>—</span>
                         )}
@@ -1908,120 +1900,51 @@ export default function Attendance() {
         </div>
       )}
 
-      {/* MTRC Attendance Policy Approval Modal */}
-      {policyModalOpen && (
-        <div style={styles.modalBackdrop} onClick={() => setPolicyModalOpen(false)}>
-          <div style={styles.smallModal} onClick={(e) => e.stopPropagation()}>
-            <div style={styles.smallModalHeader}>
-              <div>
-                <div style={styles.smallModalTitle}>MTRC Approved Attendance & Participation Policy</div>
-                <div style={styles.smallModalSub}>
-                  Configure participation rules for late arrivals, duplicate credit prevention, and supervisor approval.
-                </div>
-              </div>
+      {editMenu && (
+        <>
+          <div style={styles.editMenuBackdrop} onClick={() => setEditMenu(null)} />
+          <div role="menu" style={{ ...styles.editMenu, top: editMenu.top, left: editMenu.left }}>
+            {editMenu.record.status !== "cancelled" && (
               <button
                 type="button"
-                style={styles.closeBtn}
-                onClick={() => setPolicyModalOpen(false)}
+                role="menuitem"
+                style={styles.editMenuItem}
+                onClick={() => { setEditAction({ type: "cancel", record: editMenu.record }); setEditMenu(null); }}
               >
-                ×
+                <span style={styles.editMenuTitle}>Mark as Session Cancelled</span>
+                <span style={styles.editMenuHint}>Keeps the record; not absent, not credited</span>
               </button>
-            </div>
-
-            <form onSubmit={handleSavePolicy} style={styles.smallModalBody}>
-              <div style={styles.grid2}>
-                <label style={styles.fieldLabel}>
-                  Late Arrival Grace Period (Minutes)
-                  <input
-                    type="number"
-                    min="0"
-                    max="120"
-                    style={styles.fieldInput}
-                    value={policyForm.lateGraceMinutes}
-                    onChange={(e) =>
-                      setPolicyForm((prev) => ({
-                        ...prev,
-                        lateGraceMinutes: Number(e.target.value),
-                      }))
-                    }
-                  />
-                </label>
-
-                <label style={styles.fieldLabel}>
-                  Default Late Completion Status
-                  <select
-                    style={styles.fieldInput}
-                    value={policyForm.lateDefaultDecision}
-                    onChange={(e) =>
-                      setPolicyForm((prev) => ({
-                        ...prev,
-                        lateDefaultDecision: e.target.value,
-                      }))
-                    }
-                  >
-                    <option value="PENDING_REVIEW">Pending Review (Case Manager decides)</option>
-                    <option value="CREDITED">Credited (within grace period)</option>
-                    <option value="NOT_CREDITED">Not Credited (unless overridden)</option>
-                  </select>
-                </label>
-              </div>
-
-              <div style={styles.grid2}>
-                <label style={styles.fieldLabel}>
-                  Approving Supervisor Name
-                  <input
-                    type="text"
-                    style={styles.fieldInput}
-                    placeholder="Name of MTRC Designated Supervisor"
-                    value={policyForm.approvedByName || ""}
-                    onChange={(e) =>
-                      setPolicyForm((prev) => ({ ...prev, approvedByName: e.target.value }))
-                    }
-                  />
-                </label>
-
-                <label style={styles.fieldLabel}>
-                  Supervisor Title / Designation
-                  <input
-                    type="text"
-                    style={styles.fieldInput}
-                    placeholder="MTRC Designated Supervisor / Chief of Hospital"
-                    value={policyForm.approvedByTitle || ""}
-                    onChange={(e) =>
-                      setPolicyForm((prev) => ({ ...prev, approvedByTitle: e.target.value }))
-                    }
-                  />
-                </label>
-              </div>
-
-              <label style={styles.fieldLabel}>
-                Policy Summary & Participation Rules
-                <textarea
-                  rows={3}
-                  style={styles.fieldInput}
-                  value={policyForm.policyNotes || ""}
-                  onChange={(e) =>
-                    setPolicyForm((prev) => ({ ...prev, policyNotes: e.target.value }))
-                  }
-                />
-              </label>
-
-              <div style={styles.smallModalFooter}>
-                <button
-                  type="button"
-                  style={styles.cancelModalBtn}
-                  onClick={() => setPolicyModalOpen(false)}
-                >
-                  Cancel
-                </button>
-                <button type="submit" style={styles.saveModalBtn} disabled={policySaving}>
-                  {policySaving ? "Saving…" : "Approve & Save Policy"}
-                </button>
-              </div>
-            </form>
+            )}
+            <button
+              type="button"
+              role="menuitem"
+              style={{ ...styles.editMenuItem, color: "var(--color-danger, #B91C1C)" }}
+              onClick={() => { setEditAction({ type: "archive", record: editMenu.record }); setEditMenu(null); }}
+            >
+              <span style={styles.editMenuTitle}>Archive record</span>
+              <span style={styles.editMenuHint}>Removes it from all counts; restore from Archives</span>
+            </button>
           </div>
-        </div>
+        </>
       )}
+
+      {editAction && (
+        <ArchiveConfirmModal
+          title={editAction.type === "cancel" ? "Mark attendance as Session Cancelled" : "Archive attendance record"}
+          description={
+            editAction.type === "cancel"
+              ? `${editAction.record.full_name || "This patient"} — ${editAction.record.topic_name || editAction.record.session_type || "session"}: the record stays on file as "Session Cancelled". It will not count as an absence or as curriculum credit, and any drug test logged for this session is voided (the original result is kept).`
+              : `${editAction.record.full_name || "This patient"} — ${editAction.record.topic_name || editAction.record.session_type || "session"}: the record is removed from attendance, credits, rates and reports. It can be restored from Archives.`
+          }
+          confirmLabel={editAction.type === "cancel" ? "Mark as Cancelled" : "Archive"}
+          reasonRequired
+          reasonPlaceholder={editAction.type === "cancel" ? "e.g., Patient was recorded for a session that did not push through" : "e.g., Recorded under the wrong patient"}
+          onConfirm={confirmEditAction}
+          onClose={() => setEditAction(null)}
+        />
+      )}
+
+      {editNotice && <div role="status" style={styles.editNotice}>{editNotice}</div>}
     </AppShell>
   );
 }
@@ -2038,49 +1961,6 @@ function StatCard({ label, value, sub }) {
 
 const styles = {
   wrapper: { display: "flex", flexDirection: "column", gap: 14, height: "100%" },
-  policyBanner: {
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "center",
-    gap: 12,
-    flexWrap: "wrap",
-    background: "#F0FDF4",
-    border: "1px solid #BBF7D0",
-    borderRadius: "var(--radius-md, 10px)",
-    padding: "10px 14px",
-  },
-  policyBannerLeft: {
-    display: "flex",
-    alignItems: "center",
-    gap: 10,
-    flexWrap: "wrap",
-    flex: 1,
-  },
-  policyBadgePill: {
-    background: "#164E33",
-    color: "#ffffff",
-    fontSize: 11,
-    fontWeight: 700,
-    padding: "3px 9px",
-    borderRadius: 999,
-    whiteSpace: "nowrap",
-  },
-  policyText: {
-    fontSize: 12,
-    color: "#1E293B",
-    lineHeight: 1.4,
-  },
-  policyEditBtn: {
-    background: "#ffffff",
-    color: "#164E33",
-    border: "1px solid #86EFAC",
-    borderRadius: 8,
-    padding: "6px 12px",
-    fontSize: 12,
-    fontWeight: 700,
-    cursor: "pointer",
-    whiteSpace: "nowrap",
-  },
   statsRow: { display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 14 },
   statCard: {
     background: "var(--color-surface)",
@@ -2441,6 +2321,56 @@ const styles = {
     border: "1px solid #F0C4C4",
     padding: "2px 6px",
     borderRadius: 4,
+  },
+  editActionBtn: {
+    background: "#ffffff",
+    border: "1px solid var(--color-border, #CBD5E1)",
+    color: "var(--color-text, #334155)",
+    padding: "5px 10px",
+    borderRadius: 6,
+    fontSize: 12,
+    fontWeight: 600,
+    cursor: "pointer",
+  },
+  editMenuBackdrop: { position: "fixed", inset: 0, zIndex: 9990 },
+  editMenu: {
+    position: "fixed",
+    zIndex: 9991,
+    width: 230,
+    padding: 6,
+    background: "#ffffff",
+    border: "1px solid var(--color-border, #E2E8F0)",
+    borderRadius: 10,
+    boxShadow: "0 12px 28px rgba(15, 23, 42, 0.16)",
+  },
+  editMenuItem: {
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "flex-start",
+    gap: 2,
+    width: "100%",
+    padding: "8px 10px",
+    border: "none",
+    background: "none",
+    borderRadius: 6,
+    cursor: "pointer",
+    textAlign: "left",
+    color: "var(--color-text, #1E293B)",
+  },
+  editMenuTitle: { fontSize: 13, fontWeight: 700 },
+  editMenuHint: { fontSize: 11, color: "var(--color-text-muted, #64748B)", fontWeight: 500 },
+  editNotice: {
+    position: "fixed",
+    bottom: 24,
+    right: 24,
+    zIndex: 9992,
+    background: "#1F4D3B",
+    color: "#ffffff",
+    padding: "10px 16px",
+    borderRadius: 8,
+    fontSize: 13,
+    fontWeight: 600,
+    boxShadow: "0 8px 20px rgba(15, 23, 42, 0.2)",
   },
   reviewActionBtn: {
     background: "#F4F7F4",

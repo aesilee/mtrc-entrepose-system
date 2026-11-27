@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { printElement } from "../utils/printElement.js";
 import api from "../api/axios.js";
 import ReportPreview from "./ReportPreview.jsx";
 import { downloadElementAsPdf } from "../utils/pdf.js";
@@ -60,7 +61,7 @@ export default function ReportGeneratorModal({ onClose, onGenerated }) {
   }
 
   function handlePrint() {
-    window.print();
+    printElement(previewRef.current, { title: `${reportType}-report-${new Date().toISOString().slice(0, 10)}`, orientation: "portrait", margin: "12mm" });
   }
 
   async function handleDownload() {

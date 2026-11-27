@@ -2,22 +2,6 @@ import pool from "../config/db.js";
 
 let schemaEnsured = false;
 
-export const DEFAULT_ATTENDANCE_POLICY = {
-  lateGraceMinutes: 15,
-  lateWithinGraceDecision: "CREDITED",
-  lateBeyondGraceDecision: "PENDING_REVIEW",
-  requireReasonForLateDecision: true,
-  requireSupervisorForExcuse: true,
-  preventDuplicateTopicCredit: true,
-  approvedBySupervisor: "Fulbert Alec R. Gillego, RMT, MD, MSPH (Medical Center Chief III)",
-  policyEffectiveDate: "2026-01-01",
-  policySummary:
-    "1. Present & completed activity = Credited once per curriculum topic. " +
-    "2. Late arrivals within 15 minutes may be Credited upon full participation; arrivals beyond 15 minutes default to Pending Review or Not Credited with recorded arrival time, reason, and authorized staff. " +
-    "3. Approved excuses require a documented reason and approving staff; the curriculum requirement remains outstanding until fulfilled via a linked makeup session. " +
-    "4. Repeated topics are logged as additional attendance but never receive duplicate curriculum credit. " +
-    "5. Center-cancelled sessions do not mark patients absent.",
-};
 
 export async function ensureAttendanceCompletionSchema(customConn = null) {
   if (schemaEnsured) return true;

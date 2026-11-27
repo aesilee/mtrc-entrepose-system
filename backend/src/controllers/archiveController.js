@@ -1,15 +1,18 @@
 import pool from "../config/db.js";
 import { notifyIctAdmins } from "../utils/notify.js";
+import { ensureAttendanceArchiveTable } from "./attendanceArchiveController.js";
+import { caseloadIdsFor } from "../utils/sharedCaseload.js";
 
 export async function listArchives(req, res) {
   const { category } = req.query;
   const clauses = ["a.restored_at IS NULL"];
   const params = [];
 
+  await ensureAttendanceArchiveTable();
   if (req.user.role === "case_manager") {
-    clauses.push("a.entity_type = 'patient'");
-    clauses.push("p.assigned_case_manager_id = ?");
-    params.push(req.user.id);
+    // Case managers see their own archived patients and archived attendance records of their patients.
+    clauses.push("((a.entity_type = 'patient' AND p.assigned_case_manager_id = ?) OR (a.entity_type = 'attendance' AND pa.assigned_case_manager_id = ?))");
+    params.push(req.user.id, req.user.id);
   } else if (category && category !== "all") {
     clauses.push("a.entity_type = ?");
     params.push(category);
@@ -21,6 +24,8 @@ export async function listArchives(req, res) {
      FROM archives a
      LEFT JOIN users ua ON ua.id = a.archived_by
      LEFT JOIN patients p ON a.entity_type = 'patient' AND a.entity_id = p.id
+     LEFT JOIN attendance_archive aa ON a.entity_type = 'attendance' AND aa.id = a.entity_id
+     LEFT JOIN patients pa ON pa.id = aa.patient_id
      WHERE ${clauses.join(" AND ")}
      ORDER BY a.archived_at DESC`,
     params
@@ -244,5 +249,34 @@ export async function restoreCertificateIssuance(req, res) {
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: "Could not restore this certificate." });
+  }
+}
+
+// Finished patients for the Archives page: everyone with a discharge record (Completer or Non-Completer).
+// Read-only view; nothing is moved. Case managers see only their own caseload.
+export async function listFinishedPatients(req, res) {
+  const clauses = [];
+  const params = [];
+  if (req.user.role === "case_manager") {
+    clauses.push("p.assigned_case_manager_id IN (?)");
+    params.push(caseloadIdsFor(req.user.id));
+  }
+  try {
+    const [rows] = await pool.query(
+      `SELECT p.id AS patient_id, p.full_name, p.patient_code, p.pwud_code, p.enrollment_status, p.is_archived,
+              u.full_name AS case_manager_name,
+              d.discharge_date, d.discharge_type, d.outcome, d.reason_code, d.remarks, d.discharged_by
+       FROM discharges d
+       JOIN patients p ON p.id = d.patient_id
+       LEFT JOIN users u ON u.id = p.assigned_case_manager_id
+       WHERE d.id = (SELECT d2.id FROM discharges d2 WHERE d2.patient_id = d.patient_id ORDER BY d2.discharge_date DESC, d2.id DESC LIMIT 1)
+         ${clauses.length ? "AND " + clauses.join(" AND ") : ""}
+       ORDER BY d.discharge_date DESC, d.id DESC`,
+      params
+    );
+    res.json({ patients: rows });
+  } catch (err) {
+    console.error("listFinishedPatients failed:", err);
+    res.status(500).json({ message: "Could not load finished patients." });
   }
 }

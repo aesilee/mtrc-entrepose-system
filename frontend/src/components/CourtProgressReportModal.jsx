@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { printElement } from "../utils/printElement.js";
 import api from "../api/axios.js";
 
 function fmtDate(d) {
@@ -8,6 +9,7 @@ function fmtDate(d) {
 
 export default function CourtProgressReportModal({ patient, onClose, onSaved }) {
   const [reportType, setReportType] = useState("INITIAL");
+  const courtDocRef = useRef(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [data, setData] = useState(null);
@@ -102,7 +104,7 @@ export default function CourtProgressReportModal({ patient, onClose, onSaved }) 
   }
 
   function handlePrint() {
-    window.print();
+    printElement(courtDocRef.current, { title: "Court_Progress_Report", orientation: "portrait", margin: "15mm" });
   }
 
   const att = data?.attendance || {};
@@ -192,7 +194,7 @@ export default function CourtProgressReportModal({ patient, onClose, onSaved }) 
 
               {/* Right Column: Printable Legal Document Canvas */}
               <div style={styles.previewCol}>
-                <div className="court-print-area" style={styles.legalDoc}>
+                <div ref={courtDocRef} className="court-print-area" style={styles.legalDoc}>
                   {/* Letterhead */}
                   <div style={{ textAlign: "center", borderBottom: "2px solid #1A202C", paddingBottom: 12, marginBottom: 16 }}>
                     <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1 }}>REPUBLIC OF THE PHILIPPINES</div>

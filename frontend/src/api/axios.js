@@ -17,8 +17,11 @@ api.interceptors.response.use(
   (response) => {
     const fresh = response.headers?.["x-refreshed-token"];
     if (fresh) {
-      if (localStorage.getItem("mtrc_token")) localStorage.setItem("mtrc_token", fresh);
-      else if (sessionStorage.getItem("mtrc_token")) sessionStorage.setItem("mtrc_token", fresh);
+      // Only renew the login that made this request. A slow request from a previous account must not
+      // overwrite the token of whoever is signed in now (e.g. after logging out and into another account).
+      const sentWith = String(response.config?.headers?.Authorization || "").replace(/^Bearer\s+/, "");
+      if (sentWith && localStorage.getItem("mtrc_token") === sentWith) localStorage.setItem("mtrc_token", fresh);
+      else if (sentWith && sessionStorage.getItem("mtrc_token") === sentWith) sessionStorage.setItem("mtrc_token", fresh);
     }
     return response;
   },

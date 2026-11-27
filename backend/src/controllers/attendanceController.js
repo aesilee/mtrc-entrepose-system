@@ -3,7 +3,6 @@ import { notifyIctAdmins, notifyUser, notifyUserOnce } from "../utils/notify.js"
 import {
   ensureAttendanceCompletionSchema,
   checkDuplicateCurriculumCredit,
-  DEFAULT_ATTENDANCE_POLICY,
 } from "../utils/attendanceSchema.js";
 import { getUnifiedPatientProgress } from "../utils/curriculumProgress.js";
 import {
@@ -942,83 +941,6 @@ export async function getPatientAttendanceContext(req, res) {
   } catch (err) {
     console.error("Error fetching patient attendance context:", err);
     res.status(500).json({ message: "Could not load patient attendance context." });
-  }
-}
-
-export async function getAttendancePolicy(req, res) {
-  try {
-    const [rows] = await pool.query(
-      "SELECT setting_value FROM system_settings WHERE setting_key = 'attendance_policy' LIMIT 1"
-    ).catch(() => [[]]);
-
-    if (rows && rows.length > 0 && rows[0].setting_value) {
-      try {
-        const parsed = JSON.parse(rows[0].setting_value);
-        return res.json({ policy: { ...DEFAULT_ATTENDANCE_POLICY, ...parsed } });
-      } catch {
-        // fallback to default
-      }
-    }
-    res.json({ policy: DEFAULT_ATTENDANCE_POLICY });
-  } catch (err) {
-    res.json({ policy: DEFAULT_ATTENDANCE_POLICY });
-  }
-}
-
-export async function updateAttendancePolicy(req, res) {
-  const {
-    lateGraceMinutes,
-    lateWithinGraceDecision,
-    lateBeyondGraceDecision,
-    requireReasonForLateDecision,
-    requireSupervisorForExcuse,
-    preventDuplicateTopicCredit,
-    approvedBySupervisor,
-    policyEffectiveDate,
-    policySummary,
-  } = req.body;
-
-  const updatedPolicy = {
-    lateGraceMinutes: Number.isFinite(Number(lateGraceMinutes)) ? Number(lateGraceMinutes) : 15,
-    lateWithinGraceDecision: ["CREDITED", "PENDING_REVIEW", "NOT_CREDITED"].includes(lateWithinGraceDecision)
-      ? lateWithinGraceDecision
-      : "CREDITED",
-    lateBeyondGraceDecision: ["CREDITED", "PENDING_REVIEW", "NOT_CREDITED"].includes(lateBeyondGraceDecision)
-      ? lateBeyondGraceDecision
-      : "PENDING_REVIEW",
-    requireReasonForLateDecision: Boolean(requireReasonForLateDecision ?? true),
-    requireSupervisorForExcuse: Boolean(requireSupervisorForExcuse ?? true),
-    preventDuplicateTopicCredit: Boolean(preventDuplicateTopicCredit ?? true),
-    approvedBySupervisor: String(approvedBySupervisor || DEFAULT_ATTENDANCE_POLICY.approvedBySupervisor).trim(),
-    policyEffectiveDate: policyEffectiveDate || new Date().toISOString().slice(0, 10),
-    policySummary: String(policySummary || DEFAULT_ATTENDANCE_POLICY.policySummary).trim(),
-  };
-
-  try {
-    await pool.query(
-      `CREATE TABLE IF NOT EXISTS system_settings (
-         setting_key VARCHAR(100) PRIMARY KEY,
-         setting_value TEXT,
-         updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-       )`
-    ).catch(() => {});
-
-    await pool.query(
-      `INSERT INTO system_settings (setting_key, setting_value)
-       VALUES ('attendance_policy', ?)
-       ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)`,
-      [JSON.stringify(updatedPolicy)]
-    );
-
-    await pool.query("INSERT INTO audit_log (actor_username, action) VALUES (?, ?)", [
-      req.user.username,
-      `Updated MTRC Attendance & Participation Policy (Approved by: ${updatedPolicy.approvedBySupervisor})`,
-    ]);
-
-    res.json({ message: "Attendance policy updated.", policy: updatedPolicy });
-  } catch (err) {
-    console.error("Error updating attendance policy:", err);
-    res.status(500).json({ message: "Could not save attendance policy." });
   }
 }
 

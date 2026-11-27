@@ -1,10 +1,10 @@
 import { useState, useRef } from "react";
 import { createPortal } from "react-dom";
-import { NavLink, useLocation, useNavigate } from "react-router-dom";
+import { NavLink, useLocation } from "react-router-dom";
 import { ROLE_LABELS, NAV_BY_ROLE, FOOTER_NAV } from "../config/roles.js";
 import useViewport from "../hooks/useViewport.js";
 import useOrgSettings from "../hooks/useOrgSettings.js";
-import { useAuth } from "../context/AuthContext.jsx";
+import mtrcLogo from "../assets/logos/mtrc_logo.jpg";
 
 const NAV_ICONS = {
   dashboard: (
@@ -78,7 +78,6 @@ const NAV_ICONS = {
       <path d="M6.5 19c1-2.5 3.2-4 5.5-4s4.5 1.5 5.5 4" />
     </svg>
   ),
-
   logout: (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
@@ -92,13 +91,49 @@ const HOVER_STYLES = (
   <style>{`
     .mtrc-nav-item {
       background: transparent;
+      transition: background 0.22s cubic-bezier(0.22, 1, 0.36, 1),
+                  color 0.22s ease,
+                  transform 0.22s cubic-bezier(0.22, 1, 0.36, 1),
+                  box-shadow 0.22s ease,
+                  padding 0.25s cubic-bezier(0.22, 1, 0.36, 1);
     }
     .mtrc-nav-item:hover {
-      background: var(--color-primary-tint);
-      color: var(--color-primary-dark);
+      background: #E4F2E7;
+      color: #1E4628;
+      transform: translateX(2px);
+    }
+    .mtrc-nav-item .mtrc-nav-icon {
+      transition: transform 0.22s cubic-bezier(0.22, 1, 0.36, 1), color 0.22s ease;
     }
     .mtrc-nav-item:hover .mtrc-nav-icon {
-      color: var(--color-primary-dark);
+      color: #2B6B3E;
+      transform: scale(1.07);
+    }
+    .mtrc-collapse-btn {
+      transition: background 0.2s ease, color 0.2s ease, transform 0.2s ease;
+      border-radius: 6px;
+    }
+    .mtrc-collapse-btn:hover {
+      background: #E4F2E7 !important;
+      color: #2B6B3E !important;
+      transform: scale(1.06);
+    }
+    .mtrc-profile-card {
+      transition: background 0.2s ease, transform 0.2s ease;
+      border-radius: 10px;
+    }
+    .mtrc-profile-card:hover {
+      background: rgba(228, 242, 231, 0.7);
+      transform: translateX(2px);
+    }
+    .mtrc-logout-btn {
+      transition: background 0.2s ease, color 0.2s ease, transform 0.2s ease;
+      border-radius: 8px;
+    }
+    .mtrc-logout-btn:hover {
+      background: #FDECEA !important;
+      color: #B3261E !important;
+      transform: scale(1.06);
     }
   `}</style>
 );
@@ -143,7 +178,9 @@ function GroupFlyout({ label, groupItem }) {
     }
     setOpen(true);
   };
-  const scheduleClose = () => { closeTimer.current = setTimeout(() => setOpen(false), 150); };
+  const scheduleClose = () => {
+    closeTimer.current = setTimeout(() => setOpen(false), 150);
+  };
 
   return (
     <div ref={wrapperRef} style={styles.tooltipWrapper} onMouseEnter={openFlyout} onMouseLeave={scheduleClose}>
@@ -246,22 +283,6 @@ export default function Sidebar({ user }) {
   const items = NAV_BY_ROLE[user.role] || [];
   const location = useLocation();
   const org = useOrgSettings();
-  const { logout } = useAuth();
-  const navigate = useNavigate();
-  const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false);
-
-  const logoutName = user?.fullName || user?.username || "User";
-  const logoutRole = user?.role ? ROLE_LABELS[user.role] : "User";
-
-  function handleLogoutRequest() {
-    setLogoutConfirmOpen(true);
-  }
-
-  function confirmLogout() {
-    logout();
-    setLogoutConfirmOpen(false);
-    navigate("/login");
-  }
 
   const [collapsed, setCollapsed] = useState(
     () => sessionStorage.getItem("mtrc-sidebar-collapsed") === "true"
@@ -306,6 +327,8 @@ export default function Sidebar({ user }) {
     return <BottomBar user={user} />;
   }
 
+  const logoSrc = org?.organization_logo || mtrcLogo;
+
   return (
     <aside
       style={{
@@ -315,18 +338,57 @@ export default function Sidebar({ user }) {
       }}
     >
       {HOVER_STYLES}
+
+      {/* Decorative Light Warm-Green Abstract Waves & Medical Cross in Lower Sidebar */}
+      <svg
+        aria-hidden="true"
+        viewBox="0 0 240 320"
+        preserveAspectRatio="none"
+        style={{
+          position: "absolute",
+          bottom: 0,
+          left: 0,
+          width: "100%",
+          height: 290,
+          pointerEvents: "none",
+          zIndex: 0,
+        }}
+      >
+        {/* Subtle medical cross watermark */}
+        <g opacity="0.16" fill="#739E82" transform="translate(155, 118)">
+          <rect x="14" y="0" width="14" height="42" rx="3" />
+          <rect x="0" y="14" width="42" height="14" rx="3" />
+        </g>
+        {/* Back soft sage hill */}
+        <path
+          d="M0,195 C60,165 115,210 185,235 C215,245 230,255 240,262 L240,320 L0,320 Z"
+          fill="#8FB361"
+          fillOpacity="0.16"
+        />
+        {/* Mid warm green wave */}
+        <path
+          d="M0,225 C55,205 115,245 175,268 C205,280 225,288 240,292 L240,320 L0,320 Z"
+          fill="#357648"
+          fillOpacity="0.14"
+        />
+        {/* Front soft botanical wave */}
+        <path
+          d="M0,265 C70,250 140,282 240,298 L240,320 L0,320 Z"
+          fill="#739E82"
+          fillOpacity="0.18"
+        />
+      </svg>
+
       <div
         style={{
           ...styles.brand,
           flexDirection: collapsed ? "column" : "row",
           justifyContent: collapsed ? "center" : "space-between",
+          position: "relative",
+          zIndex: 1,
         }}
       >
-        {org?.organization_logo ? (
-  <img src={org.organization_logo} alt="Organization logo" style={styles.logoMark} />
-) : (
-  <div style={styles.logoMark}>M</div>
-)}
+        <img src={logoSrc} alt="MTRC logo" style={styles.logoMark} />
 
         {!collapsed && (
           <div style={styles.brandText}>
@@ -337,28 +399,27 @@ export default function Sidebar({ user }) {
 
         <button
           type="button"
+          className="mtrc-collapse-btn"
           onClick={() => setCollapsedPersisted((prev) => !prev)}
           style={{ ...styles.collapseBtn, marginTop: collapsed ? 10 : 0 }}
           aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
           title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
         >
           {collapsed ? (
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-              <rect x="3" y="4" width="18" height="16" rx="3" />
-              <line x1="15" y1="4" x2="15" y2="20" />
-              <rect x="15.8" y="5" width="4.2" height="14" rx="1.2" fill="currentColor" stroke="none" />
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="13 17 18 12 13 7" />
+              <polyline points="6 17 11 12 6 7" />
             </svg>
           ) : (
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-              <rect x="3" y="4" width="18" height="16" rx="3" />
-              <line x1="9" y1="4" x2="9" y2="20" />
-              <rect x="4" y="5" width="4.2" height="14" rx="1.2" fill="currentColor" stroke="none" />
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="11 17 6 12 11 7" />
+              <polyline points="18 17 13 12 18 7" />
             </svg>
           )}
         </button>
       </div>
 
-      <nav style={styles.nav}>
+      <nav style={{ ...styles.nav, position: "relative", zIndex: 1 }}>
         {items.map((item) =>
           item.children ? (
             <div key={item.label} style={styles.group}>
@@ -419,191 +480,220 @@ export default function Sidebar({ user }) {
           )
         )}
       </nav>
-
-      <div style={{ ...styles.footerBlock, ...(collapsed ? styles.footerBlockCollapsed : styles.footerBlockOpen) }}>
-        <NavTooltip label="Profile" show={collapsed}>
-          <NavLink to="/profile" end style={{ textDecoration: "none" }}>
-            <div style={styles.profileCard}>
-              {user.photoUrl ? (
-                <img src={user.photoUrl} alt={user.fullName} style={styles.profileAvatarImg} />
-              ) : (
-                <div style={styles.profileAvatarFallback}>{(user.fullName || user.username || "?").charAt(0).toUpperCase()}</div>
-              )}
-              {!collapsed && (
-                <div style={{ overflow: "hidden" }}>
-                  <div style={styles.profileName}>{user.fullName || user.username}</div>
-                  <div style={styles.profileRole}>{ROLE_LABELS[user.role]}</div>
-                </div>
-              )}
-            </div>
-          </NavLink>
-        </NavTooltip>
-
-        <NavTooltip label="Log out" show={true}>
-          <button type="button" style={styles.logoutBtn} onClick={handleLogoutRequest} aria-label="Log out">
-            <span style={styles.navIcon}>{NAV_ICONS.logout}</span>
-          </button>
-        </NavTooltip>
-      </div>
-
-      {logoutConfirmOpen &&
-        createPortal(
-          <div style={styles.confirmOverlay} onClick={() => setLogoutConfirmOpen(false)}>
-            <div style={styles.confirmModal} onClick={(e) => e.stopPropagation()}>
-              <div style={styles.confirmHeader}>Log out</div>
-              <div style={styles.confirmText}>Are you sure you want to log out?</div>
-
-              <div style={styles.confirmUserBox}>
-                <div style={styles.confirmAvatar}>{(logoutName || "U").charAt(0).toUpperCase()}</div>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={styles.confirmUserName}>{logoutName}</div>
-                  <div style={styles.confirmUserRole}>{logoutRole}</div>
-                </div>
-              </div>
-
-              <div style={styles.confirmActions}>
-                <button type="button" style={styles.confirmCancelBtn} onClick={() => setLogoutConfirmOpen(false)}>
-                  Cancel
-                </button>
-                <button type="button" style={styles.confirmLogoutBtn} onClick={confirmLogout}>
-                  Log out
-                </button>
-              </div>
-            </div>
-          </div>,
-          document.body
-        )}
     </aside>
   );
 }
 
 const styles = {
   aside: {
+    position: "relative",
+    overflow: "hidden",
     minHeight: "100vh",
-    background: "var(--color-surface)",
-    borderRight: "1px solid var(--color-border)",
+    background: "linear-gradient(180deg, #FFFFFF 0%, #F9FCF9 72%, #F1F7F1 100%)",
+    borderRight: "1px solid #DCE7DC",
     display: "flex",
     flexDirection: "column",
     padding: "20px 16px",
-    transition: "width 0.25s ease, padding 0.25s ease",
+    transition: "width 0.3s cubic-bezier(0.22, 1, 0.36, 1), padding 0.3s cubic-bezier(0.22, 1, 0.36, 1)",
   },
-  brand: { display: "flex", alignItems: "center", gap: 8, padding: "4px 4px 24px" },
-  brandText: { overflow: "hidden", whiteSpace: "nowrap" },
+  brand: {
+    display: "flex",
+    alignItems: "center",
+    gap: 9,
+    padding: "4px 4px 24px",
+    transition: "all 0.25s cubic-bezier(0.22, 1, 0.36, 1)",
+  },
+  brandText: {
+    overflow: "hidden",
+    whiteSpace: "nowrap",
+    animation: "mtrcFadeUp 0.22s cubic-bezier(0.22, 1, 0.36, 1) both",
+  },
   collapseBtn: {
-    display: "flex", alignItems: "center", justifyContent: "center", width: 22, height: 22,
-    border: "none", background: "transparent", padding: 0, color: "var(--color-text-muted)", cursor: "pointer", flexShrink: 0,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    width: 26,
+    height: 26,
+    border: "none",
+    background: "transparent",
+    padding: 0,
+    color: "#357648",
+    cursor: "pointer",
+    flexShrink: 0,
   },
   logoMark: {
-  width: 34, height: 34, background: "var(--color-primary)", color: "#fff",
-  fontFamily: "var(--font-display)", fontWeight: 800, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
-  objectFit: "contain",
-},
-  brandName: { fontFamily: "var(--font-display)", fontWeight: 800, fontSize: 15, color: "var(--color-primary-dark)" },
-  brandSub: { fontSize: 11, color: "var(--color-text-muted)" },
-  nav: { display: "flex", flexDirection: "column", gap: 2, flex: 1, overflowY: "auto" },
+    width: 36,
+    height: 36,
+    borderRadius: "50%",
+    background: "#fff",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    flexShrink: 0,
+    objectFit: "contain",
+    transition: "transform 0.22s ease",
+  },
+  brandName: { fontFamily: "var(--font-display)", fontWeight: 800, fontSize: 15.5, color: "#1B2E20" },
+  brandSub: { fontSize: 10.5, color: "#68786B" },
+  nav: { display: "flex", flexDirection: "column", gap: 4, flex: 1, overflowY: "auto" },
   group: { display: "flex", flexDirection: "column" },
   groupHeader: { display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%", border: "none", cursor: "pointer", textAlign: "left" },
-  chevron: { display: "inline-block", transition: "transform 0.15s ease", fontSize: 14, color: "var(--color-text-muted)" },
-  subNav: { display: "flex", flexDirection: "column", gap: 1, marginLeft: 12, paddingLeft: 10, borderLeft: "1px solid var(--color-border)" },
+  chevron: {
+    display: "inline-block",
+    transition: "transform 0.24s cubic-bezier(0.22, 1, 0.36, 1)",
+    fontSize: 14,
+    color: "var(--color-text-muted)",
+  },
+  subNav: {
+    display: "flex",
+    flexDirection: "column",
+    gap: 2,
+    marginLeft: 12,
+    paddingLeft: 10,
+    borderLeft: "1.5px solid #D8E6DA",
+    animation: "mtrcSubmenuSlide 0.24s cubic-bezier(0.22, 1, 0.36, 1) both",
+  },
   subNavItem: {
-    display: "flex", alignItems: "center", justifyContent: "space-between", textDecoration: "none",
-    color: "var(--color-text)", padding: "8px 12px", borderRadius: "var(--radius-sm)", fontSize: 13, fontWeight: 500,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    textDecoration: "none",
+    color: "var(--color-text)",
+    padding: "8px 12px",
+    borderRadius: "var(--radius-sm)",
+    fontSize: 13,
+    fontWeight: 500,
   },
   navItem: {
-    display: "flex", alignItems: "center", textDecoration: "none", color: "var(--color-text)",
-    padding: "10px 12px", borderRadius: "var(--radius-sm)", fontSize: 14, fontWeight: 500,
-    transition: "background 0.15s ease, color 0.15s ease, padding 0.2s ease",
+    display: "flex",
+    alignItems: "center",
+    textDecoration: "none",
+    color: "#2C3B2F",
+    padding: "10px 12px",
+    borderRadius: 10,
+    fontSize: 13.5,
+    fontWeight: 600,
     width: "100%",
   },
   navItemCollapsed: { justifyContent: "center", alignItems: "center", padding: "10px 0", width: "100%" },
   navIcon: { display: "flex", alignItems: "center", justifyContent: "center", width: 20, height: 20, flexShrink: 0 },
   navLabel: { flex: 1, overflow: "hidden", whiteSpace: "nowrap", marginLeft: 10 },
   tooltip: {
-    position: "fixed", transform: "translateY(-50%)", background: "var(--color-primary-dark)", color: "#fff",
-    fontSize: 12, fontWeight: 600, padding: "6px 10px", borderRadius: "var(--radius-sm)", whiteSpace: "nowrap",
-    boxShadow: "0 4px 12px rgba(0,0,0,0.2)", zIndex: 9999, pointerEvents: "none",
+    position: "fixed",
+    transform: "translateY(-50%)",
+    background: "#243B12",
+    color: "#F8F4F9",
+    fontSize: 12,
+    fontWeight: 600,
+    padding: "6px 10px",
+    borderRadius: "var(--radius-sm)",
+    whiteSpace: "nowrap",
+    boxShadow: "0 4px 12px rgba(36, 59, 18, 0.22)",
+    zIndex: 9999,
+    pointerEvents: "none",
+    animation: "mtrcTooltipIn 0.18s cubic-bezier(0.22, 1, 0.36, 1) both",
   },
   tooltipWrapper: { position: "relative", display: "flex", alignItems: "center", justifyContent: "center", width: "100%" },
   flyoutPanel: {
-    position: "fixed", minWidth: 200, background: "var(--color-surface)", border: "1px solid var(--color-border)",
-    borderRadius: "var(--radius-md, 10px)", boxShadow: "0 10px 28px rgba(0,0,0,0.2)", padding: 8,
-    display: "flex", flexDirection: "column", gap: 2, zIndex: 9999,
+    position: "fixed",
+    minWidth: 200,
+    background: "var(--color-surface)",
+    border: "1px solid var(--color-border)",
+    borderRadius: "var(--radius-md, 10px)",
+    boxShadow: "0 10px 28px rgba(36, 59, 18, 0.16)",
+    padding: 8,
+    display: "flex",
+    flexDirection: "column",
+    gap: 2,
+    zIndex: 9999,
+    animation: "mtrcFlyoutIn 0.2s cubic-bezier(0.22, 1, 0.36, 1) both",
   },
   flyoutHeader: { fontSize: 11, fontWeight: 700, color: "var(--color-text-muted)", textTransform: "uppercase", letterSpacing: 0.4, padding: "4px 10px 8px" },
   flyoutItem: {
-    display: "flex", alignItems: "center", justifyContent: "space-between", textDecoration: "none",
-    color: "var(--color-text)", padding: "8px 10px", borderRadius: "var(--radius-sm)", fontSize: 13, fontWeight: 500,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    textDecoration: "none",
+    color: "var(--color-text)",
+    padding: "8px 10px",
+    borderRadius: "var(--radius-sm)",
+    fontSize: 13,
+    fontWeight: 500,
   },
-  navItemActive: { background: "var(--color-primary-tint)", color: "var(--color-primary-dark)", fontWeight: 700 },
+  navItemActive: {
+    background: "linear-gradient(90deg, #DDEEE0 0%, #E7F3E8 100%)",
+    color: "#1B3F26",
+    fontWeight: 700,
+    boxShadow: "inset 4px 0 0 #26653B",
+  },
   badge: {
-    fontSize: 10, fontWeight: 700, color: "var(--color-primary-dark)", background: "var(--color-primary-tint)",
-    padding: "2px 6px", borderRadius: 999, textTransform: "uppercase", letterSpacing: 0.3,
-  },
-  footerNav: { display: "flex", flexDirection: "column", gap: 2, paddingTop: 10, marginTop: 10, borderTop: "1px solid var(--color-border)" },
-  footerBlock: { marginTop: 10, paddingTop: 10, borderTop: "1px solid var(--color-border)" },
-  footerBlockOpen: { marginLeft: -16, marginRight: -16, paddingLeft: 16, paddingRight: 16, display: "flex", flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 },
-  footerBlockCollapsed: { display: "flex", flexDirection: "column", alignItems: "center", gap: 8 },
-  profileCard: { display: "flex", alignItems: "center", gap: 10, padding: "4px 0", cursor: "pointer" },
-  logoutBtn: { display: "flex", alignItems: "center", justifyContent: "center", width: 32, height: 32, flexShrink: 0, padding: 0, background: "none", border: "none", cursor: "pointer", color: "var(--color-text-muted)" },
-  profileAvatarImg: { width: 34, height: 34, borderRadius: "50%", objectFit: "cover", flexShrink: 0 },
-  profileAvatarFallback: { width: 34, height: 34, borderRadius: "50%", background: "var(--color-primary-tint)", color: "var(--color-primary-dark)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, fontWeight: 800, flexShrink: 0 },
-  profileName: { fontSize: 13, fontWeight: 700, color: "var(--color-text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
-  profileRole: { fontSize: 11.5, color: "var(--color-text-muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
-  confirmOverlay: {
-    position: "fixed", inset: 0, background: "rgba(15, 23, 42, 0.5)", display: "flex", alignItems: "center",
-    justifyContent: "center", zIndex: 2000, padding: 16,
-  },
-  confirmModal: {
-    width: 420, maxWidth: "100%", background: "var(--color-surface)", border: "1px solid var(--color-border)",
-    borderRadius: "var(--radius-lg)", boxShadow: "0 18px 50px rgba(15, 23, 42, 0.22)", padding: 24,
-  },
-  confirmHeader: { fontSize: 20, fontWeight: 800, color: "var(--color-primary-dark)", marginBottom: 12 },
-  confirmText: { margin: 0, color: "var(--color-text)", fontSize: 15, lineHeight: 1.5 },
-  confirmUserBox: {
-    marginTop: 18, display: "flex", alignItems: "center", gap: 12, padding: "12px 14px",
-    background: "var(--color-primary-tint)", borderRadius: "var(--radius-md)", border: "1px solid rgba(95, 117, 255, 0.15)",
-  },
-  confirmAvatar: {
-    width: 36, height: 36, borderRadius: "50%", background: "var(--color-primary)", color: "#fff",
-    display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, fontSize: 15,
-  },
-  confirmUserName: { fontSize: 14, fontWeight: 700, color: "var(--color-text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
-  confirmUserRole: { fontSize: 12, color: "var(--color-text-muted)", marginTop: 2 },
-  confirmActions: { display: "flex", justifyContent: "flex-end", gap: 12, marginTop: 22 },
-  confirmCancelBtn: {
-    border: "1px solid var(--color-border)", background: "var(--color-surface)", color: "var(--color-text)",
-    padding: "10px 14px", borderRadius: "var(--radius-sm)", fontWeight: 600, cursor: "pointer",
-  },
-  confirmLogoutBtn: {
-    border: "none", background: "var(--color-primary)", color: "#fff", padding: "10px 16px",
-    borderRadius: "var(--radius-sm)", fontWeight: 700, cursor: "pointer",
+    fontSize: 10,
+    fontWeight: 700,
+    color: "#357648",
+    background: "#E8F5EC",
+    padding: "2px 6px",
+    borderRadius: 999,
+    textTransform: "uppercase",
+    letterSpacing: 0.3,
   },
 
   // ---- Bottom bar (mobile) ----
   bottomBar: {
-    position: "fixed", bottom: 0, left: 0, right: 0, height: 64,
-    background: "var(--color-surface)", borderTop: "1px solid var(--color-border)",
-    display: "flex", alignItems: "stretch", justifyContent: "space-around",
-    zIndex: 200, overflowX: "auto",
+    position: "fixed",
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: 64,
+    background: "var(--color-surface)",
+    borderTop: "1px solid var(--color-border)",
+    display: "flex",
+    alignItems: "stretch",
+    justifyContent: "space-around",
+    zIndex: 200,
+    overflowX: "auto",
   },
   bottomBarItem: {
-    display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 3,
-    flex: 1, minWidth: 56, textDecoration: "none", color: "var(--color-text-muted)",
-    border: "none", background: "none", cursor: "pointer", padding: "6px 2px",
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 3,
+    flex: 1,
+    minWidth: 56,
+    textDecoration: "none",
+    color: "var(--color-text-muted)",
+    border: "none",
+    background: "none",
+    cursor: "pointer",
+    padding: "6px 2px",
+    transition: "color 0.2s ease, transform 0.2s ease",
   },
-  bottomBarItemActive: { color: "var(--color-primary-dark)" },
+  bottomBarItemActive: { color: "#357648", fontWeight: 700 },
   bottomBarIcon: { width: 20, height: 20, display: "flex", alignItems: "center", justifyContent: "center" },
   bottomBarLabel: { fontSize: 9.5, fontWeight: 600, textAlign: "center", lineHeight: 1.1 },
 
   sheetBackdrop: { position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", zIndex: 300, display: "flex", alignItems: "flex-end" },
   sheet: {
-    width: "100%", background: "var(--color-surface)", borderRadius: "18px 18px 0 0",
-    padding: "10px 16px 20px", display: "flex", flexDirection: "column", gap: 4,
+    width: "100%",
+    background: "var(--color-surface)",
+    borderRadius: "18px 18px 0 0",
+    padding: "10px 16px 20px",
+    display: "flex",
+    flexDirection: "column",
+    gap: 4,
+    animation: "mtrcFadeUp 0.24s cubic-bezier(0.22, 1, 0.36, 1) both",
   },
   sheetHandle: { width: 36, height: 4, borderRadius: 999, background: "var(--color-border)", alignSelf: "center", marginBottom: 8 },
   sheetTitle: { fontSize: 13, fontWeight: 700, color: "var(--color-text-muted)", textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 6 },
   sheetItem: {
-    display: "flex", alignItems: "center", justifyContent: "space-between", textDecoration: "none",
-    color: "var(--color-text)", padding: "12px 10px", borderRadius: "var(--radius-sm)", fontSize: 14, fontWeight: 500,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    textDecoration: "none",
+    color: "var(--color-text)",
+    padding: "12px 10px",
+    borderRadius: "var(--radius-sm)",
+    fontSize: 14,
+    fontWeight: 500,
   },
 };

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { printElement } from "../utils/printElement.js";
 import api from "../api/axios.js";
 import ReportPreview from "./ReportPreview.jsx";
 import { downloadElementAsPdf } from "../utils/pdf.js";
@@ -29,7 +30,7 @@ export default function ReportGeneratorModal({ onClose, onGenerated }) {
 
   useEffect(() => {
     api.get("/users/case-managers").then(({ data }) => setCaseManagers(data.caseManagers));
-    api.get("/patients").then(({ data }) => setPatients(data.patients));
+    api.get("/patients", { params: { limit: 500 } }).then(({ data }) => setPatients(data.patients));
   }, []);
 
   const showPatientField = reportType === "attendance" || reportType === "patient";
@@ -60,7 +61,7 @@ export default function ReportGeneratorModal({ onClose, onGenerated }) {
   }
 
   function handlePrint() {
-    window.print();
+    printElement(previewRef.current, { title: `${reportType}-report-${new Date().toISOString().slice(0, 10)}`, orientation: "portrait", margin: "12mm" });
   }
 
   async function handleDownload() {

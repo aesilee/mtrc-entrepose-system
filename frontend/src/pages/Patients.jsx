@@ -85,6 +85,7 @@ export default function Patients() {
   const [filtersOpen, setFiltersOpen] = useState(false);
   const { isMobile } = useViewport();
 
+  const [scopeFilter, setScopeFilter] = useState("my"); // "my" or "all"
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [genderFilter, setGenderFilter] = useState("");
@@ -110,7 +111,13 @@ export default function Patients() {
     if (search.trim()) params.search = search.trim();
     if (statusFilter) params.status = statusFilter;
     if (genderFilter) params.gender = genderFilter;
-    if (caseManagerFilter) params.caseManagerId = caseManagerFilter;
+    if (caseManagerFilter === "all") {
+      params.showAll = "true";
+    } else if (caseManagerFilter) {
+      params.caseManagerId = caseManagerFilter;
+    } else if (user.role === "case_manager" && scopeFilter === "all") {
+      params.showAll = "true";
+    }
     if (municipalityFilter) params.municipality = municipalityFilter;
     if (dateFrom) params.dateFrom = dateFrom;
     if (dateTo) params.dateTo = dateTo;
@@ -137,7 +144,7 @@ export default function Patients() {
       loadPatients(1, limit);
     }, 200);
     return () => clearTimeout(t);
-  }, [search, statusFilter, genderFilter, caseManagerFilter, municipalityFilter, dateFrom, dateTo, flagFilter, limit]);
+  }, [search, statusFilter, genderFilter, caseManagerFilter, municipalityFilter, dateFrom, dateTo, flagFilter, limit, scopeFilter]);
 
   useEffect(() => {
     api.get("/users/case-managers").then(({ data }) => setCaseManagers(data.caseManagers));
@@ -171,12 +178,21 @@ export default function Patients() {
     loadPatients(1, newLimit);
   }
 
-  const activeFilterCount = [statusFilter, genderFilter, caseManagerFilter, municipalityFilter, dateFrom, dateTo, flagFilter].filter(Boolean).length;
+  const activeFilterCount = [
+    statusFilter,
+    genderFilter,
+    caseManagerFilter && caseManagerFilter !== "all",
+    municipalityFilter,
+    dateFrom,
+    dateTo,
+    flagFilter,
+  ].filter(Boolean).length;
 
   function clearFilters() {
     setStatusFilter("");
     setGenderFilter("");
     setCaseManagerFilter("");
+    setScopeFilter("my");
     setMunicipalityFilter("");
     setDateFrom("");
     setDateTo("");
@@ -261,8 +277,18 @@ export default function Patients() {
 
                     <label style={styles.filterLabel}>
                       Case manager
-                      <select style={styles.filterSelect} value={caseManagerFilter} onChange={(e) => setCaseManagerFilter(e.target.value)}>
-                        <option value="">All case managers</option>
+                      <select
+                        style={styles.filterSelect}
+                        value={caseManagerFilter}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setCaseManagerFilter(val);
+                          if (val === "all") setScopeFilter("all");
+                          else if (val === "") setScopeFilter("my");
+                        }}
+                      >
+                        <option value="">{user.role === "case_manager" ? "My Caseload (Assigned to Me)" : "All case managers"}</option>
+                        <option value="all">All facility patients (show all)</option>
                         {caseManagers.map((cm) => (
                           <option key={cm.id} value={cm.id}>{cm.full_name}</option>
                         ))}
@@ -317,7 +343,7 @@ export default function Patients() {
           )}
         </div>
 
-        <div style={styles.tabBar}>
+        <div style={{ ...styles.tabBar, flexWrap: isMobile ? "wrap" : "nowrap" }}>
           <div style={styles.statusTabs}>
             {STATUS_TABS.map((tab) => {
               const isSelected = statusFilter === tab.key;
@@ -339,6 +365,39 @@ export default function Patients() {
               );
             })}
           </div>
+
+          {user.role === "case_manager" && (
+            <div style={styles.scopeToggleGroup}>
+              <button
+                type="button"
+                style={{
+                  ...styles.scopeToggleBtn,
+                  ...(scopeFilter === "my" ? styles.scopeToggleBtnActive : {}),
+                }}
+                onClick={() => {
+                  setScopeFilter("my");
+                  setCaseManagerFilter("");
+                }}
+                title="View patients assigned to your personal caseload"
+              >
+                My Caseload
+              </button>
+              <button
+                type="button"
+                style={{
+                  ...styles.scopeToggleBtn,
+                  ...(scopeFilter === "all" ? styles.scopeToggleBtnActive : {}),
+                }}
+                onClick={() => {
+                  setScopeFilter("all");
+                  setCaseManagerFilter("all");
+                }}
+                title="View all facility patients"
+              >
+                All Facility Patients (74)
+              </button>
+            </div>
+          )}
         </div>
 
         <div style={{ ...styles.tableCard, flex: 1, minHeight: 0 }}>
@@ -640,6 +699,32 @@ const styles = {
     borderRadius: 999,
     padding: "1px 6px",
     lineHeight: 1.2,
+  },
+  scopeToggleGroup: {
+    display: "inline-flex",
+    alignItems: "center",
+    background: "var(--color-surface)",
+    border: "1px solid var(--color-border)",
+    borderRadius: "var(--radius-sm, 6px)",
+    padding: 3,
+    gap: 4,
+  },
+  scopeToggleBtn: {
+    background: "transparent",
+    border: "none",
+    borderRadius: "var(--radius-sm, 4px)",
+    padding: "5px 12px",
+    fontSize: 12,
+    fontWeight: 600,
+    color: "var(--color-text-muted)",
+    cursor: "pointer",
+    transition: "all 0.15s ease",
+    whiteSpace: "nowrap",
+  },
+  scopeToggleBtnActive: {
+    background: "var(--color-primary-tint, #e6f4ea)",
+    color: "var(--color-primary-dark, #137333)",
+    fontWeight: 700,
   },
   dischargeSubtext: {
     fontSize: 11,

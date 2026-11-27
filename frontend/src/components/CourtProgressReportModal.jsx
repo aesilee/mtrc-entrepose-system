@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { printElement } from "../utils/printElement.js";
 import api from "../api/axios.js";
 
 function fmtDate(d) {
@@ -8,6 +9,7 @@ function fmtDate(d) {
 
 export default function CourtProgressReportModal({ patient, onClose, onSaved }) {
   const [reportType, setReportType] = useState("INITIAL");
+  const courtDocRef = useRef(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [data, setData] = useState(null);
@@ -43,16 +45,27 @@ export default function CourtProgressReportModal({ patient, onClose, onSaved }) 
       // Generate default narrative
       const att = d.attendance || {};
       const attPct = att.total_recorded ? Math.round((att.present_count / att.total_recorded) * 100) : 100;
-      const rStats = d.relapseStats || { safe: 0, atRisk: 0, used: 0 };
-      
-      const narrative = `This progress report covers the outpatient rehabilitation of ${d.patient?.full_name}, admitted on ${fmtDate(d.patient?.admission_date)} under the 7-Month ENTREPOSE Outpatient Rehabilitation Curriculum.\n\n` +
+      const rStats = d.relapseStats || { safe: 0, atRisk: 0, nearlyUsed: 0, used: 0 };
+      const sStats = d.staffRiskStats || { lowRisk: 0, moderateRisk: 0, highRisk: 0, acuteRisk: 0 };
+      const dtList = Array.isArray(d.drugTests) ? d.drugTests : [];
+      const posDtCount = dtList.filter((dt) => dt.result === "POSITIVE").length;
+      const negDtCount = dtList.filter((dt) => dt.result === "NEGATIVE").length;
+
+      const narrative = `This progress report covers the outpatient rehabilitation of ${d.patient?.full_name}, admitted on ${fmtDate(d.patient?.admission_date)} under the ${d.durationSummary?.totalRequiredMonths || 7}-Month ENTREPOSE Outpatient Rehabilitation Curriculum (${d.durationSummary?.durationBasisLabel || "Standard Program"}).\n\n` +
         `ATTENDANCE & CURRICULUM PROGRESSION:\n` +
         `As of this reporting period, the client has attended ${att.present_count || 0} sessions out of ${att.total_recorded || 0} scheduled sessions (Attendance Rate: ${attPct}%). ` +
-        `Breakdown includes: ${att.cbt_count || 0} CBT group sessions, ${att.pe_count || 0} Psycho-Education sessions, and ${att.shgm_count || 0} Self-Help Group Meetings.\n\n` +
-        `SCHEDULE BOOK & RELAPSE RISK SURVEILLANCE:\n` +
-        `Weekly Schedule Book evaluations reflect consistent adherence to structured routines with ${rStats.safe} Safe ratings, ${rStats.atRisk} At-Risk reviews, and ${rStats.used} reported lapses.\n\n` +
-        `URINE DRUG TESTING (UDT) MONITORING:\n` +
-        `All bi-monthly random drug tests conducted by the center have yielded NEGATIVE results for Methamphetamine and THC, confirming sustained abstinence.`;
+        `Credited Core Curriculum breakdown: ${att.cbt_count || 0}/28 CBT group sessions, ${att.cbte_count || 0}/3 CBT-E evaluations, and ${att.pe_count || 0}/12 Psycho-Education topics (Supplementary: ${att.shgm_count || 0} SHGM).\n\n` +
+        `CLIENT SELF-REPORTED STATUS vs. STAFF CLINICAL ASSESSMENT:\n` +
+        `Weekly self-reported recovery checks reflect ${rStats.safe || 0} Safe/Abstinent ratings, ${rStats.atRisk || 0} At-Risk trigger reviews (no use), ${rStats.nearlyUsed || 0} Near-Use / Strong Craving episodes where abstinence was maintained (no substance use), and ${rStats.used || 0} self-reported substance use lapses.` +
+        (sStats.lowRisk + sStats.moderateRisk + sStats.highRisk + sStats.acuteRisk > 0
+          ? ` Independent Staff Clinical Risk Assessments logged: ${sStats.lowRisk} Low Risk, ${sStats.moderateRisk} Moderate Risk, ${sStats.highRisk} High Risk, ${sStats.acuteRisk} Acute Risk.\n\n`
+          : `\n\n`) +
+        `OBJECTIVE URINE DRUG TESTING (MULTI-3 RDT) SURVEILLANCE:\n` +
+        (dtList.length === 0
+          ? `No Multi-3 urine drug screening records have been logged in the surveillance period yet.`
+          : posDtCount === 0
+          ? `All ${negDtCount} Multi-3 urine drug screenings (THC, METH, ECS) conducted by the center have yielded NEGATIVE results, confirming objective abstinence.`
+          : `Out of ${dtList.length} Multi-3 urine drug tests conducted, ${negDtCount} yielded NEGATIVE results and ${posDtCount} yielded POSITIVE findings (see surveillance table below).`);
       
       setClinicalNarrative(narrative);
     } catch (err) {
@@ -91,7 +104,7 @@ export default function CourtProgressReportModal({ patient, onClose, onSaved }) 
   }
 
   function handlePrint() {
-    window.print();
+    printElement(courtDocRef.current, { title: "Court_Progress_Report", orientation: "portrait", margin: "15mm" });
   }
 
   const att = data?.attendance || {};
@@ -181,7 +194,7 @@ export default function CourtProgressReportModal({ patient, onClose, onSaved }) 
 
               {/* Right Column: Printable Legal Document Canvas */}
               <div style={styles.previewCol}>
-                <div className="court-print-area" style={styles.legalDoc}>
+                <div ref={courtDocRef} className="court-print-area" style={styles.legalDoc}>
                   {/* Letterhead */}
                   <div style={{ textAlign: "center", borderBottom: "2px solid #1A202C", paddingBottom: 12, marginBottom: 16 }}>
                     <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1 }}>REPUBLIC OF THE PHILIPPINES</div>

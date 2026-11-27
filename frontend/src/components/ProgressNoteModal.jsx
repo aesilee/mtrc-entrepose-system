@@ -15,7 +15,8 @@ export default function ProgressNoteModal({ patientId: initialPatientId, note, o
   const [form, setForm] = useState({
     sessionDate: note?.session_date?.slice(0, 10) || new Date().toISOString().slice(0, 10),
     sessionType: note?.session_type || "",
-    relapseRisk: note?.relapse_risk || "SAFE",
+    relapseRisk: note?.relapse_risk || "",
+    staffRiskAssessment: note?.staff_risk_assessment || "",
     observation: note?.observation || "",
     interventionProvided: note?.intervention_provided || "",
     patientResponse: note?.patient_response || "",
@@ -27,7 +28,7 @@ export default function ProgressNoteModal({ patientId: initialPatientId, note, o
 
   useEffect(() => {
     if (!initialPatientId) {
-      api.get("/patients").then(({ data }) => {
+      api.get("/patients", { params: { limit: 500 } }).then(({ data }) => {
         const pts = data.patients || [];
         setPatients(pts);
         if (pts.length && !selectedPatientId) {
@@ -63,6 +64,15 @@ export default function ProgressNoteModal({ patientId: initialPatientId, note, o
       setSaving(false);
     }
   }
+
+  const selfRiskStyle =
+    form.relapseRisk === "USED"
+      ? { background: "#FEE2E2", color: "#991B1B", borderColor: "#FCA5A5" }
+      : form.relapseRisk === "NEARLY_USED"
+      ? { background: "#FFEDD5", color: "#9A3412", borderColor: "#FDBA74" }
+      : form.relapseRisk === "AT_RISK"
+      ? { background: "#FEF3C7", color: "#92400E", borderColor: "#FCD34D" }
+      : { background: "#ECFDF5", color: "#065F46", borderColor: "#A7F3D0" };
 
   return (
     <div style={styles.backdrop} onClick={onClose}>
@@ -106,24 +116,45 @@ export default function ProgressNoteModal({ patientId: initialPatientId, note, o
             </label>
           </div>
 
-          <label style={styles.label}>
-            Schedule Book Relapse Risk (ENTREPOSE Vol. 3A)
-            <select
-              style={{
-                ...styles.input,
-                background: form.relapseRisk === "USED" ? "#FEE2E2" : form.relapseRisk === "AT_RISK" ? "#FEF3C7" : "#ECFDF5",
-                color: form.relapseRisk === "USED" ? "#991B1B" : form.relapseRisk === "AT_RISK" ? "#92400E" : "#065F46",
-                fontWeight: 600,
-                borderColor: form.relapseRisk === "USED" ? "#FCA5A5" : form.relapseRisk === "AT_RISK" ? "#FCD34D" : "#A7F3D0",
-              }}
-              value={form.relapseRisk}
-              onChange={(e) => update("relapseRisk", e.target.value)}
-            >
-              <option value="SAFE">🟢 Safe (Adhering to recovery schedule & clean)</option>
-              <option value="AT_RISK">🟡 At Risk (Trigger proximity, cravings, or skipped activities)</option>
-              <option value="USED">🔴 Used / Slip (Substance lapse or relapse reported)</option>
-            </select>
-          </label>
+          <div style={{ background: "#F8FAFC", border: "1px solid #E2E8F0", borderRadius: 8, padding: "10px 12px", display: "flex", flexDirection: "column", gap: 10 }}>
+            <div style={{ fontSize: 11.5, color: "#475569", lineHeight: 1.4 }}>
+              <strong>Separate Risk Documentation:</strong> Client self-reported craving / urge status and Staff clinical assessment are recorded separately. Selecting <em>Nearly Used / Strong Craving</em> preserves that the client experienced cravings <strong>without</strong> using drugs.
+            </div>
+            <label style={styles.label}>
+              1. Client Self-Reported Craving / Urge Status (Workbook Reflection)
+              <select
+                style={{
+                  ...styles.input,
+                  ...selfRiskStyle,
+                  fontWeight: 600,
+                }}
+                value={form.relapseRisk}
+                onChange={(e) => update("relapseRisk", e.target.value)}
+              >
+                <option value="">— Unanswered / Not Assessed —</option>
+                <option value="SAFE">🟢 Safe / Abstinent (Adhering to recovery plan; no cravings reported)</option>
+                <option value="AT_RISK">🟡 At Risk (Trigger exposure or high-risk situation — no substance use)</option>
+                <option value="NEARLY_USED">🟠 Nearly Used / Strong Craving (Strong urge — did NOT use substances)</option>
+                <option value="USED">🔴 Actual Use / Slip (Client reported actual substance use / lapse)</option>
+              </select>
+            </label>
+
+            <label style={styles.label}>
+              2. Staff Clinical Risk Assessment (Evaluator Judgment)
+              <select
+                style={styles.input}
+                value={form.staffRiskAssessment}
+                onChange={(e) => update("staffRiskAssessment", e.target.value)}
+              >
+                <option value="">— Optional: Select Staff Clinical Risk Level —</option>
+                <option value="LOW_RISK">Low Risk — Stable Recovery & Coping</option>
+                <option value="MODERATE_RISK">Moderate Risk — Monitor Triggers & Reinforce Coping</option>
+                <option value="HIGH_RISK">High Risk — Intensify Clinical Support & Follow-up</option>
+                <option value="ACUTE_RELAPSE_RISK">Acute Relapse Risk — Immediate Clinical Intervention</option>
+              </select>
+            </label>
+          </div>
+
           <label style={styles.label}>
             Observation
             <textarea style={{ ...styles.input, minHeight: 70 }} value={form.observation} onChange={(e) => update("observation", e.target.value)} required />
@@ -157,7 +188,7 @@ export default function ProgressNoteModal({ patientId: initialPatientId, note, o
 
 const styles = {
   backdrop: { position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 100 },
-  modal: { background: "var(--color-surface)", borderRadius: "var(--radius-lg)", width: 520, maxHeight: "85vh", display: "flex", flexDirection: "column", overflow: "hidden" },
+  modal: { background: "var(--color-surface)", borderRadius: "var(--radius-lg)", width: 560, maxWidth: "95vw", maxHeight: "88vh", display: "flex", flexDirection: "column", overflow: "hidden" },
   header: { display: "flex", justifyContent: "space-between", alignItems: "center", padding: "16px 20px", borderBottom: "1px solid var(--color-border)" },
   title: { fontSize: 16, fontWeight: 800 },
   closeBtn: { background: "none", border: "none", fontSize: 22, cursor: "pointer", color: "var(--color-text-muted)" },

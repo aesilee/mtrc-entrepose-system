@@ -1,5 +1,22 @@
 import pool from "../config/db.js";
+import { caseloadIdsFor } from "../utils/sharedCaseload.js";
 import { notifyIctAdmins, notifyRoles, notifyUser } from "../utils/notify.js";
+import { ensureAttendanceCompletionSchema } from "../utils/attendanceSchema.js";
+import { ensureCbteAndRiskSchema } from "../utils/cbteAndRiskSchema.js";
+import { getBulkUnifiedPatientProgress } from "../utils/curriculumProgress.js";
+import { getAttendanceRates } from "../utils/attendanceRate.js";
+import {
+  ensureProgramDurationSchema,
+  evaluatePatientDuration,
+  calculateExpectedCompletionDate,
+  toDateOnlyString,
+} from "../utils/programDuration.js";
+import {
+  ensureHistoricalReportSchema,
+  recordCaseManagerAssignment,
+  recordPatientStatusChange,
+} from "../utils/historicalReportSchema.js";
+import { isCompleterOutcome } from "../utils/classification.js";
 
 function cleanText(value) {
   return typeof value === "string" ? value.trim() : value;
@@ -113,6 +130,8 @@ export async function generatePwudCode(municipality, connection = pool) {
 }
 
 export async function listPatients(req, res) {
+  await ensureAttendanceCompletionSchema();
+  await ensureProgramDurationSchema();
   const clauses = ["p.is_archived = FALSE"];
   const params = [];
 
@@ -128,9 +147,9 @@ export async function listPatients(req, res) {
     clauses.push("p.enrollment_status = 'active'");
     clauses.push("NOT EXISTS (SELECT 1 FROM discharges d WHERE d.patient_id = p.id)");
   } else if (status === "completed") {
-    clauses.push("(p.enrollment_status = 'completed' OR EXISTS (SELECT 1 FROM discharges d WHERE d.patient_id = p.id AND d.discharge_type REGEXP 'complete|graduat'))");
+    clauses.push("(p.enrollment_status = 'completed' OR EXISTS (SELECT 1 FROM discharges d WHERE d.patient_id = p.id AND (d.outcome = 'COMPLETER' OR (d.outcome IS NULL AND d.discharge_type NOT LIKE '%Non%' AND d.discharge_type NOT LIKE '%non_%' AND d.discharge_type REGEXP 'complete|graduat'))))");
   } else if (status === "dropped") {
-    clauses.push("(p.enrollment_status = 'dropped' OR EXISTS (SELECT 1 FROM discharges d WHERE d.patient_id = p.id AND d.discharge_type NOT REGEXP 'complete|graduat'))");
+    clauses.push("(p.enrollment_status = 'dropped' OR EXISTS (SELECT 1 FROM discharges d WHERE d.patient_id = p.id AND (d.outcome = 'NON_COMPLETER' OR (d.outcome IS NULL AND (d.discharge_type LIKE '%Non%' OR d.discharge_type LIKE '%non_%' OR d.discharge_type NOT REGEXP 'complete|graduat')))))");
   } else if (status) {
     clauses.push("p.enrollment_status = ?");
     params.push(status);
@@ -140,16 +159,17 @@ export async function listPatients(req, res) {
   // For group attendance, any facilitator can take attendance for all active outpatients.
   // For regular patient list, show assigned patients plus unassigned patients needing attention.
   const caseManagerId = req.query.caseManagerId;
-  if (caseManagerId) {
+  if (caseManagerId && caseManagerId !== "all") {
     clauses.push("p.assigned_case_manager_id = ?");
     params.push(caseManagerId);
-  } else if (req.user.role === "case_manager" && !forAttendance && req.query.showAll !== "true") {
-    clauses.push("(p.assigned_case_manager_id = ? OR p.assigned_case_manager_id IS NULL)");
-    params.push(req.user.id);
+  } else if (req.user.role === "case_manager" && !forAttendance && req.query.showAll !== "true" && caseManagerId !== "all") {
+    clauses.push("(p.assigned_case_manager_id IN (?) OR p.assigned_case_manager_id IS NULL)");
+    params.push(caseloadIdsFor(req.user.id));
   }
 
   // Parse pagination params (attendance rosters can load full active cohort up to 500)
-  const maxLimit = forAttendance ? 500 : 100;
+  // Dropdowns (certificates, notes, follow-ups, reports) request the full list, so allow up to 500.
+  const maxLimit = 500;
   const defaultLimit = forAttendance ? 300 : 10;
   const page = Math.max(1, parseInt(req.query.page, 10) || 1);
   const limit = Math.max(1, Math.min(maxLimit, parseInt(req.query.limit, 10) || defaultLimit));
@@ -189,13 +209,60 @@ export async function listPatients(req, res) {
     params.push(dateTo);
   }
 
-  // Clinical Flag filter
+  // Clinical Flag filter (uses unified 28 CBT + 3 CBT-E + 12 PE = 43 Core AND patient-specific duration requirement for pdc_ready)
   const flag = cleanText(req.query.flag);
-  if (flag === "pdc_ready") {
-    clauses.push(`(
-      (SELECT COUNT(*) FROM attendance a WHERE a.patient_id = p.id AND a.status = 'present' AND a.session_type IN ('CBT_GROUP', 'PSYCHO_EDUCATION')) >= 43
-      AND NOT EXISTS (SELECT 1 FROM patient_milestones pm WHERE pm.patient_id = p.id AND pm.date_pdc IS NOT NULL)
-    )`);
+  if (flag === "pdc_ready" || flag === "any") {
+    const [candRows] = await pool.query(
+      `SELECT p.id, p.admission_date, p.rehab_start_date, p.required_duration_months,
+              p.duration_basis, p.extension_months, p.expected_completion_date,
+              (SELECT pm.date_pdc FROM patient_milestones pm WHERE pm.patient_id = p.id LIMIT 1) AS date_pdc
+       FROM patients p
+       LEFT JOIN patient_referrals r ON r.patient_id = p.id
+       WHERE ${clauses.join(" AND ")}`,
+      params
+    );
+    const candIds = candRows.filter((r) => !r.date_pdc).map((r) => r.id);
+    const candProgMap = await getBulkUnifiedPatientProgress(pool, candIds);
+    const candRowMap = new Map(candRows.map((r) => [Number(r.id), r]));
+    const pdcReadyIds = candIds.filter((pid) => {
+      const prog = candProgMap.get(Number(pid));
+      const dur = evaluatePatientDuration(candRowMap.get(Number(pid)));
+      return Boolean(prog?.isCoreComplete && dur?.isDurationMet);
+    });
+
+    if (flag === "pdc_ready") {
+      if (pdcReadyIds.length > 0) {
+        clauses.push(`p.id IN (${pdcReadyIds.map(() => "?").join(",")})`);
+        params.push(...pdcReadyIds);
+      } else {
+        clauses.push("1 = 0");
+      }
+    } else if (flag === "any") {
+      const pdcSubClause =
+        pdcReadyIds.length > 0
+          ? `p.id IN (${pdcReadyIds.map(() => "?").join(",")})`
+          : "1 = 0";
+      if (pdcReadyIds.length > 0) {
+        params.push(...pdcReadyIds);
+      }
+      clauses.push(`(
+        (${pdcSubClause})
+        OR EXISTS (
+          SELECT 1 FROM drug_test_logs dt
+          WHERE dt.patient_id = p.id AND dt.result = 'POSITIVE' AND dt.test_date >= DATE_SUB(CURDATE(), INTERVAL 30 DAY)
+        )
+        OR EXISTS (
+          SELECT 1 FROM (
+            SELECT patient_id, status, ROW_NUMBER() OVER (PARTITION BY patient_id ORDER BY session_date DESC, id DESC) as rn
+            FROM attendance
+            WHERE status != 'cancelled'
+          ) sub
+          WHERE sub.patient_id = p.id AND sub.rn <= 2
+          GROUP BY sub.patient_id
+          HAVING COUNT(*) = 2 AND SUM(sub.status = 'absent') = 2
+        )
+      )`);
+    }
   } else if (flag === "positive_rdt") {
     clauses.push(`EXISTS (
       SELECT 1 FROM drug_test_logs dt
@@ -206,30 +273,11 @@ export async function listPatients(req, res) {
       SELECT 1 FROM (
         SELECT patient_id, status, ROW_NUMBER() OVER (PARTITION BY patient_id ORDER BY session_date DESC, id DESC) as rn
         FROM attendance
+        WHERE status != 'cancelled'
       ) sub
       WHERE sub.patient_id = p.id AND sub.rn <= 2
       GROUP BY sub.patient_id
       HAVING COUNT(*) = 2 AND SUM(sub.status = 'absent') = 2
-    )`);
-  } else if (flag === "any") {
-    clauses.push(`(
-      (
-        (SELECT COUNT(*) FROM attendance a WHERE a.patient_id = p.id AND a.status = 'present' AND a.session_type IN ('CBT_GROUP', 'PSYCHO_EDUCATION')) >= 43
-        AND NOT EXISTS (SELECT 1 FROM patient_milestones pm WHERE pm.patient_id = p.id AND pm.date_pdc IS NOT NULL)
-      )
-      OR EXISTS (
-        SELECT 1 FROM drug_test_logs dt
-        WHERE dt.patient_id = p.id AND dt.result = 'POSITIVE' AND dt.test_date >= DATE_SUB(CURDATE(), INTERVAL 30 DAY)
-      )
-      OR EXISTS (
-        SELECT 1 FROM (
-          SELECT patient_id, status, ROW_NUMBER() OVER (PARTITION BY patient_id ORDER BY session_date DESC, id DESC) as rn
-          FROM attendance
-        ) sub
-        WHERE sub.patient_id = p.id AND sub.rn <= 2
-        GROUP BY sub.patient_id
-        HAVING COUNT(*) = 2 AND SUM(sub.status = 'absent') = 2
-      )
     )`);
   }
 
@@ -275,7 +323,9 @@ export async function listPatients(req, res) {
 
   const [rows] = await pool.query(
     `SELECT p.id, p.patient_code, p.pwud_code, p.full_name, p.photo_url, p.gender, p.municipality,
-            p.admission_date, p.enrollment_status, p.is_archived,
+            p.admission_date, p.rehab_start_date, p.required_duration_months, p.duration_basis,
+            p.duration_basis_detail, p.extension_months, p.expected_completion_date,
+            p.enrollment_status, p.is_archived,
             p.assigned_case_manager_id AS case_manager_id,
             u.full_name AS case_manager_name,
             r.status AS referral_status,
@@ -285,9 +335,11 @@ export async function listPatients(req, res) {
             d.discharge_type,
             d.discharge_date,
             ${chairSql}
-            (SELECT COUNT(*) FROM attendance a WHERE a.patient_id = p.id) AS total_sessions,
-            (SELECT COUNT(*) FROM attendance a WHERE a.patient_id = p.id AND a.status = 'present') AS present_sessions,
-            (SELECT COUNT(*) FROM attendance a WHERE a.patient_id = p.id AND a.status = 'present' AND a.session_type IN ('CBT_GROUP', 'PSYCHO_EDUCATION')) AS core_sessions,
+            (SELECT COUNT(*) FROM attendance a WHERE a.patient_id = p.id AND a.status != 'cancelled') AS total_sessions,
+            (SELECT COUNT(*) FROM attendance a WHERE a.patient_id = p.id AND a.status IN ('present', 'late')) AS present_sessions,
+            (SELECT COUNT(*) FROM attendance a WHERE a.patient_id = p.id AND a.status IN ('present', 'late') AND COALESCE(a.completion_status, CASE WHEN a.status = 'present' THEN 'CREDITED' ELSE 'NOT_CREDITED' END) = 'CREDITED' AND COALESCE(a.is_duplicate_topic, 0) = 0) AS credited_sessions,
+            (SELECT COUNT(*) FROM attendance a WHERE a.patient_id = p.id AND a.status IN ('present', 'late') AND COALESCE(a.completion_status, CASE WHEN a.status = 'present' THEN 'CREDITED' ELSE 'NOT_CREDITED' END) = 'CREDITED' AND COALESCE(a.is_duplicate_topic, 0) = 0 AND a.session_type IN ('CBT_GROUP', 'PSYCHO_EDUCATION')) AS core_sessions,
+            (SELECT COUNT(*) FROM attendance a WHERE a.patient_id = p.id AND a.completion_status = 'PENDING_REVIEW') AS pending_review_sessions,
             (SELECT COUNT(*) FROM drug_test_logs dt WHERE dt.patient_id = p.id AND dt.result = 'POSITIVE' AND dt.test_date >= DATE_SUB(CURDATE(), INTERVAL 30 DAY)) AS recent_positive_rdt,
             (SELECT pm.date_pdc FROM patient_milestones pm WHERE pm.patient_id = p.id LIMIT 1) AS date_pdc
      FROM patients p
@@ -303,14 +355,18 @@ export async function listPatients(req, res) {
   );
 
   let recentAbsencesMap = {};
+  let progressMap = new Map();
+  let attendanceRateMap = new Map();
   if (rows.length > 0) {
     const patientIds = rows.map((r) => r.id);
+    progressMap = await getBulkUnifiedPatientProgress(pool, patientIds);
+    attendanceRateMap = await getAttendanceRates(pool, patientIds);
     const [recentAtt] = await pool.query(
       `SELECT patient_id, status FROM (
          SELECT patient_id, status,
                 ROW_NUMBER() OVER (PARTITION BY patient_id ORDER BY session_date DESC, id DESC) as rn
          FROM attendance
-         WHERE patient_id IN (?)
+         WHERE patient_id IN (?) AND status != 'cancelled'
        ) sub WHERE rn <= 2`,
       [patientIds]
     );
@@ -328,13 +384,36 @@ export async function listPatients(req, res) {
   }
 
   const patients = rows.map((p) => {
+    const prog = progressMap.get(Number(p.id));
+    const dur = evaluatePatientDuration(p);
+    const coreCompleted = prog ? prog.attendedCore : Number(p.core_sessions || 0);
+    const cbtCompleted = prog ? prog.cbtGroup : 0;
+    const cbteCompleted = prog ? prog.cbteCompleted : 0;
+    const peCompleted = prog ? prog.psychoEd : 0;
+    const isCoreComplete = prog ? prog.isCoreComplete : false;
+    const isDurationMet = dur ? dur.isDurationMet : true;
+
     const flags = [];
-    if (p.core_sessions >= 43 && !p.date_pdc) {
+    if (isCoreComplete && isDurationMet && !p.date_pdc) {
       flags.push({
         key: "pdc_ready",
-        label: "Ready for PDC",
+        label: `Ready for PDC (43/43 · ${dur?.totalRequiredMonths || 7}m)`,
         type: "blue",
-        title: `Completed ${p.core_sessions} core sessions (>= 43). Ready for Pre-Discharge Conference.`,
+        title: `Completed all 43 core requirements (CBT ${cbtCompleted}/28, CBT-E ${cbteCompleted}/3, PE ${peCompleted}/12) and met the mandated ${dur?.totalRequiredMonths || 7}-month program duration. Ready for Pre-Discharge Conference.`,
+      });
+    } else if (isCoreComplete && !isDurationMet && !p.date_pdc) {
+      flags.push({
+        key: "duration_pending",
+        label: `Core 43/43 · Duration ${dur.monthsElapsed}/${dur.totalRequiredMonths}m`,
+        type: "amber",
+        title: `Completed all 43 core requirements, but mandated program duration (${dur.totalRequiredMonths} mos — ${dur.durationBasisLabel}) is not yet met (${dur.monthsElapsed}/${dur.totalRequiredMonths} mos elapsed; expected ${dur.expectedCompletionDate || "—"}).`,
+      });
+    } else if (!isCoreComplete && prog?.tallies?.totalPhysicalAttended >= 43 && !p.date_pdc) {
+      flags.push({
+        key: "incomplete_core",
+        label: `Core: ${coreCompleted}/43`,
+        type: "amber",
+        title: `Attended ${prog.tallies.totalPhysicalAttended} activities, but core curriculum is incomplete (CBT ${cbtCompleted}/28, CBT-E ${cbteCompleted}/3, PE ${peCompleted}/12).`,
       });
     }
     if (recentAbsencesMap[p.id]) {
@@ -354,7 +433,7 @@ export async function listPatients(req, res) {
       });
     }
 
-    const isCompleted = p.discharge_type ? /complete|graduat/i.test(p.discharge_type) : false;
+    const isCompleted = p.discharge_type ? isCompleterOutcome(p.discharge_outcome || p.discharge_type, p.discharge_remarks) : false;
     let resolvedStatus = p.enrollment_status;
     if (p.discharge_date) {
       if (resolvedStatus === "active" || !resolvedStatus) {
@@ -364,10 +443,17 @@ export async function listPatients(req, res) {
 
     return {
       ...p,
+      core_sessions: coreCompleted,
+      cbt_completed: cbtCompleted,
+      cbte_completed: cbteCompleted,
+      pe_completed: peCompleted,
+      is_core_complete: isCoreComplete,
+      is_duration_met: isDurationMet,
+      duration_summary: dur,
       enrollment_status: resolvedStatus,
       discharge_type: p.discharge_type || null,
       discharge_date: p.discharge_date || null,
-      attendance_rate: p.total_sessions > 0 ? Math.round((p.present_sessions / p.total_sessions) * 100) : null,
+      attendance_rate: attendanceRateMap.get(p.id)?.rate ?? null,
       flags,
     };
   });
@@ -390,8 +476,13 @@ export async function listPatients(req, res) {
 }
 
 export async function updatePatient(req, res) {
+  await ensureProgramDurationSchema();
   const { id } = req.params;
   const fields = req.body;
+
+  // Editing follows the same rule as viewing: a case manager may only change patients in their own caseload.
+  const access = await verifyPatientAccess(id, req.user);
+  if (!access.allowed) return res.status(access.status).json({ message: access.message });
 
   if (fields.livingArrangement !== undefined
       && !new Set(["", "With Parents", "With Relatives", "Boarding House", "Living Alone"]).has(cleanText(fields.livingArrangement) || "")) {
@@ -418,6 +509,18 @@ export async function updatePatient(req, res) {
   }
   if (fields.emergencyContactMethod === "email" && !emergencyContactEmail) {
     return res.status(400).json({ message: "Emergency contact email is required when Email is the preferred contact method." });
+  }
+
+  if (
+    fields.requiredDurationMonths !== undefined ||
+    fields.durationBasis !== undefined ||
+    fields.durationBasisDetail !== undefined ||
+    fields.extensionMonths !== undefined
+  ) {
+    return res.status(400).json({
+      message:
+        "Program duration and extension changes cannot be modified from the general patient profile. Use the formal Duration Change workflow with documented reason and approval.",
+    });
   }
 
   const columnMap = {
@@ -448,17 +551,52 @@ export async function updatePatient(req, res) {
     emergencyContactMethod: "emergency_contact_method",
     guardianName: "guardian_name", guardianRelationship: "guardian_relationship",
     guardianContactNumber: "guardian_contact_number", guardianAddress: "guardian_address",
-    admissionDate: "admission_date", referralSource: "referral_source",
+    admissionDate: "admission_date", rehabStartDate: "rehab_start_date",
+    referralSource: "referral_source",
     admissionType: "admission_type", programId: "program_id",
     assignedCaseManagerId: "assigned_case_manager_id", admissionNotes: "admission_notes",
     initialAssessment: "initial_assessment",
     enrollmentStatus: "enrollment_status",
     currentStatus: "current_status", programPhase: "program_phase",
-    expectedCompletionDate: "expected_completion_date", sessionsRequired: "sessions_required",
     caseType: "case_type",
     attendingPhysician: "attending_physician",
     opdNumber: "opd_number",
   };
+
+  // Single consolidated pre-fetch query to check current patient state
+  const [[current]] = await pool.query(
+    `SELECT first_name, middle_name, last_name, suffix, full_name,
+            enrollment_status, admission_date, rehab_start_date,
+            required_duration_months, duration_basis, duration_basis_detail,
+            extension_months, expected_completion_date,
+            assigned_case_manager_id
+     FROM patients WHERE id = ?`,
+    [id]
+  );
+
+  // If agreed start date or admission date changed, consistently recalculate expectedCompletionDate based on existing duration
+  const nextStart =
+    fields.rehabStartDate !== undefined && fields.rehabStartDate !== ""
+      ? fields.rehabStartDate
+      : toDateOnlyString(current?.rehab_start_date) ||
+        (fields.admissionDate !== undefined && fields.admissionDate !== ""
+          ? fields.admissionDate
+          : toDateOnlyString(current?.admission_date));
+  const currentReqMonths = Number(current?.required_duration_months) || 7;
+  const currentExtMonths = Number(current?.extension_months) || 0;
+
+  if (
+    nextStart &&
+    (fields.rehabStartDate !== undefined || fields.admissionDate !== undefined)
+  ) {
+    const computedExpected = calculateExpectedCompletionDate(nextStart, currentReqMonths + currentExtMonths);
+    if (computedExpected) {
+      fields.expectedCompletionDate = computedExpected;
+    }
+    if (!current?.rehab_start_date && fields.rehabStartDate === undefined) {
+      fields.rehabStartDate = nextStart;
+    }
+  }
 
   const setClauses = [];
   const values = [];
@@ -472,12 +610,6 @@ export async function updatePatient(req, res) {
   if (setClauses.length === 0) {
     return res.status(400).json({ message: "No fields to update." });
   }
-
-  // Single consolidated pre-fetch query to check current patient state
-  const [[current]] = await pool.query(
-    "SELECT first_name, middle_name, last_name, suffix, full_name, enrollment_status, admission_date, assigned_case_manager_id FROM patients WHERE id = ?",
-    [id]
-  );
 
   if (["firstName", "middleName", "lastName", "suffix"].some((key) => fields[key] !== undefined)) {
     const fullName = [
@@ -510,12 +642,14 @@ export async function updatePatient(req, res) {
   try {
     await pool.query(`UPDATE patients SET ${setClauses.join(", ")} WHERE id = ?`, values);
 
+    // Duration changes must strictly be processed via recordPatientDurationChange (POST /api/patients/:id/duration-change).
+
     const [[updatedPatient]] = await pool.query("SELECT full_name FROM patients WHERE id = ?", [id]);
     const patientDisplayName = updatedPatient?.full_name || current?.full_name || `#${id}`;
 
     let auditLogged = false;
 
-    // 1. Audit Case Manager Reassignment
+    // 1. Audit & Record Case Manager Reassignment with Effective Dates
     if (
       fields.assignedCaseManagerId !== undefined &&
       current &&
@@ -530,6 +664,12 @@ export async function updatePatient(req, res) {
         "INSERT INTO audit_log (actor_username, action, table_name, record_id) VALUES (?, ?, 'patients', ?)",
         [req.user.username, `Reassigned Case Manager to "${newCmName}" for patient "${patientDisplayName}"`, id]
       );
+      await recordCaseManagerAssignment(pool, {
+        patientId: id,
+        newCaseManagerId: fields.assignedCaseManagerId || null,
+        reason: fields.reassignmentReason || `Reassigned to "${newCmName}" by ${req.user.username}`,
+        assignedBy: req.user.id,
+      });
       auditLogged = true;
     }
 
@@ -552,6 +692,14 @@ export async function updatePatient(req, res) {
         "INSERT INTO audit_log (actor_username, action, table_name, record_id) VALUES (?, ?, 'patients', ?)",
         [req.user.username, `${statusChangeMessage} for patient "${patientDisplayName}"`, id]
       );
+      if (fields.enrollmentStatus && fields.enrollmentStatus !== current.enrollment_status) {
+        await recordPatientStatusChange(pool, {
+          patientId: id,
+          newStatus: fields.enrollmentStatus,
+          reason: statusChangeMessage,
+          changedBy: req.user.id,
+        });
+      }
       auditLogged = true;
     } else if (!auditLogged) {
       await pool.query(
@@ -586,7 +734,7 @@ export async function updatePatient(req, res) {
 async function verifyPatientAccess(patientId, user) {
   const [[patient]] = await pool.query("SELECT id, assigned_case_manager_id FROM patients WHERE id = ?", [patientId]);
   if (!patient) return { allowed: false, status: 404, message: "Patient not found." };
-  if (user.role === "case_manager" && patient.assigned_case_manager_id && patient.assigned_case_manager_id !== user.id) {
+  if (user.role === "case_manager" && patient.assigned_case_manager_id && !caseloadIdsFor(user.id).includes(Number(patient.assigned_case_manager_id))) {
     return { allowed: false, status: 403, message: "You do not have access to this patient." };
   }
   return { allowed: true, patient };
@@ -595,6 +743,7 @@ async function verifyPatientAccess(patientId, user) {
 export async function getPatient(req, res) {
   const { id } = req.params;
   try {
+    await ensureProgramDurationSchema();
     const [rows] = await pool.query(
       `SELECT p.*, u.full_name AS case_manager_name, pr.name AS program_name,
               d.discharge_type, d.discharge_date, d.remarks AS discharge_remarks, d.discharged_by
@@ -614,19 +763,219 @@ export async function getPatient(req, res) {
 
     const patient = rows[0];
     if (patient.discharge_date && (patient.enrollment_status === "active" || !patient.enrollment_status)) {
-      patient.enrollment_status = /complete|graduat/i.test(patient.discharge_type || "") ? "completed" : "dropped";
+      patient.enrollment_status = isCompleterOutcome(patient.discharge_outcome || patient.discharge_type || "", patient.discharge_remarks) ? "completed" : "dropped";
     }
 
-    res.json({ patient });
+    patient.duration_summary = evaluatePatientDuration(patient);
+    const [durationHistory] = await pool
+      .query(
+        `SELECT * FROM patient_duration_history
+         WHERE patient_id = ?
+         ORDER BY created_at DESC, id DESC`,
+        [id]
+      )
+      .catch(() => [[]]);
+    patient.duration_history = durationHistory;
+
+    res.json({ patient, durationHistory });
   } catch (err) {
     console.error("Error in getPatient:", err);
     res.status(500).json({ message: "Could not retrieve patient." });
   }
 }
 
+export async function getPatientDurationHistory(req, res) {
+  const { id } = req.params;
+  try {
+    await ensureProgramDurationSchema();
+    const access = await verifyPatientAccess(id, req.user);
+    if (!access.allowed) return res.status(access.status).json({ message: access.message });
+
+    const [[patient]] = await pool.query("SELECT * FROM patients WHERE id = ?", [id]);
+    const [history] = await pool
+      .query(
+        `SELECT * FROM patient_duration_history
+         WHERE patient_id = ?
+         ORDER BY created_at DESC, id DESC`,
+        [id]
+      )
+      .catch(() => [[]]);
+
+    res.json({
+      durationSummary: evaluatePatientDuration(patient),
+      history,
+    });
+  } catch (err) {
+    console.error("Error in getPatientDurationHistory:", err);
+    res.status(500).json({ message: "Could not retrieve program duration history." });
+  }
+}
+
+export async function recordPatientDurationChange(req, res) {
+  const { id } = req.params;
+  const {
+    changeType, // 'EXTENSION' | 'REQUIREMENT_CHANGE'
+    requiredDurationMonths,
+    additionalExtensionMonths,
+    durationBasis,
+    durationBasisDetail,
+    agreedStartDate,
+    reason,
+    effectiveDate,
+    approvedByName,
+  } = req.body;
+
+  try {
+    await ensureProgramDurationSchema();
+    const access = await verifyPatientAccess(id, req.user);
+    if (!access.allowed) return res.status(access.status).json({ message: access.message });
+
+    const [[current]] = await pool.query("SELECT * FROM patients WHERE id = ?", [id]);
+    if (!current) return res.status(404).json({ message: "Patient not found." });
+
+    if (!cleanText(reason)) {
+      return res.status(400).json({ message: "A documented reason is required when changing program duration or recording an extension." });
+    }
+    if (!cleanText(approvedByName)) {
+      return res.status(400).json({ message: "Approving supervisor / court authority name is required." });
+    }
+
+    const prevBaseMonths = Number(current.required_duration_months) || 7;
+    const prevExtMonths = Number(current.extension_months) || 0;
+    const prevBasis = current.duration_basis || "STANDARD_PROGRAM";
+    const prevExpected = toDateOnlyString(current.expected_completion_date);
+    const effectiveStart =
+      cleanText(agreedStartDate) ||
+      toDateOnlyString(current.rehab_start_date) ||
+      toDateOnlyString(current.admission_date) ||
+      new Date().toISOString().slice(0, 10);
+
+    let nextBaseMonths = prevBaseMonths;
+    let nextExtMonths = prevExtMonths;
+    let nextBasis = cleanText(durationBasis) || prevBasis;
+    let nextBasisDetail =
+      durationBasisDetail !== undefined
+        ? cleanText(durationBasisDetail)
+        : current.duration_basis_detail;
+
+    const resolvedChangeType = changeType === "EXTENSION" ? "EXTENSION" : "REQUIREMENT_CHANGE";
+
+    if (resolvedChangeType === "EXTENSION") {
+      const addMonths = Number(additionalExtensionMonths);
+      if (!Number.isFinite(addMonths) || addMonths <= 0) {
+        return res.status(400).json({ message: "Enter a valid number of extension months greater than zero." });
+      }
+      nextExtMonths = prevExtMonths + addMonths;
+    } else {
+      const reqMonths = Number(requiredDurationMonths);
+      if (!Number.isFinite(reqMonths) || reqMonths <= 0) {
+        return res.status(400).json({ message: "Enter a valid required program duration in months." });
+      }
+      nextBaseMonths = reqMonths;
+      if (req.body.resetExtensions === true) {
+        nextExtMonths = 0;
+      }
+    }
+
+    const totalMonths = nextBaseMonths + nextExtMonths;
+    const newExpected = calculateExpectedCompletionDate(effectiveStart, totalMonths);
+    const effDate = cleanText(effectiveDate) || new Date().toISOString().slice(0, 10);
+
+    await pool.query(
+      `UPDATE patients
+       SET rehab_start_date = ?,
+           required_duration_months = ?,
+           extension_months = ?,
+           duration_basis = ?,
+           duration_basis_detail = ?,
+           expected_completion_date = ?
+       WHERE id = ?`,
+      [
+        effectiveStart,
+        nextBaseMonths,
+        nextExtMonths,
+        nextBasis,
+        nextBasisDetail || null,
+        newExpected,
+        id,
+      ]
+    );
+
+    // Sync target_completion_date in active treatment plan if one exists
+    await pool
+      .query(
+        `UPDATE patient_treatment_plans
+         SET target_completion_date = ?
+         WHERE patient_id = ? AND status = 'active'`,
+        [newExpected, id]
+      )
+      .catch(() => {});
+
+    // Preserve previous requirement and record the change/extension in patient_duration_history
+    await pool.query(
+      `INSERT INTO patient_duration_history
+         (patient_id, change_type, previous_duration_months, new_duration_months,
+          extension_months, total_duration_months, previous_basis, new_basis,
+          basis_detail, agreed_start_date, previous_expected_completion_date,
+          new_expected_completion_date, reason, effective_date,
+          approved_by_name, recorded_by, recorded_by_name)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        id,
+        resolvedChangeType,
+        prevBaseMonths,
+        nextBaseMonths,
+        nextExtMonths,
+        totalMonths,
+        prevBasis,
+        nextBasis,
+        nextBasisDetail || null,
+        effectiveStart,
+        prevExpected,
+        newExpected,
+        cleanText(reason),
+        effDate,
+        cleanText(approvedByName),
+        req.user.id,
+        req.user.full_name || req.user.username || "Staff",
+      ]
+    );
+
+    const actionDescription =
+      resolvedChangeType === "EXTENSION"
+        ? `Approved +${Number(additionalExtensionMonths)} mo. program extension for "${current.full_name}" (Previous: ${prevBaseMonths + prevExtMonths} mos -> New total: ${totalMonths} mos, Expected Completion: ${newExpected}, Approved by: ${cleanText(approvedByName)}, Reason: ${cleanText(reason)})`
+        : `Updated program duration requirement for "${current.full_name}" from ${prevBaseMonths} mos (${prevBasis}) to ${nextBaseMonths} mos (${nextBasis})${nextExtMonths > 0 ? ` + ${nextExtMonths} mos ext.` : ""} (Expected Completion: ${newExpected}, Approved by: ${cleanText(approvedByName)}, Reason: ${cleanText(reason)})`;
+
+    await pool.query(
+      "INSERT INTO audit_log (actor_username, action, table_name, record_id) VALUES (?, ?, 'patients', ?)",
+      [req.user.username, actionDescription, id]
+    );
+
+    const [[updatedPatient]] = await pool.query("SELECT * FROM patients WHERE id = ?", [id]);
+    const [history] = await pool.query(
+      "SELECT * FROM patient_duration_history WHERE patient_id = ? ORDER BY created_at DESC, id DESC",
+      [id]
+    );
+
+    res.json({
+      message:
+        resolvedChangeType === "EXTENSION"
+          ? `Approved extension of +${Number(additionalExtensionMonths)} month(s) recorded. Expected completion date updated to ${newExpected}.`
+          : `Program duration requirement updated to ${totalMonths} months. Previous requirement preserved in history.`,
+      durationSummary: evaluatePatientDuration(updatedPatient),
+      history,
+    });
+  } catch (err) {
+    console.error("Error in recordPatientDurationChange:", err);
+    res.status(500).json({ message: "Could not save program duration change." });
+  }
+}
+
 export async function getPatientAttendance(req, res) {
   const { id } = req.params;
   try {
+    await ensureAttendanceCompletionSchema();
+    await ensureCbteAndRiskSchema();
     const access = await verifyPatientAccess(id, req.user);
     if (!access.allowed) return res.status(access.status).json({ message: access.message });
 
@@ -634,18 +983,41 @@ export async function getPatientAttendance(req, res) {
     const attColNames = attCols.map((c) => c.Field);
     const extraAtt = [];
     if (attColNames.includes("relapse_risk")) extraAtt.push("a.relapse_risk");
+    if (attColNames.includes("staff_risk_assessment")) extraAtt.push("a.staff_risk_assessment");
+    if (attColNames.includes("drug_test_result")) extraAtt.push("a.drug_test_result");
     if (attColNames.includes("family_attended")) extraAtt.push("a.family_attended");
     if (attColNames.includes("family_member_name")) extraAtt.push("a.family_member_name");
     if (attColNames.includes("is_chairperson")) extraAtt.push("a.is_chairperson");
     const extraAttSql = extraAtt.length ? ", " + extraAtt.join(", ") : "";
 
     const [rows] = await pool.query(
-      `SELECT a.id, a.session_date,
+      `SELECT a.id, a.session_id, a.session_date,
               COALESCE(s.session_name, a.session_type) AS session_type,
-              a.status, a.notes
+              a.session_type AS raw_session_type,
+              a.topic_id, a.topic_name,
+              COALESCE(a.curriculum_requirement, s.curriculum_requirement, a.topic_name) AS curriculum_requirement,
+              a.status,
+              COALESCE(a.completion_status, CASE WHEN a.status = 'present' THEN 'CREDITED' ELSE 'NOT_CREDITED' END) AS completion_status,
+              a.arrival_time,
+              a.decision_reason,
+              a.authorized_by_name,
+              COALESCE(a.is_makeup, 0) AS is_makeup,
+              a.makeup_for_attendance_id,
+              COALESCE(a.is_duplicate_topic, 0) AS is_duplicate_topic,
+              a.reviewed_at,
+              a.notes,
+              s.session_time,
+              COALESCE(s.session_status, 'COMPLETED') AS session_status,
+              s.cancellation_reason,
+              orig.session_date AS makeup_origin_date,
+              COALESCE(orig.curriculum_requirement, orig.topic_name, orig.session_type) AS makeup_origin_requirement,
+              mk.id AS fulfilled_by_makeup_id,
+              mk.session_date AS fulfilled_by_makeup_date
               ${extraAttSql}
        FROM attendance a
        LEFT JOIN sessions s ON s.id = a.session_id
+       LEFT JOIN attendance orig ON orig.id = a.makeup_for_attendance_id
+       LEFT JOIN attendance mk ON mk.makeup_for_attendance_id = a.id AND mk.completion_status = 'CREDITED'
        WHERE a.patient_id = ?
        ORDER BY a.session_date DESC, a.id DESC`,
       [id]
@@ -660,12 +1032,16 @@ export async function getPatientAttendance(req, res) {
 export async function getPatientProgressNotes(req, res) {
   const { id } = req.params;
   try {
+    await ensureCbteAndRiskSchema();
     const access = await verifyPatientAccess(id, req.user);
     if (!access.allowed) return res.status(access.status).json({ message: access.message });
 
     const [pnCols] = await pool.query("SHOW COLUMNS FROM progress_notes");
     const pnColNames = pnCols.map((c) => c.Field);
-    const extraPnSql = pnColNames.includes("relapse_risk") ? ", pn.relapse_risk" : "";
+    const extraPnCols = [];
+    if (pnColNames.includes("relapse_risk")) extraPnCols.push("pn.relapse_risk");
+    if (pnColNames.includes("staff_risk_assessment")) extraPnCols.push("pn.staff_risk_assessment");
+    const extraPnSql = extraPnCols.length ? ", " + extraPnCols.join(", ") : "";
 
     const [rows] = await pool.query(
       `SELECT pn.id, pn.session_date, pn.session_type, pn.observation, pn.intervention_provided,
@@ -914,7 +1290,7 @@ export async function createPatient(req, res) {
       });
     }
 
-    const patientCode = await generatePatientCode();
+    let patientCode = await generatePatientCode();
     const resolvedCaseType = "substance_use"; // Scope locked: ENTREPOSE SUD only
 
     // Enforce case manager assignment for all PWUD registrations
@@ -1002,10 +1378,28 @@ export async function createPatient(req, res) {
 
     const columns = Object.keys(finalRecord);
     const placeholders = columns.map(() => "?").join(", ");
-    const [result] = await pool.query(
-      `INSERT INTO patients (${columns.join(", ")}) VALUES (${placeholders})`,
-      Object.values(finalRecord)
-    );
+    // Two staff registering at the same moment can compute the same next code; the UNIQUE indexes
+    // reject the second insert, so regenerate the codes and retry instead of failing.
+    let result;
+    for (let attempt = 1; ; attempt++) {
+      try {
+        [result] = await pool.query(
+          `INSERT INTO patients (${columns.join(", ")}) VALUES (${placeholders})`,
+          Object.values(finalRecord)
+        );
+        break;
+      } catch (insertErr) {
+        const codeClash = insertErr.code === "ER_DUP_ENTRY" && /patient_code|pwud_code/.test(insertErr.sqlMessage || "");
+        if (!codeClash || attempt >= 10) throw insertErr;
+        await new Promise((r) => setTimeout(r, 10 + Math.floor(Math.random() * 60)));
+        patientCode = await generatePatientCode();
+        if ("patient_code" in finalRecord) finalRecord.patient_code = patientCode;
+        if (pwudCode && "pwud_code" in finalRecord) {
+          pwudCode = await generatePwudCode(normalized.municipality);
+          finalRecord.pwud_code = pwudCode;
+        }
+      }
+    }
 
     await pool.query(
       "INSERT INTO audit_log (actor_username, action, table_name, record_id) VALUES (?, ?, ?, ?)",
@@ -1013,6 +1407,23 @@ export async function createPatient(req, res) {
     );
 
     await notifyRoles(["ict_admin", "him_staff", "admitting"], "patients", "patient_registered", `New patient registered: "${fullName}" (${patientCode}) — by ${req.user.username}`);
+
+    if (assignedCaseManagerId) {
+      await recordCaseManagerAssignment(pool, {
+        patientId: result.insertId,
+        newCaseManagerId: assignedCaseManagerId,
+        effectiveDate: finalRecord.admission_date || null,
+        reason: "Initial enrollment assignment",
+        assignedBy: req.user.id,
+      }).catch(() => {});
+    }
+    await recordPatientStatusChange(pool, {
+      patientId: result.insertId,
+      newStatus: finalRecord.enrollment_status || "pending",
+      effectiveDate: finalRecord.admission_date || null,
+      reason: "Initial enrollment registration",
+      changedBy: req.user.id,
+    }).catch(() => {});
 
     if (assignedCaseManagerId && Number(assignedCaseManagerId) !== Number(req.user.id)) {
       await notifyUser(
@@ -1033,5 +1444,27 @@ export async function createPatient(req, res) {
       return res.status(409).json({ message: "A duplicate patient record or code was detected. Please try saving again." });
     }
     res.status(500).json({ message: err.message || "Could not register the patient." });
+  }
+}
+
+/**
+ * Retrieves full longitudinal Case Manager assignment timeline with effective dates
+ */
+export async function getPatientAssignmentHistory(req, res) {
+  const { id } = req.params;
+  try {
+    await ensureHistoricalReportSchema(pool);
+    const [rows] = await pool.query(
+      `SELECT h.*, u.full_name AS assigned_by_name
+       FROM patient_case_manager_history h
+       LEFT JOIN users u ON u.id = h.assigned_by
+       WHERE h.patient_id = ?
+       ORDER BY h.start_date DESC, h.id DESC`,
+      [id]
+    );
+    res.json({ success: true, history: rows });
+  } catch (err) {
+    console.error("Error in getPatientAssignmentHistory:", err);
+    res.status(500).json({ message: "Could not fetch patient assignment history." });
   }
 }

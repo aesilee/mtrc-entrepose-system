@@ -2,6 +2,7 @@ import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import pool from "../config/db.js";
 import { notifyIctAdmins } from "../utils/notify.js";
+import { getSessionTimeoutMinutes } from "../utils/sessionTimeout.js";
 
 async function getMaxLoginAttempts() {
   try {
@@ -53,7 +54,8 @@ export async function login(req, res) {
     const token = jwt.sign(
       { id: user.id, username: user.username, role: user.role, fullName: user.full_name },
       process.env.JWT_SECRET,
-      { expiresIn: process.env.JWT_EXPIRES_IN || "8h" }
+      // Idle timeout from Settings; verifyToken slides it forward while the user stays active.
+      { expiresIn: `${await getSessionTimeoutMinutes()}m` }
     );
 
     await pool.query(

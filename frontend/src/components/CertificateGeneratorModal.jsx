@@ -1,4 +1,5 @@
 import { useRef, useState } from "react";
+import { printElement } from "../utils/printElement.js";
 import api from "../api/axios.js";
 import CertificatePreview from "./CertificatePreview.jsx";
 import { downloadElementAsPdf } from "../utils/pdf.js";
@@ -29,7 +30,7 @@ export default function CertificateGeneratorModal({ patientId, onClose, onGenera
   }
 
   function handlePrint() {
-    window.print();
+    printElement(previewRef.current, { title: `certificate-${certificate?.patientCode || "MTRC"}`, orientation: "portrait", margin: "12mm" });
   }
 
   async function handleDownload() {

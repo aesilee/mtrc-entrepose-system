@@ -30,7 +30,7 @@ dotenv.config();
 
 const app = express();
 
-app.use(cors());
+app.use(cors({ exposedHeaders: ["X-Refreshed-Token"] }));
 app.use(express.json({ limit: "5mb" }));
 
 app.get("/api/health", (req, res) => res.json({ status: "ok" }));
@@ -74,6 +74,13 @@ app.use((err, req, res, next) => {
 });
 
 import pool from "./config/db.js";
+import { ensureAttendanceCompletionSchema } from "./utils/attendanceSchema.js";
+import { ensureDrugTestSchema } from "./utils/drugTestHelper.js";
+import { ensureClassificationSchema } from "./utils/classification.js";
+import { ensureHistoricalReportSchema } from "./utils/historicalReportSchema.js";
+import { ensureCbteAndRiskSchema } from "./utils/cbteAndRiskSchema.js";
+import { ensureProgramDurationSchema } from "./utils/programDuration.js";
+import { ensureInterventionSchema } from "./utils/interventionSchema.js";
 
 const PORT = process.env.PORT || 5000;
 
@@ -82,6 +89,14 @@ async function start() {
     const connection = await pool.getConnection();
     console.log("✅ Connected to MySQL database:", process.env.DB_NAME);
     connection.release();
+
+    await ensureAttendanceCompletionSchema(pool);
+    await ensureDrugTestSchema(pool);
+    await ensureClassificationSchema(pool);
+    await ensureHistoricalReportSchema(pool);
+    await ensureCbteAndRiskSchema(pool);
+    await ensureProgramDurationSchema(pool);
+    await ensureInterventionSchema(pool);
   } catch (err) {
     console.error("❌ Could not connect to MySQL:", err.message);
     process.exit(1);

@@ -1,4 +1,8 @@
 import pool from "../config/db.js";
+import { caseloadIdsFor } from "../utils/sharedCaseload.js";
+import { getBulkUnifiedPatientProgress } from "../utils/curriculumProgress.js";
+import { mapCategory } from "../services/opCmTrackerService.js";
+import { getAttendanceRates, ATTENDANCE_RATE_SESSION_TYPES } from "../utils/attendanceRate.js";
 
 function monthLabel(y, m) {
   return new Date(y, m - 1, 1).toLocaleString("default", { month: "short", year: "numeric" });
@@ -16,14 +20,19 @@ function getMonthRange(dateFrom, dateTo) {
   return months;
 }
 
+function getCmScopeCondition(userId, colPrefix = "p.") {
+  return { clause: `${colPrefix}assigned_case_manager_id IN (?)`, params: [caseloadIdsFor(userId)] };
+}
+
 // ---- Snapshot data: current totals, no date range needed ----
 export async function getAnalyticsOverview(req, res) {
   try {
     const patientClauses = ["p.is_archived = FALSE"];
     const patientParams = [];
     if (req.user.role === "case_manager") {
-      patientClauses.push("p.assigned_case_manager_id = ?");
-      patientParams.push(req.user.id);
+      const scope = getCmScopeCondition(req.user.id, "p.");
+      patientClauses.push(scope.clause);
+      patientParams.push(...scope.params);
     }
 
     const [patients] = await pool.query(
@@ -60,9 +69,16 @@ export async function getAnalyticsOverview(req, res) {
       ? Math.round((completedPatients / totalDischarged) * 100)
       : (total ? Math.round((completedPatients / total) * 100) : 0);
 
-    const withAttendance = patients.filter((p) => p.total_sessions > 0);
-    const avgAttendance = withAttendance.length
-      ? Math.round(withAttendance.reduce((sum, p) => sum + (p.present_sessions / p.total_sessions) * 100, 0) / withAttendance.length)
+    const patientIds = patients.map((p) => p.id);
+    const attMap = await getAttendanceRates(pool, patientIds);
+    let totalCbtAttended = 0;
+    let totalCbtExpected = 0;
+    for (const v of attMap.values()) {
+      totalCbtAttended += v.attended;
+      totalCbtExpected += v.expected;
+    }
+    const avgAttendance = totalCbtExpected > 0
+      ? Math.round((totalCbtAttended / totalCbtExpected) * 100)
       : 0;
 
     const withStart = patients.filter((p) => p.admission_date || p.rehab_start_date);
@@ -76,17 +92,26 @@ export async function getAnalyticsOverview(req, res) {
         )
       : 0;
 
-    const nearCompletion = patients.filter(
-      (p) => p.enrollment_status === "active" && (p.sessions_required || 43) &&
-        p.present_sessions / (p.sessions_required || 43) >= 0.8 && p.present_sessions / (p.sessions_required || 43) < 1
-    ).length;
+    // Unified 43-Session Curriculum Progress for all patients in scope
+    const progressMap = await getBulkUnifiedPatientProgress(
+      pool,
+      patients.map((p) => p.id)
+    );
+
+    const nearCompletion = patients.filter((p) => {
+      if (p.enrollment_status !== "active") return false;
+      const prog = progressMap.get(Number(p.id));
+      const coreDone = prog ? prog.attendedCore : 0;
+      return coreDone >= 35 && !prog?.isCoreComplete;
+    }).length;
 
     // Drug test abstinence metrics
     const dtClauses = ["p.is_archived = FALSE"];
     const dtParams = [];
     if (req.user.role === "case_manager") {
-      dtClauses.push("p.assigned_case_manager_id = ?");
-      dtParams.push(req.user.id);
+      const scope = getCmScopeCondition(req.user.id, "p.");
+      dtClauses.push(scope.clause);
+      dtParams.push(...scope.params);
     }
     const [[dtStats]] = await pool.query(
       `SELECT COUNT(*) AS total_tests,
@@ -132,33 +157,13 @@ export async function getAnalyticsOverview(req, res) {
       patientParams
     );
 
-    const admissionCounts = { "Court-Mandated": 0, "Voluntary": 0, "LGU-Referred": 0 };
+    const admissionCounts = { "Court-Mandated": 0, "Voluntary": 0, "LGU-Referred": 0, "Workplace-Referred": 0 };
     admissionRows.forEach((p) => {
-      const nature = (p.nature_of_confinement || "").toLowerCase();
-      const source = (p.referral_source || p.type_of_patient || "").toLowerCase();
-      const admType = (p.admission_type || "").toLowerCase();
-
-      if (
-        nature.includes("court") ||
-        nature.includes("plea bargaining") ||
-        nature.includes("compulsory") ||
-        nature.includes("arrested") ||
-        nature.includes("suspended sentence") ||
-        source.includes("court") ||
-        admType.includes("court")
-      ) {
-        admissionCounts["Court-Mandated"]++;
-      } else if (source.includes("lgu")) {
-        admissionCounts["LGU-Referred"]++;
-      } else if (
-        nature.includes("without court order") ||
-        nature.includes("self-referral") ||
-        source === "voluntary" ||
-        admType === "voluntary"
-      ) {
-        admissionCounts["Voluntary"]++;
+      const cat = mapCategory(p.admission_type, p.type_of_patient, p.nature_of_confinement, p.referral_source);
+      if (admissionCounts[cat] !== undefined) {
+        admissionCounts[cat]++;
       } else {
-        admissionCounts["Court-Mandated"]++;
+        admissionCounts["Voluntary"]++;
       }
     });
 
@@ -190,26 +195,18 @@ export async function getAnalyticsOverview(req, res) {
       return { label, value: Number(r.count) };
     });
 
-    // 43-Session Curriculum Phase progression for active cohort
-    const [cohortRows] = await pool.query(
-      `SELECT p.id,
-              (SELECT COUNT(*) FROM attendance a
-               WHERE a.patient_id = p.id
-                 AND a.status = 'present'
-                 AND a.session_type IN ('CBT_GROUP', 'PSYCHO_EDUCATION')) AS core_sessions
-       FROM patients p
-       WHERE ${patientClauses.join(" AND ")} AND p.enrollment_status = 'active'`,
-      patientParams
-    );
+    // 43-Session Curriculum Phase progression for active cohort (Unified 28 CBT + 3 CBT-E + 12 PE)
+    const activeCohort = patients.filter((p) => p.enrollment_status === "active");
 
-    let phase1 = 0; // 1-14 sessions
-    let phase2 = 0; // 15-28 sessions
-    let phase3 = 0; // 29-42 sessions
-    let pdcReady = 0; // 43+ sessions
+    let phase1 = 0; // 0-14 core requirements
+    let phase2 = 0; // 15-28 core requirements
+    let phase3 = 0; // 29-42 core requirements (or 42/43 without all 3 components met)
+    let pdcReady = 0; // All 43 core requirements met (28 CBT + 3 CBT-E + 12 PE)
 
-    cohortRows.forEach((r) => {
-      const s = Number(r.core_sessions || 0);
-      if (s >= 43) pdcReady++;
+    activeCohort.forEach((p) => {
+      const prog = progressMap.get(Number(p.id));
+      const s = prog ? prog.attendedCore : 0;
+      if (prog?.isCoreComplete) pdcReady++;
       else if (s >= 29) phase3++;
       else if (s >= 15) phase2++;
       else phase1++;
@@ -219,7 +216,7 @@ export async function getAnalyticsOverview(req, res) {
       { label: "Phase 1 (1-14)", value: phase1 },
       { label: "Phase 2 (15-28)", value: phase2 },
       { label: "Phase 3 (29-42)", value: phase3 },
-      { label: "PDC Ready (43+)", value: pdcReady },
+      { label: "PDC Ready (43/43)", value: pdcReady },
     ];
 
     // Query discharge breakdown
@@ -228,8 +225,9 @@ export async function getAnalyticsOverview(req, res) {
     let dischargeJoin = "";
     if (req.user.role === "case_manager") {
       dischargeJoin = "JOIN patients p ON p.id = d.patient_id";
-      dischargeClauses.push("p.assigned_case_manager_id = ?");
-      dischargeParams.push(req.user.id);
+      const scope = getCmScopeCondition(req.user.id, "p.");
+      dischargeClauses.push(scope.clause);
+      dischargeParams.push(...scope.params);
     }
     const [dischargeRows] = await pool.query(
       `SELECT d.discharge_type, COUNT(*) as count 
@@ -290,21 +288,25 @@ export async function getAnalyticsOverview(req, res) {
 
     const cmMap = {};
     patients.forEach((p) => {
-      if (!p.assigned_case_manager_id || p.total_sessions === 0) return;
+      if (!p.assigned_case_manager_id) return;
+      const att = attMap.get(p.id);
+      if (!att || att.expected === 0) return;
       const key = p.case_manager_name || "Unassigned";
-      if (!cmMap[key]) cmMap[key] = { present: 0, total: 0 };
-      cmMap[key].present += p.present_sessions;
-      cmMap[key].total += p.total_sessions;
+      if (!cmMap[key]) cmMap[key] = { attended: 0, expected: 0 };
+      cmMap[key].attended += att.attended;
+      cmMap[key].expected += att.expected;
     });
     const attendanceByCaseManager = Object.entries(cmMap)
-      .map(([label, v]) => ({ label, value: Math.round((v.present / v.total) * 100) }))
+      .map(([label, v]) => ({ label, value: Math.round((v.attended / v.expected) * 100) }))
       .sort((a, b) => b.value - a.value);
 
     let highestAttendancePatient = null;
-    withAttendance.forEach((p) => {
-      const rate = Math.round((p.present_sessions / p.total_sessions) * 100);
-      if (!highestAttendancePatient || rate > highestAttendancePatient.rate) {
-        highestAttendancePatient = { id: p.id, rate };
+    patients.forEach((p) => {
+      const att = attMap.get(p.id);
+      if (att && att.rate !== null) {
+        if (!highestAttendancePatient || att.rate > highestAttendancePatient.rate) {
+          highestAttendancePatient = { id: p.id, rate: att.rate };
+        }
       }
     });
     let highestAttendanceName = "—";
@@ -365,8 +367,9 @@ export async function getMonthlyAdmissions(req, res) {
   const clauses = ["admission_date >= ?"];
   const params = [rangeStart];
   if (req.user.role === "case_manager") {
-    clauses.push("assigned_case_manager_id = ?");
-    params.push(req.user.id);
+    const scope = getCmScopeCondition(req.user.id, "");
+    clauses.push(scope.clause);
+    params.push(...scope.params);
   }
 
   const [rows] = await pool.query(
@@ -389,17 +392,24 @@ export async function getAttendanceTrend(req, res) {
   const months = getMonthRange(dateFrom, dateTo);
   const rangeStart = `${months[0].year}-${String(months[0].month).padStart(2, "0")}-01`;
 
-  const scopeJoin = req.user.role === "case_manager"
-    ? "JOIN patients p ON p.id = a.patient_id AND p.assigned_case_manager_id = ?"
-    : "";
-  const scopeParams = req.user.role === "case_manager" ? [req.user.id] : [];
+  let scopeJoin = "";
+  let scopeParams = [];
+  if (req.user.role === "case_manager") {
+    const scope = getCmScopeCondition(req.user.id, "p.");
+    scopeJoin = `JOIN patients p ON p.id = a.patient_id AND ${scope.clause}`;
+    scopeParams = scope.params;
+  }
 
   const [rows] = await pool.query(
     `SELECT DATE_FORMAT(a.session_date, '%Y-%m') AS ym,
-            SUM(a.status = 'present') AS present, COUNT(*) AS total
+            SUM(a.status IN ('present', 'late') AND a.completion_status = 'CREDITED') AS present,
+            COUNT(*) AS total
      FROM attendance a ${scopeJoin}
-     WHERE a.session_date >= ? GROUP BY ym`,
-    [...scopeParams, rangeStart]
+     WHERE a.session_date >= ?
+       AND a.session_type IN (?)
+       AND a.status <> 'cancelled'
+     GROUP BY ym`,
+    [...scopeParams, rangeStart, ATTENDANCE_RATE_SESSION_TYPES]
   );
   const map = Object.fromEntries(rows.map((r) => [r.ym, r.total ? Math.round((r.present / r.total) * 100) : 0]));
 
@@ -422,8 +432,9 @@ export async function getMonthlyDischarges(req, res) {
 
   if (req.user.role === "case_manager") {
     joinPatient = "JOIN patients p ON p.id = d.patient_id";
-    clauses.push("p.assigned_case_manager_id = ?");
-    params.push(req.user.id);
+    const scope = getCmScopeCondition(req.user.id, "p.");
+    clauses.push(scope.clause);
+    params.push(...scope.params);
   }
 
   const [rows] = await pool.query(

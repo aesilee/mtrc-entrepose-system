@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { printElement } from "../utils/printElement.js";
 import api from "../api/axios.js";
 import ReportPreview from "./ReportPreview.jsx";
 import { downloadElementAsPdf } from "../utils/pdf.js";
@@ -15,7 +16,7 @@ export default function ReportViewModal({ reportId, autoAction, onClose }) {
   useEffect(() => {
     if (!report || !autoAction) return;
     if (autoAction === "print") {
-      const t = setTimeout(() => window.print(), 300);
+      const t = setTimeout(() => printElement(previewRef.current, { title: `${report.reportType}-report`, orientation: "portrait", margin: "12mm" }), 300);
       return () => clearTimeout(t);
     }
     if (autoAction === "download") {

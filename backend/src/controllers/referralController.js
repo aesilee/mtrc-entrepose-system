@@ -1,4 +1,5 @@
 import pool from "../config/db.js";
+import { normalizeReferralCategory, normalizeAdmissionCategory } from "../utils/classification.js";
 
 const VALID_SOURCES = new Set([
   "Voluntary", "Court-Mandated", "LGU-Referred", "Workplace", "NGO",
@@ -279,9 +280,16 @@ export async function savePatientReferralDraft(req, res) {
     }
 
     if (referral.referralSource || referral.admissionType) {
+      const refCat = normalizeReferralCategory(referral.referralSource);
+      const admCat = normalizeAdmissionCategory(referral.admissionType);
       await connection.query(
-        "UPDATE patients SET referral_source = COALESCE(?, referral_source), admission_type = COALESCE(?, admission_type) WHERE id = ?",
-        [referral.referralSource || null, referral.admissionType || null, patientId]
+        `UPDATE patients 
+         SET referral_source = COALESCE(?, referral_source), 
+             admission_type = COALESCE(?, admission_type),
+             referral_category = COALESCE(?, referral_category),
+             admission_category = COALESCE(?, admission_category)
+         WHERE id = ?`,
+        [referral.referralSource || null, referral.admissionType || null, refCat || null, admCat || null, patientId]
       );
     }
 
@@ -390,9 +398,16 @@ export async function submitPatientReferral(req, res) {
       );
     }
 
+    const submitRefCat = normalizeReferralCategory(referral.referralSource);
+    const submitAdmCat = normalizeAdmissionCategory(referral.admissionType);
     await connection.query(
-      "UPDATE patients SET referral_source = ?, admission_type = ? WHERE id = ?",
-      [referral.referralSource, referral.admissionType, patientId]
+      `UPDATE patients 
+       SET referral_source = ?, 
+           admission_type = ?,
+           referral_category = ?,
+           admission_category = ?
+       WHERE id = ?`,
+      [referral.referralSource, referral.admissionType, submitRefCat, submitAdmCat, patientId]
     );
     await connection.query(
       "INSERT INTO audit_log (actor_username, action, table_name, record_id) VALUES (?, ?, 'patient_referrals', ?)",

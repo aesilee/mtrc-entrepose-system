@@ -1,8 +1,18 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import AppShell from "../components/AppShell.jsx";
 import PatientWorkflowProgress from "../components/PatientWorkflowProgress.jsx";
 import api from "../api/axios.js";
+import {
+  getRegions,
+  getProvincesByRegion,
+  getCitiesByProvince,
+  getBarangaysByCity,
+  findRegionCode,
+  findProvinceCode,
+  findCityCode,
+  getZipCodeByCity,
+} from "../utils/philippineAddresses.js";
 
 const EMPTY_FORM = {
   caseType: "substance_use",
@@ -196,50 +206,103 @@ export default function RegisterPatient() {
   const guardianRequired = age !== null && age < 18;
   const showGuardian = guardianRequired || form.hasGuardian;
 
-  function handleAutoFillSample() {
-    const sampleCm = caseManagers[0]?.id ? String(caseManagers[0].id) : "";
+  function update(field, value) {
+    setForm((previous) => ({ ...previous, [field]: value }));
+  }
+
+  // Cascading Philippine Address (PSGC) selection state
+  const [manualAddress, setManualAddress] = useState(false);
+  const [selectedRegionCode, setSelectedRegionCode] = useState("");
+  const [selectedProvCode, setSelectedProvCode] = useState("");
+  const [selectedCityCode, setSelectedCityCode] = useState("");
+
+  const regionsList = useMemo(() => getRegions(), []);
+  const provincesList = useMemo(
+    () => (selectedRegionCode ? getProvincesByRegion(selectedRegionCode) : []),
+    [selectedRegionCode]
+  );
+  const citiesList = useMemo(
+    () => (selectedProvCode ? getCitiesByProvince(selectedProvCode, selectedRegionCode) : []),
+    [selectedProvCode, selectedRegionCode]
+  );
+  const barangaysList = useMemo(
+    () => (selectedCityCode ? getBarangaysByCity(selectedCityCode, selectedProvCode) : []),
+    [selectedCityCode, selectedProvCode]
+  );
+
+  // Synchronize codes when form values are loaded from the database
+  useEffect(() => {
+    if (!form.region) {
+      if (selectedRegionCode) setSelectedRegionCode("");
+      return;
+    }
+    const rCode = findRegionCode(form.region);
+    if (rCode && rCode !== selectedRegionCode) {
+      setSelectedRegionCode(rCode);
+    }
+  }, [form.region, selectedRegionCode]);
+
+  useEffect(() => {
+    if (!form.province) {
+      if (selectedProvCode) setSelectedProvCode("");
+      return;
+    }
+    const pCode = findProvinceCode(form.province, selectedRegionCode);
+    if (pCode && pCode !== selectedProvCode) {
+      setSelectedProvCode(pCode);
+    }
+  }, [form.province, selectedRegionCode, selectedProvCode]);
+
+  useEffect(() => {
+    if (!form.municipality) {
+      if (selectedCityCode) setSelectedCityCode("");
+      return;
+    }
+    const cCode = findCityCode(form.municipality, selectedProvCode);
+    if (cCode && cCode !== selectedCityCode) {
+      setSelectedCityCode(cCode);
+    }
+  }, [form.municipality, selectedProvCode, selectedCityCode]);
+
+  function handleRegionChange(e) {
+    const code = e.target.value;
+    setSelectedRegionCode(code);
+    setSelectedProvCode("");
+    setSelectedCityCode("");
+    const found = regionsList.find((r) => r.code === code);
     setForm((prev) => ({
       ...prev,
-      caseType: "substance_use",
-      assignedCaseManagerId: sampleCm || prev.assignedCaseManagerId,
-      firstName: "Juan",
-      middleName: "Mendoza",
-      lastName: "Dela Cruz",
-      suffix: "",
-      preferredName: "Johnny",
-      gender: "male",
-      birthdate: "1998-05-15",
-      civilStatus: "single",
-      nationality: "Filipino",
-      employmentStatus: "Employed",
-      occupation: "Construction Worker",
-      educationalAttainment: "High school graduate",
-      religion: "Roman Catholic",
-      livingArrangement: "With Parents",
-      estimatedFamilyMonthlyIncome: "15000",
-      numberOfSiblings: "3",
-      ordinalPosition: "1",
-      fatherName: "Pedro Dela Cruz",
-      fatherOccupation: "Farmer",
-      motherName: "Maria Mendoza Dela Cruz",
-      motherOccupation: "Housewife",
-      spouseName: "",
-      spouseOccupation: "",
-      contactNumber: "09171234567",
-      email: "juan.delacruz@example.com",
-      region: "Region V (Bicol Region)",
-      province: "Albay",
-      municipality: "Malinao",
-      barangay: "Comun",
-      streetAddress: "Purok 4",
-      postalCode: "4512",
-      emergencyContactName: "Maria Mendoza Dela Cruz",
-      emergencyContactRelationship: "Mother",
-      emergencyContactNumber: "09187654321",
-      emergencyContactEmail: "",
-      emergencyContactAddress: "Purok 4, Comun, Malinao, Albay",
-      emergencyContactMethod: "phone",
-      hasGuardian: false,
+      region: found ? found.name : "",
+      province: "",
+      municipality: "",
+      barangay: "",
+    }));
+  }
+
+  function handleProvinceChange(e) {
+    const code = e.target.value;
+    setSelectedProvCode(code);
+    setSelectedCityCode("");
+    const found = provincesList.find((p) => p.code === code);
+    setForm((prev) => ({
+      ...prev,
+      province: found ? found.name : "",
+      municipality: "",
+      barangay: "",
+    }));
+  }
+
+  function handleCityChange(e) {
+    const code = e.target.value;
+    setSelectedCityCode(code);
+    const found = citiesList.find((c) => c.code === code);
+    const cityName = found ? found.name : "";
+    const suggestedZip = getZipCodeByCity(cityName);
+    setForm((prev) => ({
+      ...prev,
+      municipality: cityName,
+      barangay: "",
+      postalCode: suggestedZip || prev.postalCode,
     }));
   }
 
@@ -313,35 +376,11 @@ export default function RegisterPatient() {
         {error && <div role="alert" style={styles.error}>{error}</div>}
 
         {/* Program Identity — Scope Locked to ENTREPOSE SUD */}
-        <section style={{ background: "var(--color-primary-tint)", border: "1.5px solid var(--color-primary)", borderRadius: "var(--radius-lg)", padding: "14px 20px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-            <div>
-              <div style={{ fontWeight: 700, fontSize: 13, color: "var(--color-primary-dark)" }}>ENTREPOSE Outpatient Program — Substance Use Disorder (PWUD)</div>
-              <div style={{ fontSize: 12, color: "var(--color-text-muted)", marginTop: 2 }}>All registrations are enrolled under the MTRC ENTREPOSE SUD pathway. A PWUD tracking code (OP-LGU-YY-NNN) will be assigned automatically.</div>
-            </div>
+        <section style={{ background: "var(--color-primary-tint)", border: "1.5px solid var(--color-primary)", borderRadius: "var(--radius-lg)", padding: "14px 20px" }}>
+          <div>
+            <div style={{ fontWeight: 700, fontSize: 13, color: "var(--color-primary-dark)" }}>ENTREPOSE Outpatient Program — Substance Use Disorder (PWUD)</div>
+            <div style={{ fontSize: 12, color: "var(--color-text-muted)", marginTop: 2 }}>All registrations are enrolled under the MTRC ENTREPOSE SUD pathway. A PWUD tracking code (OP-LGU-YY-NNN) will be assigned automatically.</div>
           </div>
-          {!id && (
-            <button
-              type="button"
-              onClick={handleAutoFillSample}
-              style={{
-                background: "var(--color-surface, #ffffff)",
-                border: "1px solid var(--color-primary)",
-                color: "var(--color-primary-dark)",
-                padding: "6px 12px",
-                borderRadius: "var(--radius-sm, 6px)",
-                fontSize: 12,
-                fontWeight: 700,
-                cursor: "pointer",
-                whiteSpace: "nowrap",
-                display: "flex",
-                alignItems: "center",
-              }}
-              title="Quickly fill valid sample demographic data for testing"
-            >
-              Auto-fill Sample Demographics
-            </button>
-          )}
         </section>
 
         <Section
@@ -428,6 +467,29 @@ export default function RegisterPatient() {
         <Section
           title="Contact Information"
           description="Use current contact details that staff can rely on for administrative communication."
+          extraHeader={
+            <button
+              type="button"
+              onClick={() => setManualAddress((prev) => !prev)}
+              style={{
+                background: "var(--color-surface, #ffffff)",
+                border: "1px solid var(--color-border, #d1d5db)",
+                color: "var(--color-primary-dark, #1E5A34)",
+                padding: "5px 12px",
+                borderRadius: "var(--radius-sm, 6px)",
+                fontSize: 12,
+                fontWeight: 600,
+                cursor: "pointer",
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 6,
+                transition: "all 0.15s ease",
+              }}
+              title="Toggle between Philippine Standard Dropdowns and manual text typing"
+            >
+              <span>{manualAddress ? "✨ Switch to Philippine Dropdowns" : "✏️ Switch to Manual Typing"}</span>
+            </button>
+          }
         >
           <Field label="Mobile number">
             <input type="tel" inputMode="tel" autoComplete="tel" pattern={PHONE_PATTERN} title="Enter 7 to 30 valid phone characters." style={styles.input} value={form.contactNumber} onChange={(e) => update("contactNumber", e.target.value)} />
@@ -435,23 +497,106 @@ export default function RegisterPatient() {
           <Field label="Email">
             <input type="email" autoComplete="email" style={styles.input} value={form.email} onChange={(e) => update("email", e.target.value)} />
           </Field>
-          <Field label="Region" required>
-            <input style={styles.input} value={form.region} onChange={(e) => update("region", e.target.value)} required />
-          </Field>
-          <Field label="Province" required>
-            <input autoComplete="address-level1" style={styles.input} value={form.province} onChange={(e) => update("province", e.target.value)} required />
-          </Field>
-          <Field label="City or municipality" required>
-            <input autoComplete="address-level2" style={styles.input} value={form.municipality} onChange={(e) => update("municipality", e.target.value)} required />
-          </Field>
-          <Field label="Barangay" required>
-            <input style={styles.input} value={form.barangay} onChange={(e) => update("barangay", e.target.value)} required />
-          </Field>
+
+          {manualAddress ? (
+            <>
+              <Field label="Region" required>
+                <input style={styles.input} value={form.region} onChange={(e) => update("region", e.target.value)} required />
+              </Field>
+              <Field label="Province" required>
+                <input autoComplete="address-level1" style={styles.input} value={form.province} onChange={(e) => update("province", e.target.value)} required />
+              </Field>
+              <Field label="City or municipality" required>
+                <input autoComplete="address-level2" style={styles.input} value={form.municipality} onChange={(e) => update("municipality", e.target.value)} required />
+              </Field>
+              <Field label="Barangay" required>
+                <input style={styles.input} value={form.barangay} onChange={(e) => update("barangay", e.target.value)} required />
+              </Field>
+            </>
+          ) : (
+            <>
+              <Field label="Region" required>
+                <select
+                  style={styles.input}
+                  value={selectedRegionCode}
+                  onChange={handleRegionChange}
+                  required
+                >
+                  <option value="">Select Region</option>
+                  {regionsList.map((r) => (
+                    <option key={r.code} value={r.code}>
+                      {r.name}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+              <Field label="Province" required>
+                <select
+                  autoComplete="address-level1"
+                  style={styles.input}
+                  value={selectedProvCode}
+                  onChange={handleProvinceChange}
+                  disabled={!selectedRegionCode}
+                  required
+                >
+                  <option value="">
+                    {selectedRegionCode ? "Select Province" : "— Select Region first —"}
+                  </option>
+                  {provincesList.map((p) => (
+                    <option key={p.code} value={p.code}>
+                      {p.name}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+              <Field label="City or municipality" required>
+                <select
+                  autoComplete="address-level2"
+                  style={styles.input}
+                  value={selectedCityCode}
+                  onChange={handleCityChange}
+                  disabled={!selectedProvCode}
+                  required
+                >
+                  <option value="">
+                    {selectedProvCode ? "Select City or Municipality" : "— Select Province first —"}
+                  </option>
+                  {citiesList.map((c) => (
+                    <option key={c.code} value={c.code}>
+                      {c.name}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+              <Field label="Barangay" required>
+                <select
+                  style={styles.input}
+                  value={form.barangay}
+                  onChange={(e) => update("barangay", e.target.value)}
+                  disabled={!selectedCityCode}
+                  required
+                >
+                  <option value="">
+                    {selectedCityCode ? "Select Barangay" : "— Select City first —"}
+                  </option>
+                  {form.barangay && !barangaysList.some((b) => b.name.toLowerCase() === form.barangay.toLowerCase()) && (
+                    <option value={form.barangay}>{form.barangay}</option>
+                  )}
+                  {barangaysList.map((b) => (
+                    <option key={b.name} value={b.name}>
+                      {b.name}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+            </>
+          )}
+
           <Field label="House # / Street" required wide>
             <input autoComplete="street-address" style={styles.input} value={form.streetAddress} onChange={(e) => update("streetAddress", e.target.value)} required />
           </Field>
           <Field label="Postal code">
-            <input inputMode="numeric" autoComplete="postal-code" style={styles.input} value={form.postalCode} onChange={(e) => update("postalCode", e.target.value)} />
+            <input inputMode="numeric" autoComplete="postal-code" style={styles.input} value={form.postalCode} onChange={(e) => update("postalCode", e.target.value)} placeholder="e.g. 4512" />
           </Field>
         </Section>
 
@@ -664,11 +809,16 @@ export default function RegisterPatient() {
   );
 }
 
-function Section({ title, description, children }) {
+function Section({ title, description, children, extraHeader }) {
   return (
     <section style={styles.section}>
-      <div style={styles.sectionTitle}>{title}</div>
-      <div style={styles.sectionDescription}>{description}</div>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, flexWrap: "wrap", marginBottom: description ? 4 : 16 }}>
+        <div>
+          <div style={styles.sectionTitle}>{title}</div>
+          {description && <div style={{ ...styles.sectionDescription, marginBottom: 16 }}>{description}</div>}
+        </div>
+        {extraHeader && <div style={{ paddingTop: 2 }}>{extraHeader}</div>}
+      </div>
       <div className="registration-grid" style={styles.grid}>{children}</div>
     </section>
   );

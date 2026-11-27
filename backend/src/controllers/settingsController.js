@@ -1,6 +1,7 @@
 import { spawn } from "child_process";
 import pool from "../config/db.js";
 import { notifyIctAdmins } from "../utils/notify.js";
+import { resetSessionTimeoutCache } from "../utils/sessionTimeout.js";
 
 const DEFAULT_SETTINGS = {
   organization_name: "MTRC ENTREPOSE",
@@ -74,6 +75,7 @@ export async function updateSettings(req, res) {
 
     await notifyIctAdmins("system", "settings_updated", `System settings updated (${keysList.slice(0, 100)}) — by ${req.user.username}`);
 
+    resetSessionTimeoutCache();
     res.json({ message: "Settings saved." });
   } catch (err) {
     console.error(err);

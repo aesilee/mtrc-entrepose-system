@@ -1,15 +1,18 @@
 import pool from "../config/db.js";
 import { notifyIctAdmins } from "../utils/notify.js";
+import { ensureAttendanceArchiveTable } from "./attendanceArchiveController.js";
+import { caseloadIdsFor } from "../utils/sharedCaseload.js";
 
 export async function listArchives(req, res) {
   const { category } = req.query;
   const clauses = ["a.restored_at IS NULL"];
   const params = [];
 
+  await ensureAttendanceArchiveTable();
   if (req.user.role === "case_manager") {
-    clauses.push("a.entity_type = 'patient'");
-    clauses.push("p.assigned_case_manager_id = ?");
-    params.push(req.user.id);
+    // Case managers see their own archived patients and archived attendance records of their patients.
+    clauses.push("((a.entity_type = 'patient' AND p.assigned_case_manager_id = ?) OR (a.entity_type = 'attendance' AND pa.assigned_case_manager_id = ?))");
+    params.push(req.user.id, req.user.id);
   } else if (category && category !== "all") {
     clauses.push("a.entity_type = ?");
     params.push(category);
@@ -21,6 +24,8 @@ export async function listArchives(req, res) {
      FROM archives a
      LEFT JOIN users ua ON ua.id = a.archived_by
      LEFT JOIN patients p ON a.entity_type = 'patient' AND a.entity_id = p.id
+     LEFT JOIN attendance_archive aa ON a.entity_type = 'attendance' AND aa.id = a.entity_id
+     LEFT JOIN patients pa ON pa.id = aa.patient_id
      WHERE ${clauses.join(" AND ")}
      ORDER BY a.archived_at DESC`,
     params
@@ -174,5 +179,104 @@ export async function restoreReport(req, res) {
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: "Could not restore this report." });
+  }
+}
+// ---------------------------------------------------------------------------
+// Issued certificates (certificate_issuances) — the records listed on the Patient Profile.
+// These have their own archive columns; they must never be confused with the legacy `certificates` table.
+let issuanceArchiveSchemaReady = false;
+async function ensureIssuanceArchiveSchema() {
+  if (issuanceArchiveSchemaReady) return;
+  const [cols] = await pool.query("SHOW COLUMNS FROM certificate_issuances");
+  const have = new Set(cols.map((c) => c.Field));
+  if (!have.has("is_archived")) await pool.query("ALTER TABLE certificate_issuances ADD COLUMN is_archived TINYINT(1) NOT NULL DEFAULT 0");
+  if (!have.has("archived_at")) await pool.query("ALTER TABLE certificate_issuances ADD COLUMN archived_at DATETIME NULL");
+  if (!have.has("archived_by")) await pool.query("ALTER TABLE certificate_issuances ADD COLUMN archived_by INT NULL");
+  issuanceArchiveSchemaReady = true;
+}
+export { ensureIssuanceArchiveSchema };
+
+async function findIssuance(id) {
+  const [[cert]] = await pool.query(
+    `SELECT ci.id, ci.is_archived, ci.certificate_type, ci.certificate_control_no, p.full_name AS patient_name
+     FROM certificate_issuances ci JOIN patients p ON p.id = ci.patient_id WHERE ci.id = ?`,
+    [id]
+  );
+  return cert;
+}
+
+export async function archiveCertificateIssuance(req, res) {
+  const id = req.params.certId;
+  const { reason } = req.body;
+  try {
+    await ensureIssuanceArchiveSchema();
+    const cert = await findIssuance(id);
+    if (!cert) return res.status(404).json({ message: "Certificate not found." });
+    if (cert.is_archived) return res.status(400).json({ message: "This certificate is already archived." });
+
+    await pool.query("UPDATE certificate_issuances SET is_archived = 1, archived_at = NOW(), archived_by = ? WHERE id = ?", [req.user.id, id]);
+    await pool.query(
+      "INSERT INTO archives (entity_type, entity_id, entity_label, reason, archived_by) VALUES ('certificate_issuance', ?, ?, ?, ?)",
+      [id, `Certificate ${cert.certificate_control_no} — ${cert.patient_name}`, reason || null, req.user.id]
+    );
+    await pool.query("INSERT INTO audit_log (actor_username, action) VALUES (?, ?)", [
+      req.user.username, `Archived ${cert.certificate_type} certificate ${cert.certificate_control_no} for "${cert.patient_name}"`,
+    ]);
+    res.json({ message: "Certificate archived." });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Could not archive this certificate." });
+  }
+}
+
+export async function restoreCertificateIssuance(req, res) {
+  const id = req.params.certId;
+  try {
+    await ensureIssuanceArchiveSchema();
+    const cert = await findIssuance(id);
+    if (!cert) return res.status(404).json({ message: "Certificate not found." });
+    if (!cert.is_archived) return res.status(400).json({ message: "This certificate is not archived." });
+
+    await pool.query("UPDATE certificate_issuances SET is_archived = 0, archived_at = NULL, archived_by = NULL WHERE id = ?", [id]);
+    await pool.query(
+      `UPDATE archives SET restored_at = NOW(), restored_by = ? WHERE entity_type = 'certificate_issuance' AND entity_id = ? AND restored_at IS NULL`,
+      [req.user.id, id]
+    );
+    await pool.query("INSERT INTO audit_log (actor_username, action) VALUES (?, ?)", [
+      req.user.username, `Restored ${cert.certificate_type} certificate ${cert.certificate_control_no} for "${cert.patient_name}"`,
+    ]);
+    res.json({ message: "Certificate restored." });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Could not restore this certificate." });
+  }
+}
+
+// Finished patients for the Archives page: everyone with a discharge record (Completer or Non-Completer).
+// Read-only view; nothing is moved. Case managers see only their own caseload.
+export async function listFinishedPatients(req, res) {
+  const clauses = [];
+  const params = [];
+  if (req.user.role === "case_manager") {
+    clauses.push("p.assigned_case_manager_id IN (?)");
+    params.push(caseloadIdsFor(req.user.id));
+  }
+  try {
+    const [rows] = await pool.query(
+      `SELECT p.id AS patient_id, p.full_name, p.patient_code, p.pwud_code, p.enrollment_status, p.is_archived,
+              u.full_name AS case_manager_name,
+              d.discharge_date, d.discharge_type, d.outcome, d.reason_code, d.remarks, d.discharged_by
+       FROM discharges d
+       JOIN patients p ON p.id = d.patient_id
+       LEFT JOIN users u ON u.id = p.assigned_case_manager_id
+       WHERE d.id = (SELECT d2.id FROM discharges d2 WHERE d2.patient_id = d.patient_id ORDER BY d2.discharge_date DESC, d2.id DESC LIMIT 1)
+         ${clauses.length ? "AND " + clauses.join(" AND ") : ""}
+       ORDER BY d.discharge_date DESC, d.id DESC`,
+      params
+    );
+    res.json({ patients: rows });
+  } catch (err) {
+    console.error("listFinishedPatients failed:", err);
+    res.status(500).json({ message: "Could not load finished patients." });
   }
 }

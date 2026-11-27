@@ -1,11 +1,23 @@
 import { useState } from "react";
 
-export default function ArchiveConfirmModal({ title, description, confirmLabel = "Archive", onConfirm, onClose }) {
+export default function ArchiveConfirmModal({
+  title,
+  description,
+  confirmLabel = "Archive",
+  onConfirm,
+  onClose,
+  reasonRequired = false,
+  reasonPlaceholder = "Why is this being archived?",
+}) {
   const [reason, setReason] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
 
   async function handleConfirm() {
+    if (reasonRequired && !reason.trim()) {
+      setError("Please enter a reason.");
+      return;
+    }
     setSubmitting(true);
     setError("");
     try {
@@ -27,8 +39,8 @@ export default function ArchiveConfirmModal({ title, description, confirmLabel =
           {error && <div style={styles.error}>{error}</div>}
           <p style={styles.description}>{description}</p>
           <label style={styles.label}>
-            Reason <span style={{ fontWeight: 400, color: "var(--color-text-muted)" }}>(optional)</span>
-            <textarea style={styles.input} value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Why is this being archived?" />
+            Reason {reasonRequired ? <span style={{ color: "var(--color-danger)" }}>*</span> : <span style={{ fontWeight: 400, color: "var(--color-text-muted)" }}>(optional)</span>}
+            <textarea style={styles.input} value={reason} onChange={(e) => setReason(e.target.value)} placeholder={reasonPlaceholder} />
           </label>
           <div style={styles.footer}>
             <button type="button" style={styles.secondaryBtn} onClick={onClose}>Cancel</button>

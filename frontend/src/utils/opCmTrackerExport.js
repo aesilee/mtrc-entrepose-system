@@ -98,7 +98,9 @@ export function exportOpCmTrackerWorkbook(report) {
     r.interventionsConductedInMonth,
     r.medicalComorbidity,
     r.psychiatricComorbidity,
-    r.consultTypeWithinMtrc || "",
+    r.consultTypeAndDates || (Array.isArray(r.consultDetailsList) && r.consultDetailsList.length > 0
+      ? r.consultDetailsList.map((c) => (c.date ? `${c.type || "Consult"} (${String(c.date).slice(0, 10)})` : (c.type || "Consult"))).join(", ")
+      : r.consultTypeWithinMtrc || ""),
     r.comorbidityDetails || "",
     dateCell(r.dateOfDischarge),
     r.statusOfDischarge || "",

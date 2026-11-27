@@ -29,13 +29,41 @@ const DEFAULT_RELAPSE_PLAN = `1. Recognize high-risk triggers (former peer netwo
 2. Apply cognitive thought-stopping, 15-minute urge delaying, and situational avoidance.
 3. Notify the assigned Case Manager or designated recovery support family member immediately upon experiencing strong cravings.`;
 
-export default function TreatmentPlanModal({ patientId, existingPlan, onClose, onSaved }) {
-  const defaultTargetDate = new Date();
-  defaultTargetDate.setMonth(defaultTargetDate.getMonth() + 6);
+function computeExpectedCompletion(startDateStr, months) {
+  if (!startDateStr || !months) return "";
+  const [y, m, d] = String(startDateStr).slice(0, 10).split("-").map(Number);
+  if (!y || !m || !d) return "";
+  const targetMonthIndex = m - 1 + Number(months);
+  const targetYear = y + Math.floor(targetMonthIndex / 12);
+  const targetMonth = ((targetMonthIndex % 12) + 12) % 12;
+  const maxDay = new Date(Date.UTC(targetYear, targetMonth + 1, 0)).getUTCDate();
+  const clampedDay = Math.min(d, maxDay);
+  return `${targetYear}-${String(targetMonth + 1).padStart(2, "0")}-${String(clampedDay).padStart(2, "0")}`;
+}
+
+export default function TreatmentPlanModal({ patientId, patient, existingPlan, onClose, onSaved }) {
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const initialStart =
+    (patient?.rehab_start_date ? String(patient.rehab_start_date).slice(0, 10) : "") ||
+    (patient?.admission_date ? String(patient.admission_date).slice(0, 10) : "") ||
+    existingPlan?.plan_date?.slice(0, 10) ||
+    todayStr;
+  const initialBaseMonths = Number(patient?.required_duration_months) > 0 ? Number(patient.required_duration_months) : 7;
+  const extMonths = Number(patient?.extension_months) > 0 ? Number(patient.extension_months) : 0;
+  const initialBasis = patient?.duration_basis || "STANDARD_PROGRAM";
+  const initialBasisDetail = patient?.duration_basis_detail || "";
+  const initialTargetDate =
+    computeExpectedCompletion(initialStart, initialBaseMonths + extMonths) ||
+    existingPlan?.target_completion_date?.slice(0, 10) ||
+    "";
 
   const [form, setForm] = useState({
-    plan_date: existingPlan?.plan_date?.slice(0, 10) || new Date().toISOString().slice(0, 10),
-    target_completion_date: existingPlan?.target_completion_date?.slice(0, 10) || defaultTargetDate.toISOString().slice(0, 10),
+    plan_date: existingPlan?.plan_date?.slice(0, 10) || todayStr,
+    agreed_start_date: initialStart,
+    required_duration_months: initialBaseMonths,
+    duration_basis: initialBasis,
+    duration_basis_detail: initialBasisDetail,
+    target_completion_date: initialTargetDate,
     problem_domains: existingPlan?.problem_domains?.length 
       ? existingPlan.problem_domains 
       : ["SUBSTANCE_DEPENDENCE", "LEGAL_RTC", "FAMILY_INTERPERSONAL"],
@@ -127,15 +155,89 @@ export default function TreatmentPlanModal({ patientId, existingPlan, onClose, o
             </label>
 
             <label style={styles.label}>
-              Target Completion Date
+              Agreed Program Start Date *
               <input
                 type="date"
+                required
                 style={styles.input}
-                value={form.target_completion_date}
-                onChange={e => setForm(f => ({ ...f, target_completion_date: e.target.value }))}
+                value={form.agreed_start_date}
+                onChange={e => {
+                  const nextStart = e.target.value;
+                  const nextTarget = computeExpectedCompletion(nextStart, Number(form.required_duration_months) + extMonths);
+                  setForm(f => ({ ...f, agreed_start_date: nextStart, target_completion_date: nextTarget || f.target_completion_date }));
+                }}
                 disabled={saving}
               />
-              <span style={styles.hint}>Standard DOH Outpatient duration: 6 months</span>
+              <span style={styles.hint}>Official start date for calculating expected completion</span>
+            </label>
+          </div>
+
+          <div style={styles.grid2}>
+            <label style={styles.label}>
+              Required Duration (Months) & Basis *
+              <div style={{ display: "flex", gap: 8 }}>
+                <select
+                  style={{ ...styles.input, flex: 1 }}
+                  value={form.duration_basis}
+                  onChange={e => {
+                    const nextBasis = e.target.value;
+                    let nextMonths = Number(form.required_duration_months) || 7;
+                    if (nextBasis === "STANDARD_PROGRAM") nextMonths = 7;
+                    else if (nextBasis === "COURT_ORDER" && nextMonths === 7) nextMonths = 12;
+                    else if (nextBasis === "PLEA_BARGAIN" && nextMonths === 7) nextMonths = 6;
+                    const nextTarget = computeExpectedCompletion(form.agreed_start_date, nextMonths + extMonths);
+                    setForm(f => ({
+                      ...f,
+                      duration_basis: nextBasis,
+                      required_duration_months: nextMonths,
+                      target_completion_date: nextTarget || f.target_completion_date,
+                    }));
+                  }}
+                  disabled={saving}
+                >
+                  <option value="STANDARD_PROGRAM">Standard ENTREPOSE (7 Months)</option>
+                  <option value="COURT_ORDER">Court Instruction / RTC Mandate</option>
+                  <option value="PLEA_BARGAIN">Plea Bargaining Framework</option>
+                  <option value="CLINICAL_ASSESSMENT">Clinical / Multidisciplinary Requirement</option>
+                  <option value="OTHER">Other Approved Requirement</option>
+                </select>
+                <input
+                  type="number"
+                  min={1}
+                  max={36}
+                  style={{ ...styles.input, width: 78 }}
+                  value={form.required_duration_months}
+                  onChange={e => {
+                    const nextMonths = Number(e.target.value) || 7;
+                    const nextTarget = computeExpectedCompletion(form.agreed_start_date, nextMonths + extMonths);
+                    setForm(f => ({
+                      ...f,
+                      required_duration_months: nextMonths,
+                      target_completion_date: nextTarget || f.target_completion_date,
+                    }));
+                  }}
+                  disabled={saving}
+                  title="Base required duration in months"
+                />
+              </div>
+              <span style={styles.hint}>
+                {extMonths > 0
+                  ? `Base ${form.required_duration_months} mos + ${extMonths} mos approved extension = ${Number(form.required_duration_months) + extMonths} mos total`
+                  : "Standard ENTREPOSE is 7 months; Court Mandate is typically 12 months"}
+              </span>
+            </label>
+
+            <label style={styles.label}>
+              Calculated Target Completion Date
+              <input
+                type="date"
+                style={{ ...styles.input, background: "#F8FAFC", fontWeight: 700, color: "#0F172A" }}
+                value={form.target_completion_date}
+                readOnly
+              />
+              <span style={styles.hint}>
+                Consistently calculated from Agreed Start Date + {Number(form.required_duration_months) + extMonths} months
+              </span>
             </label>
           </div>
 

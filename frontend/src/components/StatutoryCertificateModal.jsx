@@ -1,8 +1,10 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
+import { printElement } from "../utils/printElement.js";
 import api from "../api/axios.js";
 
 export default function StatutoryCertificateModal({ patient, initialType = "ENROLLMENT", reprintRecord = null, onClose, onIssued }) {
   const [certType, setCertType] = useState(reprintRecord?.certificate_type || initialType);
+  const certRef = useRef(null);
   const [eligibility, setEligibility] = useState(null);
   const [loading, setLoading] = useState(false);
   const [generating, setGenerating] = useState(false);
@@ -41,14 +43,20 @@ export default function StatutoryCertificateModal({ patient, initialType = "ENRO
       const res = await api.post(`/certificates/${patient.id}/generate`, {
         certificateType: certType,
         remarks: "Issued via Patient Profile.",
-        pleaBargainNote: certType === "COMPLETION" ? "In compliance with court mandate." : ""
+        pleaBargainNote: certType === "COMPLETION" ? "In compliance with court mandate." : "",
+        signatoryName: user?.full_name || user?.username || "Designated Clinical Supervisor",
+        approvedByName: user?.full_name || user?.username || "Designated Clinical Supervisor",
+        recordedApprovalConfirmed: true,
       });
       if (res.data.success) {
         setGeneratedPayload(res.data.payload);
         if (onIssued) onIssued();
       }
     } catch (err) {
-      setError(err.response?.data?.message || "Failed to generate certificate.");
+      const msg = err.response?.data?.guards?.length
+        ? `${err.response.data.message}: ${err.response.data.guards.join(" ")}`
+        : err.response?.data?.message || "Failed to generate certificate.";
+      setError(msg);
     } finally {
       setGenerating(false);
     }
@@ -88,6 +96,95 @@ export default function StatutoryCertificateModal({ patient, initialType = "ENRO
                 <div style={{ padding: 30, textAlign: 'center', color: '#666' }}>Checking eligibility requirements...</div>
               ) : (
                 <>
+                  {certType === "COMPLETION" && eligibility?.durationSummary && (
+                    <div style={{
+                      border: `1px solid ${eligibility.durationSummary.isDurationMet ? "#86EFAC" : "#FCD34D"}`,
+                      background: eligibility.durationSummary.isDurationMet ? "#F0FDF4" : "#FFFBEB",
+                      borderRadius: 8,
+                      padding: "10px 14px",
+                      marginBottom: 14,
+                      fontSize: 12.5,
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                      flexWrap: "wrap",
+                      gap: 10,
+                    }}>
+                      <div>
+                        <div style={{ fontWeight: 800, color: eligibility.durationSummary.isDurationMet ? "#166534" : "#92400E" }}>
+                          {eligibility.durationSummary.isDurationMet ? "✓" : "⏳"} Program Duration Requirement:{" "}
+                          {eligibility.durationSummary.totalRequiredMonths} Months ({eligibility.durationSummary.durationBasisLabel})
+                          {eligibility.durationSummary.extensionMonths > 0
+                            ? ` [Base ${eligibility.durationSummary.baseDurationMonths}m + ${eligibility.durationSummary.extensionMonths}m Extension]`
+                            : ""}
+                        </div>
+                        <div style={{ color: "#475569", marginTop: 2, fontSize: 12 }}>
+                          Agreed Start: <strong>{eligibility.durationSummary.agreedStartDate || "—"}</strong> · Expected Completion:{" "}
+                          <strong>{eligibility.durationSummary.expectedCompletionDate || "—"}</strong> · Elapsed:{" "}
+                          <strong>{eligibility.durationSummary.monthsElapsed} of {eligibility.durationSummary.totalRequiredMonths} months</strong>
+                        </div>
+                      </div>
+                      <span style={{
+                        padding: "4px 10px",
+                        borderRadius: 999,
+                        fontWeight: 800,
+                        fontSize: 11.5,
+                        background: eligibility.durationSummary.isDurationMet ? "#DCFCE7" : "#FEF3C7",
+                        color: eligibility.durationSummary.isDurationMet ? "#166534" : "#B45309",
+                      }}>
+                        {eligibility.durationSummary.isDurationMet
+                          ? `✓ ${eligibility.durationSummary.totalRequiredMonths}m Duration Met`
+                          : `${eligibility.durationSummary.remainingMonths} mo(s) remaining`}
+                      </span>
+                    </div>
+                  )}
+
+                  {certType === "COMPLETION" && eligibility?.curriculumProgress?.components && (
+                    <div style={{ border: "1px solid #CBD5E1", borderRadius: 8, overflow: "hidden", marginBottom: 16 }}>
+                      <div style={{ background: "#F8FAFC", padding: "8px 12px", fontSize: 12, fontWeight: 800, color: "#334155", borderBottom: "1px solid #E2E8F0" }}>
+                        Unified Curriculum Completion Check (Approved Non-Duplicate Credits Only)
+                      </div>
+                      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12.5 }}>
+                        <thead>
+                          <tr style={{ background: "#F1F5F9", borderBottom: "1px solid #E2E8F0" }}>
+                            <th style={{ textAlign: "left", padding: "7px 12px" }}>Component</th>
+                            <th style={{ textAlign: "center", padding: "7px 12px" }}>Completed</th>
+                            <th style={{ textAlign: "center", padding: "7px 12px" }}>Required</th>
+                            <th style={{ textAlign: "left", padding: "7px 12px" }}>Status</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {[
+                            eligibility.curriculumProgress.components.cbt,
+                            eligibility.curriculumProgress.components.cbte,
+                            eligibility.curriculumProgress.components.pe,
+                          ].map((comp) => (
+                            <tr key={comp.label} style={{ borderBottom: "1px solid #F1F5F9" }}>
+                              <td style={{ padding: "7px 12px", fontWeight: 700 }}>{comp.label}</td>
+                              <td style={{ textAlign: "center", padding: "7px 12px", fontWeight: 800 }}>{comp.completed}</td>
+                              <td style={{ textAlign: "center", padding: "7px 12px" }}>{comp.required}</td>
+                              <td style={{ padding: "7px 12px", color: comp.isComplete ? "#166534" : "#B91C1C", fontWeight: 700 }}>
+                                {comp.isComplete ? "✓ Complete" : `${comp.remaining} missing`}
+                              </td>
+                            </tr>
+                          ))}
+                          <tr style={{ background: "#F0FDF4", fontWeight: 800 }}>
+                            <td style={{ padding: "8px 12px" }}>Total core requirements</td>
+                            <td style={{ textAlign: "center", padding: "8px 12px" }}>
+                              {eligibility.curriculumProgress.components.totalCore.completed}
+                            </td>
+                            <td style={{ textAlign: "center", padding: "8px 12px" }}>
+                              {eligibility.curriculumProgress.components.totalCore.required}
+                            </td>
+                            <td style={{ padding: "8px 12px", color: eligibility.curriculumProgress.isCoreComplete ? "#166534" : "#B91C1C" }}>
+                              {eligibility.curriculumProgress.isCoreComplete ? "✓ Eligible (43/43)" : "✕ Incomplete Core"}
+                            </td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+
                   {!isEligible && (
                     <div style={styles.warningBanner}>
                       <strong>Ineligible for {certType === "ENROLLMENT" ? "Enrollment" : "Completion"} Certificate:</strong>
@@ -124,12 +221,12 @@ export default function StatutoryCertificateModal({ patient, initialType = "ENRO
               <div className="no-print" style={styles.successBar}>
                 <span>✅ Certificate issued successfully! Control No: <strong>{generatedPayload.controlNo}</strong></span>
                 <div style={{ display: 'flex', gap: 10 }}>
-                  <button type="button" style={styles.printBtn} onClick={() => window.print()}>🖨️ Print / Save PDF</button>
+                  <button type="button" style={styles.printBtn} onClick={() => printElement(certRef.current, { title: `Certificate_${generatedPayload.controlNo}`, orientation: "portrait", margin: "12mm", frame: "keep" })}>🖨️ Print / Save PDF</button>
                   <button type="button" style={styles.cancelBtn} onClick={onClose}>Done</button>
                 </div>
               </div>
 
-              <div className="print-area" style={styles.certificateCanvas}>
+              <div ref={certRef} className="print-area" style={styles.certificateCanvas}>
                 <div style={styles.certHeader}>
                   <h3 style={{ margin: 0 }}>REPUBLIC OF THE PHILIPPINES</h3>
                   <h4 style={{ margin: '5px 0' }}>DEPARTMENT OF HEALTH</h4>

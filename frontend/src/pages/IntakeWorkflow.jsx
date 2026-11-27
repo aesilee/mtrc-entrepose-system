@@ -75,7 +75,31 @@ const EMPTY_FORM = {
   generalMedicalConsentSigned: false,
   programOrientationDate: "",
   admissionDate: TODAY,
+  rehabStartDate: TODAY,
+  requiredDurationMonths: 7,
+  durationBasis: "STANDARD_PROGRAM",
+  durationBasisDetail: "",
   assignedCaseManagerId: "",
+};
+
+function computeExpectedCompletionDate(startDateStr, months) {
+  if (!startDateStr || !months) return "";
+  const [y, m, d] = String(startDateStr).slice(0, 10).split("-").map(Number);
+  if (!y || !m || !d) return "";
+  const targetMonthIndex = m - 1 + Number(months);
+  const targetYear = y + Math.floor(targetMonthIndex / 12);
+  const targetMonth = ((targetMonthIndex % 12) + 12) % 12;
+  const maxDay = new Date(Date.UTC(targetYear, targetMonth + 1, 0)).getUTCDate();
+  const clampedDay = Math.min(d, maxDay);
+  return `${targetYear}-${String(targetMonth + 1).padStart(2, "0")}-${String(clampedDay).padStart(2, "0")}`;
+}
+
+const DURATION_BASIS_LABELS = {
+  STANDARD_PROGRAM: "Standard ENTREPOSE Program (7 Months)",
+  COURT_ORDER: "Court Instruction / RTC Mandate",
+  PLEA_BARGAIN: "Plea Bargaining Framework",
+  CLINICAL_ASSESSMENT: "Clinical / Multidisciplinary Requirement",
+  OTHER: "Other Approved Requirement",
 };
 
 function mapLengthForUi(val) {
@@ -97,11 +121,21 @@ function mapFrequencyForUi(val) {
   return val;
 }
 
-function toForm(intake, patientData) {
+function toForm(intake, patientData, referralData) {
+  const defaultAdm = patientData?.admission_date ? String(patientData.admission_date).slice(0, 10) : TODAY;
+  const defaultStart = patientData?.rehab_start_date ? String(patientData.rehab_start_date).slice(0, 10) : defaultAdm;
+  const isCourt = /court|plea/i.test(referralData?.referral_source || referralData?.nature_of_confinement || patientData?.referral_source || "");
+  const defaultBasis = patientData?.duration_basis || (isCourt ? "COURT_ORDER" : "STANDARD_PROGRAM");
+  const defaultMonths = Number(patientData?.required_duration_months) > 0 ? Number(patientData.required_duration_months) : 7;
+
   if (!intake) {
     return {
       ...EMPTY_FORM,
-      admissionDate: patientData?.admission_date ? String(patientData.admission_date).slice(0, 10) : TODAY,
+      admissionDate: defaultAdm,
+      rehabStartDate: defaultStart,
+      requiredDurationMonths: defaultMonths,
+      durationBasis: defaultBasis,
+      durationBasisDetail: patientData?.duration_basis_detail || "",
       assignedCaseManagerId: patientData?.assigned_case_manager_id || "",
     };
   }
@@ -143,7 +177,11 @@ function toForm(intake, patientData) {
     dataPrivacyConsentSigned: Boolean(intake.data_privacy_consent_signed),
     generalMedicalConsentSigned: Boolean(intake.general_medical_consent_signed),
     programOrientationDate: intake.program_orientation_date ? String(intake.program_orientation_date).slice(0, 10) : "",
-    admissionDate: patientData?.admission_date ? String(patientData.admission_date).slice(0, 10) : TODAY,
+    admissionDate: defaultAdm,
+    rehabStartDate: defaultStart,
+    requiredDurationMonths: defaultMonths,
+    durationBasis: defaultBasis,
+    durationBasisDetail: patientData?.duration_basis_detail || "",
     assignedCaseManagerId: patientData?.assigned_case_manager_id || "",
   };
 }
@@ -181,7 +219,7 @@ export default function IntakeWorkflow() {
         setPatient(data.patient);
         setReferral(data.referral);
         setIntake(data.intake);
-        setForm(toForm(data.intake, data.patient));
+        setForm(toForm(data.intake, data.patient, data.referral));
         setCertificateId(data.enrollmentCertificateId || null);
         if (data.intake?.workflow_step >= 6) {
           setError("");
@@ -295,6 +333,10 @@ export default function IntakeWorkflow() {
             dataPrivacyConsentSigned: form.dataPrivacyConsentSigned,
             programOrientationDate: form.programOrientationDate,
             admissionDate: form.admissionDate,
+            rehabStartDate: form.rehabStartDate || form.admissionDate,
+            requiredDurationMonths: Number(form.requiredDurationMonths) || 7,
+            durationBasis: form.durationBasis || "STANDARD_PROGRAM",
+            durationBasisDetail: form.durationBasisDetail || "",
             assignedCaseManagerId: form.assignedCaseManagerId || patient?.assigned_case_manager_id,
           };
       const { data } = await api.post(`/intakes/patient/${id}/finalize`, payload);
@@ -542,6 +584,33 @@ export default function IntakeWorkflow() {
                         {patient?.program_name || (isOPD ? "General Outpatient Consultation" : "Outpatient Rehabilitation (ENTREPOSE)")}
                       </span>
                     </div>
+                    {!isOPD && (
+                      <>
+                        <div style={styles.summaryItem}>
+                          <span style={styles.summaryLabel}>Agreed Program Start Date</span>
+                          <span style={styles.summaryVal}>
+                            {(form.rehabStartDate || form.admissionDate)
+                              ? new Date(form.rehabStartDate || form.admissionDate).toLocaleDateString("en-PH", { year: "numeric", month: "long", day: "numeric" })
+                              : "—"}
+                          </span>
+                        </div>
+                        <div style={styles.summaryItem}>
+                          <span style={styles.summaryLabel}>Required Duration & Basis</span>
+                          <span style={styles.summaryVal}>
+                            {form.requiredDurationMonths || 7} Months — {DURATION_BASIS_LABELS[form.durationBasis] || form.durationBasis || "Standard Program"}
+                            {form.durationBasisDetail ? ` (${form.durationBasisDetail})` : ""}
+                          </span>
+                        </div>
+                        <div style={styles.summaryItem}>
+                          <span style={styles.summaryLabel}>Expected Completion Date</span>
+                          <span style={styles.summaryVal}>
+                            {computeExpectedCompletionDate(form.rehabStartDate || form.admissionDate, form.requiredDurationMonths || 7)
+                              ? new Date(computeExpectedCompletionDate(form.rehabStartDate || form.admissionDate, form.requiredDurationMonths || 7)).toLocaleDateString("en-PH", { year: "numeric", month: "long", day: "numeric" })
+                              : "—"}
+                          </span>
+                        </div>
+                      </>
+                    )}
                   </div>
                 </section>
 
@@ -578,7 +647,7 @@ export default function IntakeWorkflow() {
                 <section style={styles.section}>
                   <div style={styles.sectionTitle}>Admission & Caseload Activation</div>
                   <div style={styles.sectionDescription}>
-                    Confirm the official admission date and assigned Case Manager. Once finalized, this client will become an active enrollee and appear on the Case Manager's caseload and the OP CM Tracker.
+                    Confirm the official admission date, agreed program start date, required duration (e.g., 7-month standard ENTREPOSE or 12-month court mandate), and assigned Case Manager.
                   </div>
                   <div className="registration-grid" style={styles.grid}>
                     <Field label="Official Admission / Enrollment Date" required>
@@ -587,7 +656,14 @@ export default function IntakeWorkflow() {
                         max={TODAY}
                         style={styles.input}
                         value={form.admissionDate || TODAY}
-                        onChange={(event) => update("admissionDate", event.target.value)}
+                        onChange={(event) => {
+                          const val = event.target.value;
+                          setForm((prev) => ({
+                            ...prev,
+                            admissionDate: val,
+                            rehabStartDate: !prev.rehabStartDate || prev.rehabStartDate === prev.admissionDate ? val : prev.rehabStartDate,
+                          }));
+                        }}
                         required
                       />
                     </Field>
@@ -616,6 +692,85 @@ export default function IntakeWorkflow() {
                         required
                       />
                     </Field>
+                    {!isOPD && (
+                      <>
+                        <Field label="Agreed Program Start Date" required hint="Basis for calculating expected completion date">
+                          <input
+                            type="date"
+                            style={styles.input}
+                            value={form.rehabStartDate || form.admissionDate || TODAY}
+                            onChange={(event) => update("rehabStartDate", event.target.value)}
+                            required
+                          />
+                        </Field>
+                        <Field label="Required Program Duration (Months)" required hint="Standard is 7 months; select 12 months if court-mandated">
+                          <div style={{ display: "flex", gap: 8 }}>
+                            <select
+                              style={{ ...styles.input, flex: 1 }}
+                              value={[6, 7, 12].includes(Number(form.requiredDurationMonths)) ? String(form.requiredDurationMonths) : "custom"}
+                              onChange={(event) => {
+                                const v = event.target.value;
+                                if (v === "7") {
+                                  setForm((prev) => ({ ...prev, requiredDurationMonths: 7, durationBasis: "STANDARD_PROGRAM" }));
+                                } else if (v === "12") {
+                                  setForm((prev) => ({ ...prev, requiredDurationMonths: 12, durationBasis: "COURT_ORDER" }));
+                                } else if (v === "6") {
+                                  setForm((prev) => ({ ...prev, requiredDurationMonths: 6, durationBasis: "PLEA_BARGAIN" }));
+                                } else {
+                                  setForm((prev) => ({ ...prev, requiredDurationMonths: Number(prev.requiredDurationMonths) || 9 }));
+                                }
+                              }}
+                            >
+                              <option value="7">7 Months — Standard ENTREPOSE Program</option>
+                              <option value="12">12 Months — Court-Mandated / RTC Order</option>
+                              <option value="6">6 Months — Plea Bargaining Minimum</option>
+                              <option value="custom">Custom Duration (Months)...</option>
+                            </select>
+                            <input
+                              type="number"
+                              min={1}
+                              max={36}
+                              style={{ ...styles.input, width: 85 }}
+                              value={form.requiredDurationMonths}
+                              onChange={(event) => update("requiredDurationMonths", Number(event.target.value) || 7)}
+                              required
+                              title="Duration in months"
+                            />
+                          </div>
+                        </Field>
+                        <Field label="Requirement Basis" required hint="Documented source of the duration requirement">
+                          <select
+                            style={styles.input}
+                            value={form.durationBasis || "STANDARD_PROGRAM"}
+                            onChange={(event) => update("durationBasis", event.target.value)}
+                            required
+                          >
+                            <option value="STANDARD_PROGRAM">Standard ENTREPOSE Program (7 Months)</option>
+                            <option value="COURT_ORDER">Court Instruction / RTC Mandate</option>
+                            <option value="PLEA_BARGAIN">Plea Bargaining Framework</option>
+                            <option value="CLINICAL_ASSESSMENT">Clinical / Multidisciplinary Requirement</option>
+                            <option value="OTHER">Other Approved Requirement</option>
+                          </select>
+                        </Field>
+                        <Field label="Court Order / Basis Reference Note (Optional)" wide hint="E.g. RTC Branch 3 Legazpi Criminal Case No. / Commitment Order date">
+                          <input
+                            type="text"
+                            style={styles.input}
+                            placeholder="Optional docket number, court order instruction, or clinical note..."
+                            value={form.durationBasisDetail || ""}
+                            onChange={(event) => update("durationBasisDetail", event.target.value)}
+                          />
+                        </Field>
+                        <Field label="Calculated Expected Completion Date" hint="Automatically computed from Agreed Start Date + Required Duration">
+                          <input
+                            type="date"
+                            style={{ ...styles.input, background: "#F8FAFC", fontWeight: 700, color: "#0F172A" }}
+                            value={computeExpectedCompletionDate(form.rehabStartDate || form.admissionDate || TODAY, form.requiredDurationMonths || 7)}
+                            readOnly
+                          />
+                        </Field>
+                      </>
+                    )}
                   </div>
                 </section>
 

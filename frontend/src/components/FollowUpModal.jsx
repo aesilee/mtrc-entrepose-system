@@ -11,7 +11,7 @@ export default function FollowUpModal({ patientId: initialPatientId, onClose, on
 
   useEffect(() => {
     if (!initialPatientId) {
-      api.get("/patients").then(({ data }) => {
+      api.get("/patients", { params: { limit: 500 } }).then(({ data }) => {
         const pts = data.patients || [];
         setPatients(pts);
         if (pts.length && !selectedPatientId) {

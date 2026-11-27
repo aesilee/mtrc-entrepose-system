@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from "react";
 import api from "../api/axios.js";
 import { useAuth } from "../context/AuthContext.jsx";
+import { printElement } from "../utils/printElement.js";
 import useOrgSettings from "../hooks/useOrgSettings.js";
 import { downloadElementAsPdf } from "../utils/pdf.js";
 
@@ -107,7 +108,7 @@ export default function TransmittalNoticeModal({
   }
 
   function handlePrint() {
-    window.print();
+    printElement(printRef.current, { title: "Transmittal_Notice", orientation: "portrait", margin: "12mm" });
   }
 
   const p = patient || {};

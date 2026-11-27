@@ -1,8 +1,10 @@
-import React, { useState } from "react";
+import React, { useState, useRef } from "react";
+import { printElement } from "../utils/printElement.js";
+import { exportDohReportToExcel } from "../utils/dohExcelExport.js";
 import { Link } from "react-router-dom";
 import AppShell from "../components/AppShell.jsx";
 import api from "../api/axios.js";
-import * as XLSX from "xlsx";
+import ReportDefinitionsModal from "../components/opCmTracker/ReportDefinitionsModal.jsx";
 import {
   Form41View,
   Form42View,
@@ -37,12 +39,17 @@ const DOH_FORMS = [
 
 export default function Reports() {
   const [selectedForm, setSelectedForm] = useState(DOH_FORMS[0].id);
+  const printAreaRef = useRef(null);
   const [month, setMonth] = useState(new Date().getMonth() + 1);
   const [year, setYear] = useState(new Date().getFullYear());
   const [quarter, setQuarter] = useState(Math.floor(new Date().getMonth() / 3) + 1);
   const [data, setData] = useState(null);
+  // Which form the loaded data belongs to: a form is only drawn with its own data (switching the
+  // dropdown before clicking Generate used to render the new form with the old data and crash).
+  const [dataForm, setDataForm] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [definitionsModalOpen, setDefinitionsModalOpen] = useState(false);
 
   React.useEffect(() => {
     setData(null);
@@ -50,6 +57,7 @@ export default function Reports() {
   }, [selectedForm]);
 
   const isQuarterly = selectedForm === "doh-form-10-1";
+  const hasReport = Boolean(data) && dataForm === selectedForm;
 
   const monthNames = [
     "January", "February", "March", "April", "May", "June",
@@ -69,6 +77,7 @@ export default function Reports() {
       const res = await api.get(`/reports/${selectedForm}`, { params });
       if (res.data.success) {
         setData(res.data.data);
+        setDataForm(selectedForm);
       } else {
         setError("Failed to fetch report data from server.");
       }
@@ -80,35 +89,23 @@ export default function Reports() {
   }
 
   function handleExportExcel() {
-    if (!data) return;
+    if (!hasReport) return;
     const reportElem = document.getElementById("report-table");
     if (!reportElem) return;
 
-    const tables = reportElem.querySelectorAll("table");
-    if (tables.length === 0) return;
-
-    const wb = XLSX.utils.book_new();
-
-    if (tables.length === 1) {
-      const ws = XLSX.utils.table_to_sheet(tables[0]);
-      XLSX.utils.book_append_sheet(wb, ws, "DOH_Report");
-    } else {
-      tables.forEach((tbl, idx) => {
-        const ws = XLSX.utils.table_to_sheet(tbl);
-        XLSX.utils.book_append_sheet(wb, ws, `Table_${idx + 1}`);
-      });
-    }
-
+    // One organized sheet: letterhead, form title/period, every section with its table, signatories.
     const cleanLabel = isQuarterly ? `Q${quarter}_${year}` : `${monthNames[month - 1]}_${year}`;
-    XLSX.writeFile(wb, `MTRC_DOH_${selectedForm}_${cleanLabel}.xlsx`);
+    exportDohReportToExcel(reportElem, { fileName: `MTRC_DOH_${selectedForm}_${cleanLabel}.xlsx` });
   }
 
   function handlePrint() {
-    window.print();
+    // Print only the official form, from a clean copy (no sidebar offset, no clipping at screen height).
+    const period = isQuarterly ? `Q${quarter}_${year}` : `${monthNames[month - 1]}_${year}`;
+    printElement(printAreaRef.current, { title: `MTRC_DOH_${selectedForm}_${period}`, orientation: "landscape" });
   }
 
   const renderTable = () => {
-    if (!data) return null;
+    if (!data || dataForm !== selectedForm) return null;
 
     switch (selectedForm) {
       case "doh-form-4-1":
@@ -146,11 +143,30 @@ export default function Reports() {
 
   return (
     <AppShell title="DOH Reports Automation" description="Generate, print, and export official DOH Outpatient statutory forms.">
-      <div className="no-print" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-        <p style={{ margin: 0, fontSize: 13 }}>
+      <div className="no-print" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16, flexWrap: "wrap", gap: 10 }}>
+        <p style={{ margin: 0, fontSize: 13, display: "flex", alignItems: "center", gap: 12 }}>
           <Link to="/reports/op-cm-tracker" style={{ color: "var(--color-primary-dark)", fontWeight: 700, textDecoration: "none" }}>
             ← Open OP CM Tracker (Monthly Intervention)
           </Link>
+          <button
+            type="button"
+            onClick={() => setDefinitionsModalOpen(true)}
+            style={{
+              background: "#FFFFFF",
+              border: "1px solid #CBD5E1",
+              borderRadius: 6,
+              padding: "4px 10px",
+              fontSize: 12,
+              fontWeight: 700,
+              color: "var(--color-primary-dark)",
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              gap: 4,
+            }}
+          >
+            <span>📘</span> HIM Definitions
+          </button>
         </p>
         <span style={{ fontSize: 12, color: "#64748b", background: "#f1f5f9", padding: "4px 10px", borderRadius: 4, fontWeight: 600 }}>
           Facility: DOH - Malinao TRC | Outpatient Scope
@@ -204,13 +220,13 @@ export default function Reports() {
         </div>
 
         <div style={styles.actions}>
-          <button style={styles.exportBtn} onClick={handleExportExcel} disabled={!data}>
+          <button style={styles.exportBtn} onClick={handleExportExcel} disabled={!hasReport}>
             <svg style={{ width: 16, height: 16, marginRight: 6 }} fill="currentColor" viewBox="0 0 24 24">
               <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6zm1.8 14l-1.8-3-1.8 3h-1.7l2.6-4.2-2.4-3.8h1.7l1.6 2.8 1.6-2.8h1.7l-2.4 3.8 2.6 4.2h-1.7zM13 9V3.5L18.5 9H13z"/>
             </svg>
             Export to Excel
           </button>
-          <button style={styles.printBtn} onClick={handlePrint} disabled={!data}>
+          <button style={styles.printBtn} onClick={handlePrint} disabled={!hasReport}>
             <svg style={{ width: 16, height: 16, marginRight: 6 }} fill="currentColor" viewBox="0 0 24 24">
               <path d="M19 8H5c-1.66 0-3 1.34-3 3v6h4v4h12v-4h4v-6c0-1.66-1.34-3-3-3zm-3 11H8v-5h8v5zm3-7c-.55 0-1-.45-1-1s.45-1 1-1 1 .45 1 1-.45 1-1 1zm-1-9H6v4h12V3z"/>
             </svg>
@@ -242,8 +258,8 @@ export default function Reports() {
         </div>
       )}
 
-      {data && (
-        <div style={styles.reportContainer} className="print-area">
+      {hasReport && (
+        <div ref={printAreaRef} style={styles.reportContainer} className="print-area">
           {renderTable()}
         </div>
       )}
@@ -584,6 +600,11 @@ export default function Reports() {
           }
         }
       `}</style>
+
+      <ReportDefinitionsModal
+        isOpen={definitionsModalOpen}
+        onClose={() => setDefinitionsModalOpen(false)}
+      />
     </AppShell>
   );
 }

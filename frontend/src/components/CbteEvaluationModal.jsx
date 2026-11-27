@@ -2,169 +2,223 @@ import { useState } from "react";
 import api from "../api/axios.js";
 import { useAuth } from "../context/AuthContext.jsx";
 
-const CBTE_1_SOURCE_QUESTIONS = [
-  {
-    key: "recovery_stage",
-    promptTagalog: "1. Daan Tungo sa Paggaling: Saang yugto ng paggaling sa tingin mo ikaw ay naroroon ngayon?",
-    promptEnglish: "Stage on the Road to Recovery (Workbook Sesyon 1 / Sesyon 7 reference)",
-    options: [
-      { value: "WITHDRAWAL", label: "Withdrawal Stage (Unang 1–2 Linggo / Pag-aadjust ng Katawan)" },
-      { value: "HONEYMOON", label: "Honeymoon Stage (Pakiramdam na Wala Nang Problema / Overconfidence)" },
-      { value: "THE_WALL", label: "Ang Pader / The Wall (Pagkabagot, Lungkot, at Malakas na Tukso)" },
-      { value: "ADJUSTMENT", label: "Pag-aangkop / Adjustment (Pagbuo ng Bagong Rutina at Pamumuhay)" },
-      { value: "RESOLUTION", label: "Resolusyon / Resolution (Matatag na Abstinence at Paglago)" },
-    ],
-  },
-  {
-    key: "craving_frequency",
-    promptTagalog: "2. Sa nakalipas na buwan, gaano kadalas kang nakaranas ng giyang (craving) o tukso na gumamit?",
-    promptEnglish: "Self-reported frequency of cravings or urges in the past month",
-    options: [
-      { value: "NONE", label: "Wala (None — No cravings experienced)" },
-      { value: "RARE", label: "Bihira (Rare — Once or twice, easily managed)" },
-      { value: "SOMETIMES", label: "Paminsan-minsan (Sometimes — Occasional urges)" },
-      { value: "OFTEN", label: "Madalas (Often — Frequent urges requiring active coping)" },
-      { value: "DAILY", label: "Araw-araw (Daily — Persistent strong cravings)" },
-    ],
-  },
-];
+// ==============================================================================
+// AUTHENTIC CLINICAL CONTENT: ENTREPOSE SERIES VOL. 2A
+// Patient's Workbook for Cognitive Behavioral Therapy Sessions (March 2024, 2nd Ed.)
+// Strictly Outpatient · Pages 219–232 (CBT-E Sessions 1, 2, and 3)
+// ==============================================================================
 
-const CBTE_1_DOMAINS = [
+// ------------------------------------------------------------------------------
+// CBT-E SESSION 1: RECOVERY STATUS REVIEW (Pagsusuri ng Katayuan ng Paggaling)
+// Vol. 2A, Pages 221–223
+// ------------------------------------------------------------------------------
+export const CBTE_1_LIFE_AREAS = [
   {
-    key: "craving_control",
-    label: "1. Pagkontrol sa Giyang at Kaisipan (Craving & Thought Control)",
-    desc: "Ability to recognize and manage urges using thought-stopping and delay techniques",
+    key: "career",
+    label: "1. Career / Trabaho",
+    desc: "Work, employment, livelihood, or daily professional productivity",
   },
   {
-    key: "trigger_avoidance",
-    label: "2. Pag-iwas sa External at Internal Triggers (Trigger Avoidance)",
-    desc: "Active avoidance of high-risk people, places, things, and unmanaged emotional triggers",
+    key: "friends",
+    label: "2. Friends / Mga Kaibigan",
+    desc: "Friendships, peer relationships, and social support network",
   },
   {
-    key: "schedule_compliance",
-    label: "3. Pagsunod sa Pang-araw-araw na Schedule Book (Daily Schedule Adherence)",
-    desc: "Structuring daily hours to eliminate idle time and boredom",
+    key: "family",
+    label: "3. Family / Pamilya",
+    desc: "Family harmony, open communication, and home stability",
   },
   {
-    key: "family_relations",
-    label: "4. Ugnayan at Komunikasyon sa Pamilya (Family Relationships)",
-    desc: "Restoring trust, open communication, and healthy family roles",
+    key: "romantic_relationships",
+    label: "4. Romantic relationships / Romantikong Relasyon",
+    desc: "Spouse, partner, and intimate relationship dynamics",
   },
   {
-    key: "emotional_regulation",
-    label: "5. Pamamahala ng Galit, Lungkot, at Stress (Emotional Regulation)",
-    desc: "Handling anger, boredom, anxiety, and stress without substance use",
+    key: "drug_use_cravings",
+    label: "5. Drug use/cravings / Paggamit ng Droga at Giyang",
+    desc: "Urge management, craving control, and maintaining substance abstinence",
+  },
+  {
+    key: "alcohol_use_cravings",
+    label: "6. Alcohol use/cravings / Paggamit ng Alak at Giyang",
+    desc: "Abstaining from alcohol and avoiding cross-substance triggers",
+  },
+  {
+    key: "self_esteem",
+    label: "7. Self-esteem / Pagpapahalaga sa Sarili",
+    desc: "Personal dignity, self-confidence, and positive self-worth",
   },
   {
     key: "physical_health",
-    label: "6. Pangangalaga sa Sarili at Kalusugan (Physical Health & Self-Care)",
-    desc: "Sleep hygiene, nutrition, exercise, and physical recovery",
+    label: "8. Physical health / Kalusugang Pisikal",
+    desc: "Sleep hygiene, nutrition, exercise, medical checkups, and physical recovery",
   },
   {
-    key: "honesty_accountability",
-    label: "7. Pagkamatapat at Pagtanggap ng Pananagutan (Honesty & Accountability)",
-    desc: "Truthfulness in group sharing, Schedule Book logging, and clinical sessions",
+    key: "psychological_wellbeing",
+    label: "9. Psychological well-being / Sikolohikal na Kagalingan",
+    desc: "Emotional regulation, stress reduction, and mental health stability",
   },
   {
-    key: "shgm_participation",
-    label: "8. Pakikilahok sa Self-Help Group at 12-Steps (SHGM Engagement)",
-    desc: "Active attendance and peer support engagement in Self-Help Group Meetings",
+    key: "sexual_fulfillment",
+    label: "10. Sexual fulfillment / Sekswal na Kasiyahan",
+    desc: "Healthy intimate boundaries and emotional fulfillment without substances",
   },
   {
-    key: "productivity_work",
-    label: "9. Trabaho, Pag-aaral, at Makabuluhang Gawain (Work & Daily Productivity)",
-    desc: "Fulfilling work, school, or household responsibilities consistently",
-  },
-  {
-    key: "financial_responsibility",
-    label: "10. Pamamahala ng Buhay at Pera (Financial Responsibility)",
-    desc: "Responsible handling of money without triggering substance urges",
-  },
-  {
-    key: "legal_compliance",
-    label: "11. Pagsunod sa Patakaran ng MTRC at Hukuman (Program & Legal Compliance)",
-    desc: "Punctual attendance and adherence to court/rehabilitation conditions",
+    key: "spiritual_wellbeing",
+    label: "11. Spiritual well-being / Espirituwal na Kagalingan",
+    desc: "Inner peace, higher purpose, moral values, and spiritual strength",
   },
 ];
 
-const CBTE_2_SKILLS = [
+export const CBTE_1_RATING_LABELS = {
+  1: "1 — Very Dissatisfied (Lubhang Hindi Nasisiyahan)",
+  2: "2 — Somewhat Dissatisfied (Medyo Hindi Nasisiyahan)",
+  3: "3 — Neutral (Katamtaman / Neutral)",
+  4: "4 — Somewhat Satisfied (Medyo Nasisiyahan)",
+  5: "5 — Very Satisfied (Lubhang Nasisiyahan)",
+};
+
+export const CBTE_1_STAGE_OPTIONS = [
+  { value: "WITHDRAWAL", label: "Withdrawal Stage (Unang 1–2 Linggo / Pag-aadjust ng Katawan)" },
+  { value: "HONEYMOON", label: "Honeymoon Stage (Pakiramdam na Wala Nang Problema / Overconfidence)" },
+  { value: "THE_WALL", label: "Ang Pader / The Wall (Pagkabagot, Lungkot, at Malakas na Tukso)" },
+  { value: "ADJUSTMENT", label: "Pag-aangkop / Readjustment (Pagbuo ng Bagong Rutina at Pamumuhay)" },
+  { value: "RESOLUTION", label: "Resolusyon / Resolution (Matatag na Abstinence at Personal na Paglago)" },
+];
+
+export const CBTE_1_CRAVING_OPTIONS = [
+  { value: "NONE", label: "Wala (None — No cravings experienced in past month)" },
+  { value: "RARE", label: "Bihira (Rare — Once or twice, easily managed without urge)" },
+  { value: "SOMETIMES", label: "Paminsan-minsan (Sometimes — Occasional urges requiring coping)" },
+  { value: "OFTEN", label: "Madalas (Often — Frequent urges requiring active support)" },
+  { value: "DAILY", label: "Araw-araw (Daily — Persistent strong cravings experienced)" },
+];
+
+// ------------------------------------------------------------------------------
+// CBT-E SESSION 2: ANALYZING BEHAVIORS FOR RELAPSE PREVENTION
+// (Pagsusuri sa mga Pag-uugali para sa Pag-iwas sa Relapse)
+// Vol. 2A, Pages 225–227
+// ------------------------------------------------------------------------------
+export const CBTE_2_ACTIVITIES = [
   {
-    key: "schedule_book",
-    label: "1. Paggamit ng pang-araw-araw na Schedule Book upang maiwasan ang bakanteng oras at pagkabagot (Daily Schedule Book usage to prevent idle time)",
+    key: "schedule_activities_daily",
+    label: "Schedule activities daily",
+    tagalog: "Mag-iskedyul ng mga gawain araw-araw upang maayos ang oras",
   },
   {
-    key: "external_triggers",
-    label: "2. Pagkilala at pag-iwas sa mga External Triggers — dating barkada, lugar, at kagamitan (Avoiding External Triggers: people, places, things)",
+    key: "visit_physician",
+    label: "Visit the physician for a checkup",
+    tagalog: "Bumisita sa manggagamot / doktor para sa regular na pagsusuri ng kalusugan",
   },
   {
-    key: "internal_triggers",
-    label: "3. Pagkilala sa mga Internal Triggers — galit, lungkot, pagod, stress bago lumala ang tukso (Recognizing Internal Triggers / emotional states early)",
+    key: "destroy_paraphernalia",
+    label: "Destroy all drug paraphernalia",
+    tagalog: "Sirain at itapon ang lahat ng kagamitan o gamit sa paggamit ng droga",
+  },
+  {
+    key: "avoid_alcohol_users",
+    label: "Avoid people who use alcohol",
+    tagalog: "Iwasan ang mga taong umiinom ng alak o nag-aanyayang uminom",
+  },
+  {
+    key: "avoid_drug_users",
+    label: "Avoid people who use drugs",
+    tagalog: "Iwasan ang mga taong gumagamit ng droga o dating barkada sa bisyo",
+  },
+  {
+    key: "avoid_bars_clubs",
+    label: "Avoid bars and clubs",
+    tagalog: "Iwasan ang mga bar, club, at mga lugar na may alak o droga",
+  },
+  {
+    key: "stop_alcohol",
+    label: "Stop using alcohol",
+    tagalog: "Itigil nang tuluyan ang pag-inom ng anumang alak",
+  },
+  {
+    key: "stop_all_drugs",
+    label: "Stop using all drugs",
+    tagalog: "Itigil nang tuluyan ang paggamit ng lahat ng ipinagbabawal na gamot",
+  },
+  {
+    key: "pay_financial_obligations",
+    label: "Pay financial obligations promptly",
+    tagalog: "Bayaran ang mga pinansyal na obligasyon at mga utang sa tamang oras",
+  },
+  {
+    key: "identify_addictive_behaviors",
+    label: "Identify addictive behaviors",
+    tagalog: "Kilalanin ang mga gawi at pag-uugali na nagtutulak sa muling paggamit",
+  },
+  {
+    key: "avoid_triggers",
+    label: "Avoid triggers (when possible)",
+    tagalog: "Iwasan ang mga trigger (tao, lugar, bagay, oras, damdamin) kung maaari",
   },
   {
     key: "thought_stopping",
-    label: "4. Paggamit ng Thought Stopping at pagpapalit ng kaisipan kapag may giyang (Applying Thought Stopping & cognitive restructuring)",
+    label: "Use thought-stopping techniques for cravings",
+    tagalog: "Gamitin ang thought-stopping techniques (visualization, snapping, relaxation) kapag may giyang",
   },
   {
-    key: "alcohol_abstinence",
-    label: "5. Pag-iwas sa alak at iba pang pamalit na bisyo na nagpapahina ng pagpipigil (Maintaining abstinence from alcohol and cross-triggers)",
+    key: "attend_aftercare",
+    label: "Attend aftercare programs",
+    tagalog: "Dumalo sa mga aftercare program (SIBOL / OP-ACP) pagkatapos ng outpatient treatment",
   },
   {
-    key: "support_network",
-    label: "6. Pakikipag-ugnayan sa pamilya, Case Manager, o Sober Support Person sa oras ng tukso (Reaching out to sober support network during urges)",
+    key: "attend_self_help",
+    label: "Attend self-help meetings",
+    tagalog: "Dumalo sa mga regular na pagpupulong ng Narcotics Anonymous (NA) o Self-Help Groups",
   },
   {
-    key: "shgm_12steps",
-    label: "7. Aktibong pakikilahok sa Self-Help Group Meetings (SHGM) at 12-Steps (Consistent participation in SHGM and 12-Step recovery)",
+    key: "exercise_daily",
+    label: "Exercise daily",
+    tagalog: "Mag-ehersisyo araw-araw para sa pisikal na kalakasan at pagpapabuti ng mood",
   },
   {
-    key: "relapse_drift_check",
-    label: "8. Pagbantay sa mga babala ng Relapse Drift at pagiging tapat sa sarili (Monitoring Relapse Drift warning signs and practicing honesty)",
+    key: "discuss_honestly_counselor",
+    label: "Discuss thoughts, feelings, and behaviors honestly with your counselor",
+    tagalog: "Maging tapat at bukas sa pagbabahagi ng kaisipan, damdamin, at gawi sa iyong counselor",
   },
 ];
 
-const CBTE_2_RESPONSE_OPTIONS = [
-  { value: "PRACTICED_CONSISTENTLY", label: "Palaging Ginagawa (Consistently Practiced)" },
-  { value: "PRACTICED_SOMETIMES", label: "Paminsan-minsan (Partially Practiced)" },
-  { value: "NOT_YET_PRACTICED", label: "Hindi Pa Nagagawa (Not Yet Practiced)" },
+export const CBTE_2_RELAPSE_CATEGORIES = [
+  { key: "career_events", label: "Career events", tagalog: "Mga kaganapan sa trabaho, hanapbuhay, o kabuhayan" },
+  { key: "personal_events", label: "Personal events", tagalog: "Mga personal o pampamilyang kaganapan at relasyon" },
+  { key: "treatment_events", label: "Treatment events", tagalog: "Mga kaganapan kaugnay ng paggamot, sesyon, o pagdalo" },
+  { key: "drug_related_behaviors", label: "Drug-related behaviors", tagalog: "Mga gawi kaugnay ng droga (pagpunta sa dating lugar, pagkontak)" },
+  { key: "behavioral_patterns", label: "Behavioral patterns", tagalog: "Mga gawi sa araw-araw (pagliban sa gawain, pagpupuyat, pag-iisa)" },
+  { key: "relapse_thoughts", label: "Relapse thoughts", tagalog: "Mga kaisipan ng paggamit o pagbibigay-katwiran sa muling paggamit" },
+  { key: "health_status", label: "Health status", tagalog: "Kalagayang pangkalusugan (pagkakasakit, labis na pagod, stress, gutom)" },
 ];
 
-const CBTE_3_READINESS = [
-  {
-    key: "sustaining_habits",
-    label: "1. May malinaw na pang-araw-araw na gawaing ipagpapatuloy upang mapanatili ang abstinence (Clear daily recovery routine to sustain abstinence)",
-  },
-  {
-    key: "high_risk_plan",
-    label: "2. May konkretong plano sa pagharap sa mga darating na High-Risk Situations at tukso (Concrete relapse prevention plan for future high-risk situations)",
-  },
-  {
-    key: "family_reintegration",
-    label: "3. Maayos na komunikasyon at suporta mula sa pamilya o tahanan (Healthy family communication and home support system)",
-  },
-  {
-    key: "livelihood_purpose",
-    label: "4. May nakalatag na plano sa trabaho, pag-aaral, o makabuluhang gawain sa komunidad (Plan for employment, education, or community productivity)",
-  },
-  {
-    key: "acp_commitment",
-    label: "5. Handa at nakahandang pumasok sa 9-Month Community Aftercare Program (SIBOL / OP-ACP) (Committed to 9-Month Community Aftercare & follow-up)",
-  },
+// ------------------------------------------------------------------------------
+// CBT-E SESSION 3: CONTINUING TREATMENT PLANNING
+// (Pagpapatuloy ng Treatment Planning)
+// Vol. 2A, Pages 229–232
+// ------------------------------------------------------------------------------
+export const CBTE_3_GOAL_AREAS = [
+  { key: "family", label: "1. Family / Pamilya", desc: "Family relationships, home environment, parental/spousal roles" },
+  { key: "work_career", label: "2. Work/Career / Trabaho", desc: "Employment, livelihood, career development, or business" },
+  { key: "friendships", label: "3. Friendships / Pakikipagkaibigan", desc: "Sober friendships, positive peer connections, boundary setting" },
+  { key: "financial_legal", label: "4. Financial, legal obligations / Pinansyal at Legal", desc: "Debts, budgeting, savings, court appearances, legal compliance" },
+  { key: "education", label: "5. Education / Edukasyon", desc: "Vocational skills, schooling, certifications, or formal studies" },
+  { key: "exercise", label: "6. Exercise / Ehersisyo", desc: "Physical fitness, sports, recreation, and health maintenance" },
+  { key: "leisure", label: "7. Leisure activities / Libangan", desc: "Substance-free hobbies, relaxation, and healthy recreation" },
+  { key: "self_help", label: "8. Self-help meetings / Mga Pagpupulong ng Self-Help", desc: "Narcotics Anonymous (NA) or 12-Step group participation" },
 ];
 
-const CBTE_3_RESPONSE_OPTIONS = [
-  { value: "YES", label: "Oo — Handa (Yes / Demonstrated)" },
-  { value: "PARTIAL", label: "Bahagya — Kailangan ng Gabay (Partial / Needs Support)" },
-  { value: "NO", label: "Hindi Pa (Not Yet Demonstrated)" },
-];
-
-const SELF_REPORTED_STATUS_OPTIONS = [
+// ------------------------------------------------------------------------------
+// SEPARATE CLINICAL STATUS & ASSESSMENT OPTIONS
+// ------------------------------------------------------------------------------
+export const SELF_REPORTED_STATUS_OPTIONS = [
   {
     value: "SAFE",
     label: "🟢 Safe / Abstinent (No cravings or high-risk exposure reported)",
   },
   {
     value: "AT_RISK",
-    label: "🟡 At Risk (Exposed to triggers or skipped schedule — did NOT use substances)",
+    label: "🟡 At Risk (Exposed to triggers or high-risk situations — did NOT use substances)",
   },
   {
     value: "NEARLY_USED",
@@ -176,24 +230,19 @@ const SELF_REPORTED_STATUS_OPTIONS = [
   },
 ];
 
-const STAFF_RISK_ASSESSMENT_OPTIONS = [
+export const STAFF_RISK_ASSESSMENT_OPTIONS = [
   { value: "LOW_RISK", label: "Low Risk — Stable Recovery & Coping" },
   { value: "MODERATE_RISK", label: "Moderate Risk — Monitor Triggers & Reinforce Coping" },
   { value: "HIGH_RISK", label: "High Risk — Intensify Clinical Support & Follow-up" },
   { value: "ACUTE_RELAPSE_RISK", label: "Acute Relapse Risk — Immediate Clinical Intervention" },
 ];
 
-function buildEmptyDomainScores() {
-  return CBTE_1_DOMAINS.reduce((acc, d) => ({ ...acc, [d.key]: null }), {});
-}
-
-function buildEmptySkillsResponses() {
-  return CBTE_2_SKILLS.reduce((acc, s) => ({ ...acc, [s.key]: null }), {});
-}
-
-function buildEmptyReadinessResponses() {
-  return CBTE_3_READINESS.reduce((acc, r) => ({ ...acc, [r.key]: null }), {});
-}
+export const CLINICAL_JUDGMENT_OPTIONS = [
+  { value: "ON_TRACK", label: "✅ On Track — Continue Standard Outpatient Regimen" },
+  { value: "NEEDS_INTENSIFICATION", label: "⚠️ Needs Intensification — Increase Individual Counseling" },
+  { value: "RECOMMEND_DISCHARGE", label: "🎓 Recommend for PDC & Graduation (CBT-E 3 Only)" },
+  { value: "REFER_RESIDENTIAL", label: "🚨 Severe Relapse Risk — Refer for Inpatient / Residential Evaluation" },
+];
 
 export default function CbteEvaluationModal({
   patient,
@@ -227,120 +276,162 @@ export default function CbteEvaluationModal({
     existingEvaluation?.adaptation_notes || ""
   );
 
-  // Separate Clinical Dimensions:
-  // 1. Client Self-Reported Schedule Book / Craving Status (Unanswered by default!)
+  // 1. Client Self-Reported Urge / Relapse Status
   const [selfReportedStatus, setSelfReportedStatus] = useState(
     existingEvaluation?.self_reported_status || ""
   );
-  // 2. Staff Clinical Risk Assessment (Unanswered by default!)
+  // 2. Staff Clinical Risk Assessment
   const [staffRiskAssessment, setStaffRiskAssessment] = useState(
     existingEvaluation?.staff_risk_assessment || ""
   );
-  // 3. Staff Clinical Evaluation Decision (Unanswered by default!)
+  // 3. Staff Clinical Evaluation Decision
   const [clinicalJudgment, setClinicalJudgment] = useState(
     existingEvaluation?.clinical_judgment || ""
   );
+  // Evaluator Remarks
+  const [evaluatorRemarks, setEvaluatorRemarks] = useState(
+    existingEvaluation?.evaluator_remarks || ""
+  );
 
-  // CBT-E 1 Source Worksheet Questions + 11 Domains (All start unanswered!)
+  // ----------------------------------------------------------------------------
+  // CBT-E 1 STATE (Recovery Status Review)
+  // ----------------------------------------------------------------------------
   const [cbte1Source, setCbte1Source] = useState({
     abstinence_duration: existingWs.abstinence_duration || "",
     recovery_stage: existingWs.recovery_stage || "",
     craving_frequency: existingWs.craving_frequency || "",
-    life_changes_reflection: existingWs.life_changes_reflection || "",
-    current_challenges: existingWs.current_challenges || "",
+    most_improved_area: existingWs.most_improved_area || existingWs.life_changes_reflection || "",
+    weakest_areas_plan: existingWs.weakest_areas_plan || existingWs.current_challenges || "",
+    self_review_commitment: existingWs.self_review_commitment || "",
   });
 
-  const [domainScores, setDomainScores] = useState(() => {
-    const base = buildEmptyDomainScores();
-    if (existingEvaluation && existingDomains && typeof existingDomains === "object") {
-      for (const k of Object.keys(base)) {
-        if (existingDomains[k] != null) base[k] = Number(existingDomains[k]);
-      }
+  const [domainRatings, setDomainRatings] = useState(() => {
+    const base = {};
+    CBTE_1_LIFE_AREAS.forEach((a) => {
+      base[a.key] = null;
+    });
+    const sourceMap = existingDomains || existingWs.domain_ratings;
+    if (sourceMap && typeof sourceMap === "object") {
+      CBTE_1_LIFE_AREAS.forEach((a) => {
+        if (sourceMap[a.key] != null) base[a.key] = Number(sourceMap[a.key]);
+      });
     }
     return base;
   });
 
-  // CBT-E 2 Source Worksheet Questions (All start unanswered!)
-  const [skillsResponses, setSkillsResponses] = useState(() => {
-    const base = buildEmptySkillsResponses();
-    const sourceSkills = existingWs.skills_responses || existingSkills;
-    if (existingEvaluation && sourceSkills && typeof sourceSkills === "object") {
-      for (const k of Object.keys(base)) {
-        const val = sourceSkills[k];
-        if (typeof val === "string") {
-          base[k] = val;
-        } else if (val === true) {
-          base[k] = "PRACTICED_CONSISTENTLY";
-        } else if (val === false) {
-          base[k] = "NOT_YET_PRACTICED";
+  // ----------------------------------------------------------------------------
+  // CBT-E 2 STATE (Analyzing Behaviors for Relapse Prevention)
+  // ----------------------------------------------------------------------------
+  const [activitiesChecklist, setActivitiesChecklist] = useState(() => {
+    const base = {};
+    CBTE_2_ACTIVITIES.forEach((act) => {
+      base[act.key] = null; // null = unanswered, "NO_DIFFICULTY" | "HAS_DIFFICULTY"
+    });
+    const sourceSkills = existingWs.skills_checklist || existingWs.skills_responses || existingSkills;
+    if (sourceSkills && typeof sourceSkills === "object") {
+      CBTE_2_ACTIVITIES.forEach((act) => {
+        const val = sourceSkills[act.key];
+        if (val === "NO_DIFFICULTY" || val === "HAS_DIFFICULTY") {
+          base[act.key] = val;
+        } else if (val === "PRACTICED_CONSISTENTLY" || val === true) {
+          base[act.key] = "NO_DIFFICULTY";
+        } else if (val === "NOT_YET_PRACTICED" || val === false || val === "PRACTICED_SOMETIMES") {
+          base[act.key] = "HAS_DIFFICULTY";
         }
-      }
+      });
     }
     return base;
   });
+
   const [cbte2Source, setCbte2Source] = useState({
-    effective_coping_strategies: existingWs.effective_coping_strategies || "",
-    situations_needing_caution: existingWs.situations_needing_caution || "",
+    difficulty_reasons: existingWs.difficulty_reasons || existingWs.situations_needing_caution || "",
+    regular_review_benefits: existingWs.regular_review_benefits || existingWs.effective_coping_strategies || "",
+    relapse_chart_benefits: existingWs.relapse_chart_benefits || "",
   });
 
-  // CBT-E 3 Source Worksheet Questions (All start unanswered!)
-  const [readinessResponses, setReadinessResponses] = useState(() => {
-    const base = buildEmptyReadinessResponses();
-    const sourceReadiness = existingWs.readiness_responses || existingSkills;
-    if (existingEvaluation && sourceReadiness && typeof sourceReadiness === "object") {
-      for (const k of Object.keys(base)) {
-        const val = sourceReadiness[k];
-        if (typeof val === "string") {
-          base[k] = val;
-        } else if (val === true) {
-          base[k] = "YES";
-        } else if (val === false) {
-          base[k] = "NO";
-        }
-      }
-    }
+  const [relapseChart, setRelapseChart] = useState(() => {
+    const base = {};
+    CBTE_2_RELAPSE_CATEGORIES.forEach((cat) => {
+      base[cat.key] = {
+        events: existingWs.relapse_chart?.[cat.key]?.events || "",
+        feelings: existingWs.relapse_chart?.[cat.key]?.feelings || "",
+      };
+    });
     return base;
   });
-  const [lifeGoalsText, setLifeGoalsText] = useState(existingEvaluation?.life_goals_text || "");
-  const [emergencySupportPlan, setEmergencySupportPlan] = useState(
-    existingWs.emergency_support_plan || ""
-  );
 
-  const [evaluatorRemarks, setEvaluatorRemarks] = useState(
-    existingEvaluation?.evaluator_remarks || ""
-  );
+  // ----------------------------------------------------------------------------
+  // CBT-E 3 STATE (Continuing Treatment Planning)
+  // ----------------------------------------------------------------------------
+  const [goalsMatrix, setGoalsMatrix] = useState(() => {
+    const base = {};
+    CBTE_3_GOAL_AREAS.forEach((area) => {
+      base[area.key] = {
+        current_status: existingWs.goals_matrix?.[area.key]?.current_status || "",
+        target_goal: existingWs.goals_matrix?.[area.key]?.target_goal || "",
+        steps: existingWs.goals_matrix?.[area.key]?.steps || "",
+        timeline: existingWs.goals_matrix?.[area.key]?.timeline || "",
+      };
+    });
+    return base;
+  });
+
+  const [cbte3Source, setCbte3Source] = useState({
+    barriers: existingWs.barriers || "",
+    transformation: existingWs.transformation || "",
+    aftercare_motivation: existingWs.aftercare_motivation || "",
+    trc_helpful_feedback: existingWs.trc_helpful_feedback || "",
+    na_contact_person: existingWs.na_contact_person || "",
+    na_phone_number: existingWs.na_phone_number || "",
+    na_physical_location: existingWs.na_physical_location || "",
+  });
+
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
-  // Calculate unanswered vs answered items for the active worksheet
+  // Calculate answered items
   function getCompletionStats() {
     if (evalType === "CBTE_1") {
-      const sourceAnswered =
+      const sourceCount =
         (cbte1Source.abstinence_duration.trim() ? 1 : 0) +
         (cbte1Source.recovery_stage ? 1 : 0) +
         (cbte1Source.craving_frequency ? 1 : 0) +
-        (cbte1Source.life_changes_reflection.trim() ? 1 : 0);
-      const domainsAnswered = Object.values(domainScores).filter((v) => v !== null).length;
+        (cbte1Source.most_improved_area.trim() ? 1 : 0) +
+        (cbte1Source.weakest_areas_plan.trim() ? 1 : 0) +
+        (cbte1Source.self_review_commitment.trim() ? 1 : 0);
+      const ratingsAnswered = Object.values(domainRatings).filter((v) => v !== null).length;
       return {
-        answered: sourceAnswered + domainsAnswered,
-        total: 4 + CBTE_1_DOMAINS.length,
-        domainsAnswered,
-        domainsTotal: CBTE_1_DOMAINS.length,
+        answered: sourceCount + ratingsAnswered,
+        total: 6 + CBTE_1_LIFE_AREAS.length,
+        ratingsAnswered,
+        ratingsTotal: CBTE_1_LIFE_AREAS.length,
       };
     }
     if (evalType === "CBTE_2") {
-      const skillsAnswered = Object.values(skillsResponses).filter((v) => v !== null).length;
-      const openAnswered = cbte2Source.effective_coping_strategies.trim() ? 1 : 0;
+      const activitiesAnswered = Object.values(activitiesChecklist).filter((v) => v !== null).length;
+      const reflAnswered =
+        (cbte2Source.difficulty_reasons.trim() ? 1 : 0) +
+        (cbte2Source.regular_review_benefits.trim() ? 1 : 0);
       return {
-        answered: skillsAnswered + openAnswered,
-        total: CBTE_2_SKILLS.length + 1,
+        answered: activitiesAnswered + reflAnswered,
+        total: CBTE_2_ACTIVITIES.length + 2,
+        activitiesAnswered,
+        activitiesTotal: CBTE_2_ACTIVITIES.length,
       };
     }
-    const readinessAnswered = Object.values(readinessResponses).filter((v) => v !== null).length;
-    const goalsAnswered = lifeGoalsText.trim() ? 1 : 0;
+    // CBT-E 3
+    const matrixAnswered = Object.values(goalsMatrix).filter(
+      (m) => m.target_goal.trim() || m.steps.trim()
+    ).length;
+    const reflectionsAnswered =
+      (cbte3Source.barriers.trim() ? 1 : 0) +
+      (cbte3Source.transformation.trim() ? 1 : 0) +
+      (cbte3Source.trc_helpful_feedback.trim() ? 1 : 0);
     return {
-      answered: readinessAnswered + goalsAnswered,
-      total: CBTE_3_READINESS.length + 1,
+      answered: matrixAnswered + reflectionsAnswered,
+      total: CBTE_3_GOAL_AREAS.length + 3,
+      matrixAnswered,
+      matrixTotal: CBTE_3_GOAL_AREAS.length,
     };
   }
 
@@ -360,9 +451,7 @@ export default function CbteEvaluationModal({
       return;
     }
     if (!selfReportedStatus) {
-      setError(
-        "Please select the Client's Self-Reported Schedule Book / Craving Status (unanswered items must be completed)."
-      );
+      setError("Please record the client's self-reported craving / relapse risk status before saving.");
       return;
     }
     if (!staffRiskAssessment) {
@@ -376,34 +465,38 @@ export default function CbteEvaluationModal({
 
     if (evalType === "CBTE_1") {
       if (!cbte1Source.abstinence_duration.trim() || !cbte1Source.recovery_stage || !cbte1Source.craving_frequency) {
-        setError("Please complete the CBT-E 1 source worksheet recovery status questions before saving.");
+        setError("Please answer the recovery continuity questions (Abstinence Duration, Recovery Stage, Craving Frequency).");
         return;
       }
-      const unansweredDomains = CBTE_1_DOMAINS.filter((d) => domainScores[d.key] === null);
-      if (unansweredDomains.length > 0) {
-        setError(
-          `Please answer all 11 recovery domain items (${unansweredDomains.length} item(s) still unanswered).`
-        );
+      const unansweredRatings = CBTE_1_LIFE_AREAS.filter((a) => domainRatings[a.key] === null);
+      if (unansweredRatings.length > 0) {
+        setError(`Please complete the 11 Life Areas Satisfaction Rating (${unansweredRatings.length} area(s) unanswered).`);
+        return;
+      }
+      if (!cbte1Source.most_improved_area.trim() || !cbte1Source.weakest_areas_plan.trim()) {
+        setError("Please document the qualitative reflection on the most improved and weakest life areas.");
         return;
       }
     } else if (evalType === "CBTE_2") {
-      const unansweredSkills = CBTE_2_SKILLS.filter((s) => skillsResponses[s.key] === null);
-      if (unansweredSkills.length > 0) {
-        setError(
-          `Please evaluate all 8 relapse prevention behavior items (${unansweredSkills.length} item(s) still unanswered).`
-        );
+      const unansweredActs = CBTE_2_ACTIVITIES.filter((a) => activitiesChecklist[a.key] === null);
+      if (unansweredActs.length > 0) {
+        setError(`Please evaluate all 16 Relapse Prevention Activities (${unansweredActs.length} item(s) unanswered).`);
+        return;
+      }
+      if (!cbte2Source.difficulty_reasons.trim()) {
+        setError("Please answer why certain relapse prevention activities are difficult and what needs to change.");
         return;
       }
     } else if (evalType === "CBTE_3") {
-      const unansweredReadiness = CBTE_3_READINESS.filter((r) => readinessResponses[r.key] === null);
-      if (unansweredReadiness.length > 0) {
-        setError(
-          `Please answer all 5 continuing treatment & aftercare readiness items (${unansweredReadiness.length} item(s) still unanswered).`
-        );
+      const filledAreas = Object.values(goalsMatrix).filter(
+        (m) => m.target_goal.trim() && m.steps.trim()
+      ).length;
+      if (filledAreas < 4) {
+        setError("Please complete at least 4 life areas in the Continuing Treatment Goals Matrix (Target Goal & Action Steps).");
         return;
       }
-      if (!lifeGoalsText.trim()) {
-        setError("Please document the client's Continuing Recovery & Life Goals for CBT-E 3.");
+      if (!cbte3Source.transformation.trim()) {
+        setError("Please document how the client is a different person now compared to when they started treatment.");
         return;
       }
     }
@@ -413,22 +506,36 @@ export default function CbteEvaluationModal({
       const worksheetResponsesJson =
         evalType === "CBTE_1"
           ? {
-              worksheet_title: "Sesyon 1. Pagsusuri ng Katayuan ng Paggaling",
+              worksheet_title: "Sesyon 1. Pagsusuri ng Katayuan ng Paggaling (Recovery Status Review)",
+              source_standard: "ENTREPOSE Series Vol. 2A (Pages 221–223)",
               ...cbte1Source,
-              domain_ratings: domainScores,
+              domain_ratings: domainRatings,
             }
           : evalType === "CBTE_2"
           ? {
-              worksheet_title: "Sesyon 2. Pagsusuri sa mga Pag-uugali para sa Pag-iwas sa Muling Paggamit",
-              skills_responses: skillsResponses,
+              worksheet_title: "Sesyon 2. Pagsusuri sa mga Pag-uugali para sa Pag-iwas sa Relapse",
+              source_standard: "ENTREPOSE Series Vol. 2A (Pages 225–227)",
+              skills_checklist: activitiesChecklist,
               ...cbte2Source,
+              relapse_chart: relapseChart,
             }
           : {
-              worksheet_title: "Sesyon 3. Pagpapatuloy ng Treatment Planning",
-              readiness_responses: readinessResponses,
-              continuing_life_goals: lifeGoalsText.trim(),
-              emergency_support_plan: emergencySupportPlan.trim(),
+              worksheet_title: "Sesyon 3. Pagpapatuloy ng Treatment Planning (Continuing Treatment Planning)",
+              source_standard: "ENTREPOSE Series Vol. 2A (Pages 229–232)",
+              goals_matrix: goalsMatrix,
+              ...cbte3Source,
             };
+
+      const lifeGoalsSummary =
+        evalType === "CBTE_3"
+          ? Object.entries(goalsMatrix)
+              .filter(([_, data]) => data.target_goal.trim())
+              .map(([key, data]) => {
+                const areaInfo = CBTE_3_GOAL_AREAS.find((a) => a.key === key);
+                return `${areaInfo?.label || key}: Goal: ${data.target_goal} | Steps: ${data.steps} | When: ${data.timeline || "Ongoing"}`;
+              })
+              .join("\n")
+          : null;
 
       const payload = {
         evaluationType: evalType,
@@ -440,15 +547,15 @@ export default function CbteEvaluationModal({
         selfReportedStatus,
         staffRiskAssessment,
         worksheetResponsesJson,
-        recoveryDomainsJson: evalType === "CBTE_1" ? domainScores : null,
+        recoveryDomainsJson: evalType === "CBTE_1" ? domainRatings : null,
         copingSkillsJson:
           evalType === "CBTE_2"
-            ? skillsResponses
+            ? activitiesChecklist
             : evalType === "CBTE_3"
-            ? readinessResponses
+            ? goalsMatrix
             : null,
-        lifeGoalsText: evalType === "CBTE_3" ? lifeGoalsText.trim() : null,
-        overallScore: null, // Never present an unapproved application-invented score as an official clinical measure
+        lifeGoalsText: lifeGoalsSummary,
+        overallScore: null, // Qualitative tool: no manufactured composite score
         clinicalJudgment,
         evaluatorRemarks: evaluatorRemarks.trim() || null,
       };
@@ -472,20 +579,21 @@ export default function CbteEvaluationModal({
   return (
     <div style={styles.backdrop} onClick={onClose}>
       <div style={styles.modal} onClick={(e) => e.stopPropagation()}>
+        {/* Header with Warm Botanical Green Theme */}
         <div style={styles.header}>
           <div>
             <div style={styles.title}>
               {readOnly
-                ? "CBT-E Clinical Evaluation Record (Source Worksheet)"
+                ? "CBT-E Clinical Evaluation Record (ENTREPOSE Vol. 2A)"
                 : existingEvaluation
                 ? "Update CBT-E Clinical Evaluation"
                 : "CBT-E Clinical Evaluation (ENTREPOSE Vol. 2A Source Forms)"}
             </div>
             <div style={styles.subtitle}>
-              Client: <strong>{patient?.full_name}</strong> · All items start unanswered and preserve exact responses
+              Client: <strong>{patient?.full_name}</strong> · Authentic Outpatient Workbook Tools (Vol. 2A Pages 219–232)
             </div>
           </div>
-          <button type="button" style={styles.closeBtn} onClick={onClose}>
+          <button type="button" style={styles.closeBtn} onClick={onClose} aria-label="Close modal">
             ×
           </button>
         </div>
@@ -495,18 +603,18 @@ export default function CbteEvaluationModal({
           {[
             {
               key: "CBTE_1",
-              title: "CBT-E 1 (Sesyon 1)",
-              desc: "Pagsusuri ng Katayuan ng Paggaling",
+              title: "CBT-E 1 (Sesyon 1 · Week 5)",
+              desc: "Recovery Status Review (Pagsusuri ng Katayuan ng Paggaling)",
             },
             {
               key: "CBTE_2",
-              title: "CBT-E 2 (Sesyon 2)",
-              desc: "Pag-uugali sa Pag-iwas sa Relapse",
+              title: "CBT-E 2 (Sesyon 2 · Week 13)",
+              desc: "Relapse Prevention Behaviors (Pag-uugali para sa Pag-iwas sa Relapse)",
             },
             {
               key: "CBTE_3",
-              title: "CBT-E 3 (Sesyon 3)",
-              desc: "Pagpapatuloy ng Treatment Planning",
+              title: "CBT-E 3 (Sesyon 3 · Month 6–7)",
+              desc: "Continuing Treatment Planning (Pagpapatuloy ng Treatment Planning)",
             },
           ].map((tab) => (
             <button
@@ -521,7 +629,7 @@ export default function CbteEvaluationModal({
               }}
             >
               <div style={{ fontWeight: 800, fontSize: 13 }}>{tab.title}</div>
-              <div style={{ fontSize: 11, opacity: 0.85 }}>{tab.desc}</div>
+              <div style={{ fontSize: 11, opacity: 0.9 }}>{tab.desc}</div>
             </button>
           ))}
         </div>
@@ -552,7 +660,7 @@ export default function CbteEvaluationModal({
                   value={evaluatorName}
                   disabled={readOnly}
                   onChange={(e) => setEvaluatorName(e.target.value)}
-                  placeholder="Name of Case Manager / Evaluator"
+                  placeholder="Case Manager / Authorized Clinician"
                   required
                 />
               </label>
@@ -566,7 +674,7 @@ export default function CbteEvaluationModal({
                   onChange={(e) => setFormBasis(e.target.value)}
                 >
                   <option value="SUPPLIED_ENTREPOSE_WORKSHEET">
-                    Supplied ENTREPOSE Vol. 2A Source Worksheet
+                    Supplied ENTREPOSE Vol. 2A Source Worksheets
                   </option>
                   <option value="MTRC_APPROVED_LOCAL_ADAPTATION">
                     MTRC Clinical Lead Approved Local Adaptation
@@ -588,14 +696,14 @@ export default function CbteEvaluationModal({
                   />
                 </label>
                 <label style={styles.label}>
-                  Local Adaptation Reference / Notes
+                  Local Adaptation Reference / Clinical Note
                   <input
                     type="text"
                     style={styles.input}
                     value={adaptationNotes}
                     disabled={readOnly}
                     onChange={(e) => setAdaptationNotes(e.target.value)}
-                    placeholder="e.g., Added structured 11-domain qualitative rubric alongside Sesyon 1 questions"
+                    placeholder="Clinical justification for adaptation"
                   />
                 </label>
               </div>
@@ -606,343 +714,698 @@ export default function CbteEvaluationModal({
                 <strong>Worksheet Completion Status:</strong> {completionStats.answered} of{" "}
                 {completionStats.total} required items answered
               </div>
-              <div style={{ fontSize: 11.5, color: "#475569" }}>
-                ℹ️ Qualitative worksheet responses are preserved directly (no unvalidated composite score is generated).
+              <div style={{ fontSize: 11.5, color: "#2A6A45", fontWeight: 600 }}>
+                🌿 Qualitative worksheet responses preserved verbatim. No unvalidated composite score is generated.
               </div>
             </div>
           </div>
 
-          {/* CBT-E 1: Sesyon 1. Pagsusuri ng Katayuan ng Paggaling */}
+          {/* ================================================================= */}
+          {/* CBT-E 1: SESYON 1. PAGSUSURI NG KATAYUAN NG PAGGALING              */}
+          {/* ================================================================= */}
           {evalType === "CBTE_1" && (
             <div style={styles.section}>
-              <div style={styles.sectionTitle}>
-                Bahagi I — Source Worksheet: Sesyon 1. Pagsusuri ng Katayuan ng Paggaling (Evaluation of Recovery Status)
+              <div style={styles.sectionHeader}>
+                <span style={styles.sectionBadge}>CBT-E 1 · Week 5</span>
+                <span>Sesyon 1. Pagsusuri ng Katayuan ng Paggaling (Recovery Status Review)</span>
               </div>
 
-              <div style={styles.questionCard}>
-                <label style={styles.label}>
-                  <div>
-                    <strong>0. Gaano katagal ka nang hindi gumagamit ng droga at alak?</strong>
-                    <div style={{ fontSize: 11.5, color: "#64748B", fontWeight: 500 }}>
-                      Length of continuous abstinence reported by the client (e.g., "5 linggo / 35 araw na abstinent")
-                    </div>
-                  </div>
-                  <input
-                    type="text"
-                    style={styles.input}
-                    value={cbte1Source.abstinence_duration}
-                    disabled={readOnly}
-                    onChange={(e) =>
-                      setCbte1Source((prev) => ({ ...prev, abstinence_duration: e.target.value }))
-                    }
-                    placeholder="Enter client's reported duration of abstinence…"
-                  />
-                </label>
-              </div>
-
-              {CBTE_1_SOURCE_QUESTIONS.map((q) => (
-                <div key={q.key} style={styles.questionCard}>
-                  <div style={{ fontWeight: 700, fontSize: 13, color: "#1E293B" }}>{q.promptTagalog}</div>
-                  <div style={{ fontSize: 11.5, color: "#64748B", marginBottom: 8 }}>{q.promptEnglish}</div>
-                  <select
-                    style={{
-                      ...styles.input,
-                      borderColor: cbte1Source[q.key] ? "#166534" : "#CBD5E0",
-                      background: cbte1Source[q.key] ? "#F0FDF4" : "#FFF",
-                    }}
-                    value={cbte1Source[q.key]}
-                    disabled={readOnly}
-                    onChange={(e) =>
-                      setCbte1Source((prev) => ({ ...prev, [q.key]: e.target.value }))
-                    }
-                  >
-                    <option value="">— Unanswered: Select client response —</option>
-                    {q.options.map((opt) => (
-                      <option key={opt.value} value={opt.value}>
-                        {opt.label}
-                      </option>
-                    ))}
-                  </select>
+              {/* Continuity Recovery Status Questions */}
+              <div style={styles.card}>
+                <div style={styles.cardHeader}>
+                  A. Katayuan sa Abstinence at Yugto ng Paggaling (Clinical Recovery Baseline)
                 </div>
-              ))}
 
-              <div style={styles.grid2}>
-                <label style={styles.label}>
-                  <span>
-                    <strong>3. Mga Positibong Pagbabago sa Buhay (Positive Changes Since Entering Program) *</strong>
-                  </span>
-                  <textarea
-                    style={{ ...styles.input, minHeight: 68 }}
-                    value={cbte1Source.life_changes_reflection}
-                    disabled={readOnly}
-                    onChange={(e) =>
-                      setCbte1Source((prev) => ({ ...prev, life_changes_reflection: e.target.value }))
-                    }
-                    placeholder="Document client's reflection on changes in health, family, daily routine, and outlook…"
-                  />
-                </label>
-                <label style={styles.label}>
-                  <span>
-                    <strong>4. Mga Kasalukuyang Hamon o Tukso (Current Challenges / Triggers Being Faced)</strong>
-                  </span>
-                  <textarea
-                    style={{ ...styles.input, minHeight: 68 }}
-                    value={cbte1Source.current_challenges}
-                    disabled={readOnly}
-                    onChange={(e) =>
-                      setCbte1Source((prev) => ({ ...prev, current_challenges: e.target.value }))
-                    }
-                    placeholder="Document specific triggers, stressors, or difficulties identified during the session…"
-                  />
-                </label>
-              </div>
+                <div style={styles.grid3}>
+                  <label style={styles.label}>
+                    <span>
+                      <strong>Gaano katagal ka nang hindi gumagamit ng droga at alak? *</strong>
+                      <div style={{ fontSize: 11, color: "#64748B", fontWeight: 500 }}>
+                        Continuous abstinence reported by client
+                      </div>
+                    </span>
+                    <input
+                      type="text"
+                      style={styles.input}
+                      value={cbte1Source.abstinence_duration}
+                      disabled={readOnly}
+                      onChange={(e) =>
+                        setCbte1Source((prev) => ({ ...prev, abstinence_duration: e.target.value }))
+                      }
+                      placeholder="e.g., 5 linggo / 35 araw na abstinent"
+                      required
+                    />
+                  </label>
 
-              <div style={{ ...styles.sectionTitle, marginTop: 10 }}>
-                Bahagi II — 11 Recovery Life Domains Check (All Items Start Unanswered: 1 = Matinding Hamon to 5 = Matatag)
-              </div>
-              <div style={styles.domainList}>
-                {CBTE_1_DOMAINS.map((d) => {
-                  const currentVal = domainScores[d.key];
-                  return (
-                    <div
-                      key={d.key}
+                  <label style={styles.label}>
+                    <span>
+                      <strong>Daan Tungo sa Paggaling: Saang yugto ka naroroon? *</strong>
+                      <div style={{ fontSize: 11, color: "#64748B", fontWeight: 500 }}>
+                        Stage on the Road to Recovery (Workbook Sesyon 7)
+                      </div>
+                    </span>
+                    <select
                       style={{
-                        ...styles.domainRow,
-                        borderColor: currentVal === null ? "#FCD34D" : "#E2E8F0",
-                        background: currentVal === null ? "#FFFBEB" : "#FFFFFF",
+                        ...styles.input,
+                        borderColor: cbte1Source.recovery_stage ? "#2A6A45" : "#CBD5E1",
+                        background: cbte1Source.recovery_stage ? "#F4FAF5" : "#FFF",
+                        fontWeight: 600,
                       }}
+                      value={cbte1Source.recovery_stage}
+                      disabled={readOnly}
+                      onChange={(e) =>
+                        setCbte1Source((prev) => ({ ...prev, recovery_stage: e.target.value }))
+                      }
+                      required
                     >
-                      <div style={{ flex: 1, paddingRight: 12 }}>
-                        <div style={{ fontWeight: 700, fontSize: 13, color: "#2D3748" }}>{d.label}</div>
-                        <div style={{ fontSize: 11.5, color: "#718096" }}>{d.desc}</div>
+                      <option value="">— Pumili ng Yugto / Select Stage —</option>
+                      {CBTE_1_STAGE_OPTIONS.map((opt) => (
+                        <option key={opt.value} value={opt.value}>
+                          {opt.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+
+                  <label style={styles.label}>
+                    <span>
+                      <strong>Dalas ng Giyang (Craving) sa nakalipas na buwan *</strong>
+                      <div style={{ fontSize: 11, color: "#64748B", fontWeight: 500 }}>
+                        Frequency of cravings or urges in past month
                       </div>
-                      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                        {currentVal === null && (
-                          <span style={{ fontSize: 11, color: "#B45309", fontWeight: 700, marginRight: 4 }}>
-                            Unanswered
-                          </span>
-                        )}
-                        {[1, 2, 3, 4, 5].map((score) => (
-                          <button
-                            key={score}
-                            type="button"
-                            disabled={readOnly}
-                            onClick={() =>
-                              setDomainScores((prev) => ({ ...prev, [d.key]: score }))
-                            }
-                            style={{
-                              ...styles.scoreBtn,
-                              ...(currentVal === score ? styles.scoreBtnActive : {}),
-                            }}
-                          >
-                            {score}
-                          </button>
-                        ))}
+                    </span>
+                    <select
+                      style={{
+                        ...styles.input,
+                        borderColor: cbte1Source.craving_frequency ? "#2A6A45" : "#CBD5E1",
+                        background: cbte1Source.craving_frequency ? "#F4FAF5" : "#FFF",
+                        fontWeight: 600,
+                      }}
+                      value={cbte1Source.craving_frequency}
+                      disabled={readOnly}
+                      onChange={(e) =>
+                        setCbte1Source((prev) => ({ ...prev, craving_frequency: e.target.value }))
+                      }
+                      required
+                    >
+                      <option value="">— Pumili ng Dalas / Select Frequency —</option>
+                      {CBTE_1_CRAVING_OPTIONS.map((opt) => (
+                        <option key={opt.value} value={opt.value}>
+                          {opt.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+              </div>
+
+              {/* Part I: 11 Life Areas Satisfaction Rating (Vol. 2A Page 222) */}
+              <div style={styles.card}>
+                <div style={styles.cardHeader}>
+                  B. 11 Life Areas Satisfaction Rating (Rate 1 to 5 · Vol. 2A Page 222)
+                </div>
+                <div style={{ fontSize: 12, color: "#475569", marginBottom: 12 }}>
+                  Rate how satisfied the client is with each of the following 11 life areas as of now:{" "}
+                  <strong>1 = Very Dissatisfied</strong>, <strong>2 = Somewhat Dissatisfied</strong>,{" "}
+                  <strong>3 = Neutral</strong>, <strong>4 = Somewhat Satisfied</strong>,{" "}
+                  <strong>5 = Very Satisfied</strong>.
+                </div>
+
+                <div style={styles.itemsList}>
+                  {CBTE_1_LIFE_AREAS.map((area) => {
+                    const currentRating = domainRatings[area.key];
+                    return (
+                      <div
+                        key={area.key}
+                        style={{
+                          ...styles.itemRow,
+                          borderColor: currentRating === null ? "#F59E0B" : "#D5E5D6",
+                          background: currentRating === null ? "#FFFBEB" : "#FFFFFF",
+                        }}
+                      >
+                        <div style={{ flex: 1, paddingRight: 12 }}>
+                          <div style={{ fontWeight: 700, fontSize: 13, color: "#1B432C" }}>
+                            {area.label}
+                          </div>
+                          <div style={{ fontSize: 11.5, color: "#64748B" }}>{area.desc}</div>
+                        </div>
+
+                        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                          {currentRating === null ? (
+                            <span style={{ fontSize: 11, color: "#B45309", fontWeight: 700, marginRight: 4 }}>
+                              Unanswered
+                            </span>
+                          ) : (
+                            <span style={{ fontSize: 11.5, color: "#2A6A45", fontWeight: 700, marginRight: 6 }}>
+                              {CBTE_1_RATING_LABELS[currentRating]?.split(" (")[0]}
+                            </span>
+                          )}
+
+                          {[1, 2, 3, 4, 5].map((score) => (
+                            <button
+                              key={score}
+                              type="button"
+                              disabled={readOnly}
+                              onClick={() =>
+                                setDomainRatings((prev) => ({ ...prev, [area.key]: score }))
+                              }
+                              title={CBTE_1_RATING_LABELS[score]}
+                              style={{
+                                ...styles.scoreBtn,
+                                ...(currentRating === score ? styles.scoreBtnActive : {}),
+                              }}
+                            >
+                              {score}
+                            </button>
+                          ))}
+                        </div>
                       </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Part II: Vol. 2A Reflection Questions */}
+              <div style={styles.card}>
+                <div style={styles.cardHeader}>
+                  C. Pagsusuri at Mga Plano sa Pagbabago (Vol. 2A Pages 222–223 Reflections)
+                </div>
+
+                <div style={styles.grid2}>
+                  <label style={styles.label}>
+                    <span>
+                      <strong>1. Alin sa mga larangang ito ang pinaka-bumuti mula nang pumasok ka sa paggamot? *</strong>
+                      <div style={{ fontSize: 11, color: "#64748B", fontWeight: 500 }}>
+                        Which of these areas has improved the most since you entered treatment?
+                      </div>
+                    </span>
+                    <textarea
+                      style={{ ...styles.input, minHeight: 70 }}
+                      value={cbte1Source.most_improved_area}
+                      disabled={readOnly}
+                      onChange={(e) =>
+                        setCbte1Source((prev) => ({ ...prev, most_improved_area: e.target.value }))
+                      }
+                      placeholder="Ilarawan ang aspetong may pinakamalaking pagbuti (kalusugan, pamilya, tiwala sa sarili)…"
+                      required
+                    />
+                  </label>
+
+                  <label style={styles.label}>
+                    <span>
+                      <strong>2. Alin ang iyong pinakamahinang larangan? Paano mo ito planong pagbutihin? *</strong>
+                      <div style={{ fontSize: 11, color: "#64748B", fontWeight: 500 }}>
+                        Which are your weakest areas? How are you planning to improve them? How will you change yourself?
+                      </div>
+                    </span>
+                    <textarea
+                      style={{ ...styles.input, minHeight: 70 }}
+                      value={cbte1Source.weakest_areas_plan}
+                      disabled={readOnly}
+                      onChange={(e) =>
+                        setCbte1Source((prev) => ({ ...prev, weakest_areas_plan: e.target.value }))
+                      }
+                      placeholder="Ilarawan ang mga larangang kailangan pang palakasin at kongkretong hakbang upang baguhin ang sarili…"
+                      required
+                    />
+                  </label>
+                </div>
+
+                <label style={{ ...styles.label, marginTop: 10 }}>
+                  <span>
+                    <strong>3. Magsasagawa ka ba ng regular na pagsusuri ng katayuan sa paggaling pagkatapos ng programa? *</strong>
+                    <div style={{ fontSize: 11, color: "#64748B", fontWeight: 500 }}>
+                      Will you conduct the self-review of your recovery status regularly after completing treatment? What will be the benefits?
                     </div>
-                  );
-                })}
+                  </span>
+                  <textarea
+                    style={{ ...styles.input, minHeight: 60 }}
+                    value={cbte1Source.self_review_commitment}
+                    disabled={readOnly}
+                    onChange={(e) =>
+                      setCbte1Source((prev) => ({ ...prev, self_review_commitment: e.target.value }))
+                    }
+                    placeholder="Pahayag ng kliyente sa paninindigan sa buwanang self-review at mga kapakinabangan nito sa pag-iwas sa relapse…"
+                  />
+                </label>
               </div>
             </div>
           )}
 
-          {/* CBT-E 2: Sesyon 2. Pagsusuri sa mga Pag-uugali para sa Pag-iwas sa Muling Paggamit */}
+          {/* ================================================================= */}
+          {/* CBT-E 2: SESYON 2. PAGSUSURI SA MGA PAG-UUGALI PARA SA PAG-IWAS SA RELAPSE */}
+          {/* ================================================================= */}
           {evalType === "CBTE_2" && (
             <div style={styles.section}>
-              <div style={styles.sectionTitle}>
-                Source Worksheet: Sesyon 2. Pagsusuri sa mga Pag-uugali para sa Pag-iwas sa Muling Paggamit
+              <div style={styles.sectionHeader}>
+                <span style={styles.sectionBadge}>CBT-E 2 · Week 13</span>
+                <span>Sesyon 2. Pagsusuri sa mga Pag-uugali para sa Pag-iwas sa Relapse</span>
               </div>
-              <div style={styles.domainList}>
-                {CBTE_2_SKILLS.map((s) => {
-                  const val = skillsResponses[s.key];
-                  return (
-                    <div
-                      key={s.key}
-                      style={{
-                        ...styles.domainRow,
-                        flexDirection: "column",
-                        alignItems: "stretch",
-                        gap: 8,
-                        borderColor: val === null ? "#FCD34D" : "#E2E8F0",
-                        background: val === null ? "#FFFBEB" : "#FFFFFF",
-                      }}
-                    >
-                      <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
-                        <span style={{ fontSize: 13, fontWeight: 700, color: "#1E293B" }}>{s.label}</span>
-                        {val === null && (
-                          <span style={{ fontSize: 11, color: "#B45309", fontWeight: 700, whiteSpace: "nowrap" }}>
-                            Unanswered
-                          </span>
-                        )}
-                      </div>
-                      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                        {CBTE_2_RESPONSE_OPTIONS.map((opt) => (
+
+              {/* Part I: 16 Relapse Prevention Activities Checklist (Vol. 2A Page 226) */}
+              <div style={styles.card}>
+                <div style={styles.cardHeader}>
+                  A. 16 Relapse Prevention Activities Checklist (Vol. 2A Page 226)
+                </div>
+                <div style={{ fontSize: 12, color: "#475569", marginBottom: 10 }}>
+                  Which things in the list below does the client have difficulties in doing regularly or adequately?
+                  Mark each item as <strong>Doing Adequately</strong> or <strong>Has Difficulty / Needs Attention</strong>.
+                </div>
+
+                <div style={styles.itemsList}>
+                  {CBTE_2_ACTIVITIES.map((act) => {
+                    const currentStatus = activitiesChecklist[act.key];
+                    return (
+                      <div
+                        key={act.key}
+                        style={{
+                          ...styles.itemRow,
+                          borderColor: currentStatus === null ? "#F59E0B" : "#D5E5D6",
+                          background: currentStatus === null ? "#FFFBEB" : "#FFFFFF",
+                          flexWrap: "wrap",
+                          gap: 8,
+                        }}
+                      >
+                        <div style={{ flex: "1 1 340px" }}>
+                          <div style={{ fontWeight: 700, fontSize: 13, color: "#1B432C" }}>
+                            {act.label}
+                          </div>
+                          <div style={{ fontSize: 11.5, color: "#64748B" }}>{act.tagalog}</div>
+                        </div>
+
+                        <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                          {currentStatus === null && (
+                            <span style={{ fontSize: 11, color: "#B45309", fontWeight: 700, marginRight: 4 }}>
+                              Unanswered
+                            </span>
+                          )}
+
                           <button
-                            key={opt.value}
                             type="button"
                             disabled={readOnly}
                             onClick={() =>
-                              setSkillsResponses((prev) => ({ ...prev, [s.key]: opt.value }))
+                              setActivitiesChecklist((prev) => ({ ...prev, [act.key]: "NO_DIFFICULTY" }))
                             }
                             style={{
                               ...styles.optionPillBtn,
-                              ...(val === opt.value ? styles.optionPillBtnActive : {}),
+                              ...(currentStatus === "NO_DIFFICULTY" ? styles.optionPillBtnSuccess : {}),
                             }}
                           >
-                            {opt.label}
+                            ✓ Walang Hirap (Doing Adequately)
                           </button>
-                        ))}
+
+                          <button
+                            type="button"
+                            disabled={readOnly}
+                            onClick={() =>
+                              setActivitiesChecklist((prev) => ({ ...prev, [act.key]: "HAS_DIFFICULTY" }))
+                            }
+                            style={{
+                              ...styles.optionPillBtn,
+                              ...(currentStatus === "HAS_DIFFICULTY" ? styles.optionPillBtnWarning : {}),
+                            }}
+                          >
+                            ⚠️ May Hirap (Has Difficulty)
+                          </button>
+                        </div>
                       </div>
-                    </div>
-                  );
-                })}
+                    );
+                  })}
+                </div>
+
+                <div style={{ ...styles.grid2, marginTop: 12 }}>
+                  <label style={styles.label}>
+                    <span>
+                      <strong>Bakit ito mahirap? Ano ang kailangang magbago upang masimulan ang mga ito? *</strong>
+                      <div style={{ fontSize: 11, color: "#64748B", fontWeight: 500 }}>
+                        Why are they difficult? What might need to change for you to begin those things?
+                      </div>
+                    </span>
+                    <textarea
+                      style={{ ...styles.input, minHeight: 72 }}
+                      value={cbte2Source.difficulty_reasons}
+                      disabled={readOnly}
+                      onChange={(e) =>
+                        setCbte2Source((prev) => ({ ...prev, difficulty_reasons: e.target.value }))
+                      }
+                      placeholder="Ilarawan ang mga balakid at mga pagbabagong kailangan upang magawa ang mga gawain…"
+                      required
+                    />
+                  </label>
+
+                  <label style={styles.label}>
+                    <span>
+                      <strong>Magagawa mo bang regular na suriin ang iyong mga gawain sa pag-iwas sa relapse?</strong>
+                      <div style={{ fontSize: 11, color: "#64748B", fontWeight: 500 }}>
+                        Will you be able to review your relapse prevention activities regularly? What are the benefits?
+                      </div>
+                    </span>
+                    <textarea
+                      style={{ ...styles.input, minHeight: 72 }}
+                      value={cbte2Source.regular_review_benefits}
+                      disabled={readOnly}
+                      onChange={(e) =>
+                        setCbte2Source((prev) => ({ ...prev, regular_review_benefits: e.target.value }))
+                      }
+                      placeholder="Mga kapakinabangan ng regular na pagsusuri sa pagpapanatili ng abstinence…"
+                    />
+                  </label>
+                </div>
               </div>
 
-              <div style={styles.grid2}>
-                <label style={styles.label}>
+              {/* Part II: Relapse Analysis Chart (Vol. 2A Page 227) */}
+              <div style={styles.card}>
+                <div style={styles.cardHeader}>
+                  B. Relapse Analysis Chart: Pagsusuri sa Konteksto ng Relapse o Muntikang Paggamit (Vol. 2A Page 227)
+                </div>
+                <div style={{ fontSize: 12, color: "#475569", marginBottom: 10 }}>
+                  Recall the events that occurred during the week immediately before the relapse (or high-risk craving episode)
+                  and feelings at that time across the 7 life categories:
+                </div>
+
+                <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                  {CBTE_2_RELAPSE_CATEGORIES.map((cat) => (
+                    <div key={cat.key} style={styles.tableRowCard}>
+                      <div style={{ fontWeight: 700, fontSize: 12.5, color: "#1B432C", marginBottom: 4 }}>
+                        {cat.label} ({cat.tagalog})
+                      </div>
+                      <div style={styles.grid2}>
+                        <input
+                          type="text"
+                          style={styles.input}
+                          disabled={readOnly}
+                          value={relapseChart[cat.key]?.events || ""}
+                          onChange={(e) =>
+                            setRelapseChart((prev) => ({
+                              ...prev,
+                              [cat.key]: { ...prev[cat.key], events: e.target.value },
+                            }))
+                          }
+                          placeholder="Events during the week immediately before (Mga kaganapan bago ang insidente)…"
+                        />
+                        <input
+                          type="text"
+                          style={styles.input}
+                          disabled={readOnly}
+                          value={relapseChart[cat.key]?.feelings || ""}
+                          onChange={(e) =>
+                            setRelapseChart((prev) => ({
+                              ...prev,
+                              [cat.key]: { ...prev[cat.key], feelings: e.target.value },
+                            }))
+                          }
+                          placeholder="Your feelings about the event at that time (Naramdaman noong panahong iyon)…"
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <label style={{ ...styles.label, marginTop: 12 }}>
                   <span>
-                    <strong>Pinakamabisang Paraan sa Pag-iwas sa Relapse (Most Effective Coping Strategies Used) *</strong>
+                    <strong>Magagawa mo bang sagutan ang Relapse Analysis Chart kung makaranas ka ng relapse?</strong>
+                    <div style={{ fontSize: 11, color: "#64748B", fontWeight: 500 }}>
+                      Will you be able to fill the Relapse Analysis Chart if you experience a relapse? What are the benefits of doing so?
+                    </div>
                   </span>
                   <textarea
-                    style={{ ...styles.input, minHeight: 72 }}
-                    value={cbte2Source.effective_coping_strategies}
+                    style={{ ...styles.input, minHeight: 55 }}
+                    value={cbte2Source.relapse_chart_benefits}
                     disabled={readOnly}
                     onChange={(e) =>
-                      setCbte2Source((prev) => ({
-                        ...prev,
-                        effective_coping_strategies: e.target.value,
-                      }))
+                      setCbte2Source((prev) => ({ ...prev, relapse_chart_benefits: e.target.value }))
                     }
-                    placeholder="Record client's specific relapse prevention behaviors that worked best…"
-                  />
-                </label>
-                <label style={styles.label}>
-                  <span>
-                    <strong>Mga Sitwasyong Kailangan Pang Pag-ingatan (High-Risk Situations Still Needing Work)</strong>
-                  </span>
-                  <textarea
-                    style={{ ...styles.input, minHeight: 72 }}
-                    value={cbte2Source.situations_needing_caution}
-                    disabled={readOnly}
-                    onChange={(e) =>
-                      setCbte2Source((prev) => ({
-                        ...prev,
-                        situations_needing_caution: e.target.value,
-                      }))
-                    }
-                    placeholder="Record remaining triggers or relapse drift warning signs to monitor…"
+                    placeholder="Pahayag ng kliyente sa kahalagahan ng pag-aaral sa pattern ng relapse upang mapigilan ang pag-ulit nito…"
                   />
                 </label>
               </div>
             </div>
           )}
 
-          {/* CBT-E 3: Sesyon 3. Pagpapatuloy ng Treatment Planning */}
+          {/* ================================================================= */}
+          {/* CBT-E 3: SESYON 3. PAGPAPATULOY NG TREATMENT PLANNING              */}
+          {/* ================================================================= */}
           {evalType === "CBTE_3" && (
             <div style={styles.section}>
-              <div style={styles.sectionTitle}>
-                Source Worksheet: Sesyon 3. Pagpapatuloy ng Treatment Planning (Continuing Recovery & Aftercare Plan)
-              </div>
-              <div style={styles.domainList}>
-                {CBTE_3_READINESS.map((r) => {
-                  const val = readinessResponses[r.key];
-                  return (
-                    <div
-                      key={r.key}
-                      style={{
-                        ...styles.domainRow,
-                        flexDirection: "column",
-                        alignItems: "stretch",
-                        gap: 8,
-                        borderColor: val === null ? "#FCD34D" : "#E2E8F0",
-                        background: val === null ? "#FFFBEB" : "#FFFFFF",
-                      }}
-                    >
-                      <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
-                        <span style={{ fontSize: 13, fontWeight: 700, color: "#1E293B" }}>{r.label}</span>
-                        {val === null && (
-                          <span style={{ fontSize: 11, color: "#B45309", fontWeight: 700, whiteSpace: "nowrap" }}>
-                            Unanswered
-                          </span>
-                        )}
-                      </div>
-                      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                        {CBTE_3_RESPONSE_OPTIONS.map((opt) => (
-                          <button
-                            key={opt.value}
-                            type="button"
-                            disabled={readOnly}
-                            onClick={() =>
-                              setReadinessResponses((prev) => ({ ...prev, [r.key]: opt.value }))
-                            }
-                            style={{
-                              ...styles.optionPillBtn,
-                              ...(val === opt.value ? styles.optionPillBtnActive : {}),
-                            }}
-                          >
-                            {opt.label}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  );
-                })}
+              <div style={styles.sectionHeader}>
+                <span style={styles.sectionBadge}>CBT-E 3 · Month 6–7</span>
+                <span>Sesyon 3. Pagpapatuloy ng Treatment Planning (Continuing Treatment Planning)</span>
               </div>
 
-              <div style={styles.grid2}>
-                <label style={styles.label}>
-                  <span>
-                    <strong>Mga Layunin sa Pagpapatuloy ng Paggaling (Continuing Recovery & Aftercare Goals) *</strong>
-                  </span>
-                  <textarea
-                    style={{ ...styles.input, minHeight: 80 }}
-                    placeholder="Document client's post-rehab goals, employment/reintegration plans, and OP-ACP schedule commitment…"
-                    value={lifeGoalsText}
-                    disabled={readOnly}
-                    onChange={(e) => setLifeGoalsText(e.target.value)}
-                  />
-                </label>
-                <label style={styles.label}>
-                  <span>
-                    <strong>Emergency Support Network & Crisis Plan (Mga Taong Maaaring Hingian ng Tulong)</strong>
-                  </span>
-                  <textarea
-                    style={{ ...styles.input, minHeight: 80 }}
-                    placeholder="List sober support contacts, family members, and steps client will take if strong cravings arise…"
-                    value={emergencySupportPlan}
-                    disabled={readOnly}
-                    onChange={(e) => setEmergencySupportPlan(e.target.value)}
-                  />
-                </label>
+              {/* Part I: Continuing Treatment Goals Matrix (Vol. 2A Pages 229–230) */}
+              <div style={styles.card}>
+                <div style={styles.cardHeader}>
+                  A. Continuing Treatment Goals Matrix across 8 Life Areas (Vol. 2A Pages 229–230)
+                </div>
+                <div style={{ fontSize: 12, color: "#475569", marginBottom: 12 }}>
+                  Set concrete continuing treatment goals and action steps for each area of life after outpatient graduation:
+                </div>
+
+                <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                  {CBTE_3_GOAL_AREAS.map((area) => (
+                    <div key={area.key} style={styles.tableRowCard}>
+                      <div style={{ fontWeight: 800, fontSize: 13, color: "#1B432C" }}>
+                        {area.label}
+                      </div>
+                      <div style={{ fontSize: 11, color: "#64748B", marginBottom: 6 }}>{area.desc}</div>
+
+                      <div style={{ display: "grid", gridTemplateColumns: "1.2fr 1.2fr 1.6fr 0.8fr", gap: 8 }}>
+                        <label style={{ display: "flex", flexDirection: "column", gap: 3, fontSize: 11, fontWeight: 700, color: "#475569" }}>
+                          Nasaan ka ngayon? (Current Status)
+                          <input
+                            type="text"
+                            style={styles.inputSmall}
+                            disabled={readOnly}
+                            value={goalsMatrix[area.key]?.current_status || ""}
+                            onChange={(e) =>
+                              setGoalsMatrix((prev) => ({
+                                ...prev,
+                                [area.key]: { ...prev[area.key], current_status: e.target.value },
+                              }))
+                            }
+                            placeholder="Current status…"
+                          />
+                        </label>
+
+                        <label style={{ display: "flex", flexDirection: "column", gap: 3, fontSize: 11, fontWeight: 700, color: "#475569" }}>
+                          Saan nais makarating? (Target Goal)
+                          <input
+                            type="text"
+                            style={styles.inputSmall}
+                            disabled={readOnly}
+                            value={goalsMatrix[area.key]?.target_goal || ""}
+                            onChange={(e) =>
+                              setGoalsMatrix((prev) => ({
+                                ...prev,
+                                [area.key]: { ...prev[area.key], target_goal: e.target.value },
+                              }))
+                            }
+                            placeholder="Desired goal…"
+                          />
+                        </label>
+
+                        <label style={{ display: "flex", flexDirection: "column", gap: 3, fontSize: 11, fontWeight: 700, color: "#475569" }}>
+                          Anong hakbang ang gagawin? (Steps Needed)
+                          <input
+                            type="text"
+                            style={styles.inputSmall}
+                            disabled={readOnly}
+                            value={goalsMatrix[area.key]?.steps || ""}
+                            onChange={(e) =>
+                              setGoalsMatrix((prev) => ({
+                                ...prev,
+                                [area.key]: { ...prev[area.key], steps: e.target.value },
+                              }))
+                            }
+                            placeholder="Action steps…"
+                          />
+                        </label>
+
+                        <label style={{ display: "flex", flexDirection: "column", gap: 3, fontSize: 11, fontWeight: 700, color: "#475569" }}>
+                          Kailan? (When)
+                          <input
+                            type="text"
+                            style={styles.inputSmall}
+                            disabled={readOnly}
+                            value={goalsMatrix[area.key]?.timeline || ""}
+                            onChange={(e) =>
+                              setGoalsMatrix((prev) => ({
+                                ...prev,
+                                [area.key]: { ...prev[area.key], timeline: e.target.value },
+                              }))
+                            }
+                            placeholder="e.g., Buwan 1 / Agad"
+                          />
+                        </label>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Part II: Continuing Recovery & Program Reflections (Vol. 2A Pages 230–232) */}
+              <div style={styles.card}>
+                <div style={styles.cardHeader}>
+                  B. Pagninilay sa Paggaling at Suporta sa Komunidad (Vol. 2A Pages 230–232 Reflections)
+                </div>
+
+                <div style={styles.grid2}>
+                  <label style={styles.label}>
+                    <span>
+                      <strong>1. May kakaharapin ka bang mga balakid upang makamit ang mga layunin? Ano ang mga iyon?</strong>
+                      <div style={{ fontSize: 11, color: "#64748B", fontWeight: 500 }}>
+                        Will you face barriers to achieve those goals? What are those?
+                      </div>
+                    </span>
+                    <textarea
+                      style={{ ...styles.input, minHeight: 68 }}
+                      value={cbte3Source.barriers}
+                      disabled={readOnly}
+                      onChange={(e) =>
+                        setCbte3Source((prev) => ({ ...prev, barriers: e.target.value }))
+                      }
+                      placeholder="Ilista ang posibleng balakid (stress, kakulangan sa pondo, tukso) at solusyon…"
+                    />
+                  </label>
+
+                  <label style={styles.label}>
+                    <span>
+                      <strong>2. Paano ka naging ibang tao ngayon kumpara noong nagsimula ka sa programa? *</strong>
+                      <div style={{ fontSize: 11, color: "#64748B", fontWeight: 500 }}>
+                        How are you a different person now than you were when you started the treatment program?
+                      </div>
+                    </span>
+                    <textarea
+                      style={{ ...styles.input, minHeight: 68 }}
+                      value={cbte3Source.transformation}
+                      disabled={readOnly}
+                      onChange={(e) =>
+                        setCbte3Source((prev) => ({ ...prev, transformation: e.target.value }))
+                      }
+                      placeholder="Pagbabago sa pag-iisip, pagpapahalaga, relasyon sa pamilya, at pamumuhay…"
+                      required
+                    />
+                  </label>
+                </div>
+
+                <div style={{ ...styles.grid2, marginTop: 10 }}>
+                  <label style={styles.label}>
+                    <span>
+                      <strong>3. Ipagpapatuloy mo ba ang pagdalo sa mga programa (Aftercare / NA)? Paano mo mamomotivate ang sarili?</strong>
+                      <div style={{ fontSize: 11, color: "#64748B", fontWeight: 500 }}>
+                        Will you continue to attend programs for your recovery? How can you motivate yourself to do so?
+                      </div>
+                    </span>
+                    <textarea
+                      style={{ ...styles.input, minHeight: 68 }}
+                      value={cbte3Source.aftercare_motivation}
+                      disabled={readOnly}
+                      onChange={(e) =>
+                        setCbte3Source((prev) => ({ ...prev, aftercare_motivation: e.target.value }))
+                      }
+                      placeholder="Plano sa paglahok sa 18-Month Aftercare Program at regular na NA meetings…"
+                    />
+                  </label>
+
+                  <label style={styles.label}>
+                    <span>
+                      <strong>4. Anong aspeto ng paggamot sa TRC ang pinakamakatulong? May mga bahagi ba na hindi nakatulong?</strong>
+                      <div style={{ fontSize: 11, color: "#64748B", fontWeight: 500 }}>
+                        What aspects of treatment in the TRC have been most helpful? Were there parts that haven't been helpful?
+                      </div>
+                    </span>
+                    <textarea
+                      style={{ ...styles.input, minHeight: 68 }}
+                      value={cbte3Source.trc_helpful_feedback}
+                      disabled={readOnly}
+                      onChange={(e) =>
+                        setCbte3Source((prev) => ({ ...prev, trc_helpful_feedback: e.target.value }))
+                      }
+                      placeholder="Pagsusuri sa mga naging pinakamabisang sesyon, modyul, o suporta ng staff…"
+                    />
+                  </label>
+                </div>
+
+                {/* NA / Self-Help Group Details */}
+                <div style={{ marginTop: 12, padding: "10px 12px", background: "#F4FAF5", border: "1px solid #D5E5D6", borderRadius: 8 }}>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: "#1B432C", marginBottom: 6 }}>
+                    Ugnayan sa Narcotics Anonymous (NA) / Self-Help Group Malapit sa Tirahan (Vol. 2A Homework Page 232)
+                  </div>
+                  <div style={styles.grid3}>
+                    <label style={{ display: "flex", flexDirection: "column", gap: 3, fontSize: 11.5, fontWeight: 600, color: "#334155" }}>
+                      Contact Person
+                      <input
+                        type="text"
+                        style={styles.inputSmall}
+                        disabled={readOnly}
+                        value={cbte3Source.na_contact_person}
+                        onChange={(e) =>
+                          setCbte3Source((prev) => ({ ...prev, na_contact_person: e.target.value }))
+                        }
+                        placeholder="Pangalan ng Sponsor / Contact"
+                      />
+                    </label>
+                    <label style={{ display: "flex", flexDirection: "column", gap: 3, fontSize: 11.5, fontWeight: 600, color: "#334155" }}>
+                      Phone Number
+                      <input
+                        type="text"
+                        style={styles.inputSmall}
+                        disabled={readOnly}
+                        value={cbte3Source.na_phone_number}
+                        onChange={(e) =>
+                          setCbte3Source((prev) => ({ ...prev, na_phone_number: e.target.value }))
+                        }
+                        placeholder="Numero ng Telepono"
+                      />
+                    </label>
+                    <label style={{ display: "flex", flexDirection: "column", gap: 3, fontSize: 11.5, fontWeight: 600, color: "#334155" }}>
+                      Physical Location / Meeting Venue
+                      <input
+                        type="text"
+                        style={styles.inputSmall}
+                        disabled={readOnly}
+                        value={cbte3Source.na_physical_location}
+                        onChange={(e) =>
+                          setCbte3Source((prev) => ({ ...prev, na_physical_location: e.target.value }))
+                        }
+                        placeholder="Lugar o Barangay ng NA meeting"
+                      />
+                    </label>
+                  </div>
+                </div>
               </div>
             </div>
           )}
 
-          {/* SEPARATE CLINICAL INFORMATION: 1. Self-Reported Risk, 2. Staff Assessment, 3. Clinical Decision */}
+          {/* ================================================================= */}
+          {/* SEPARATE CLINICAL STATUS & ASSESSMENT: 1. Self-Report, 2. Staff Risk, 3. Clinical Judgment */}
+          {/* ================================================================= */}
           <div style={styles.separationBox}>
-            <div style={{ fontSize: 12, fontWeight: 800, color: "#1E293B", textTransform: "uppercase", letterSpacing: 0.4 }}>
-              Separate Risk & Clinical Documentation (Self-Report vs. Staff Assessment)
+            <div style={{ fontSize: 12.5, fontWeight: 800, color: "#1B432C", textTransform: "uppercase", letterSpacing: 0.4 }}>
+              Hiwalay na Pagtatala ng Relapse Risk at Klinikal na Desisyon (Self-Report vs. Staff Assessment)
             </div>
-            <div style={{ fontSize: 11.5, color: "#475569", marginBottom: 8 }}>
-              A client reporting a strong craving or near-use (<em>Nearly Used / Muntik nang Gumamit</em>) without actual substance use is preserved as <strong>Abstinence Maintained (Near-Use/Craving)</strong> and never recorded as drug use. Objective Multi-3 drug test results remain logged separately under Drug Tests.
+            <div style={{ fontSize: 11.5, color: "#3D5A45", marginBottom: 8, lineHeight: 1.4 }}>
+              Ang kliyenteng nag-ulat ng matinding giyang o muntikang paggamit (<em>Nearly Used / Strong Craving</em>) nang hindi
+              aktwal na gumamit ng droga ay iniingatan bilang <strong>Abstinence Maintained (Near-Use/Craving)</strong> at kailanman ay
+              hindi itatala bilang paggamit ng droga. Ang obhetibong resulta ng laboratory Multi-3 drug test ay nakatala nang hiwalay sa talaan ng Drug Tests.
             </div>
 
             <div style={styles.grid3}>
               <label style={styles.label}>
-                1. Client Self-Reported Status (Schedule Book) *
+                1. Client Self-Reported Urge / Relapse Status *
                 <select
                   style={{
                     ...styles.input,
-                    borderColor: selfReportedStatus ? "#0D9488" : "#F59E0B",
-                    background: selfReportedStatus ? "#F0FDFA" : "#FFFBEB",
-                    fontWeight: 600,
+                    borderColor: selfReportedStatus ? "#2A6A45" : "#F59E0B",
+                    background: selfReportedStatus ? "#F4FAF5" : "#FFFBEB",
+                    fontWeight: 700,
                   }}
                   value={selfReportedStatus}
                   disabled={readOnly}
                   onChange={(e) => setSelfReportedStatus(e.target.value)}
                   required
                 >
-                  <option value="">— Select Client Self-Report —</option>
+                  <option value="">— Pumili ng Ulat ng Kliyente —</option>
                   {SELF_REPORTED_STATUS_OPTIONS.map((opt) => (
                     <option key={opt.value} value={opt.value}>
                       {opt.label}
@@ -956,16 +1419,16 @@ export default function CbteEvaluationModal({
                 <select
                   style={{
                     ...styles.input,
-                    borderColor: staffRiskAssessment ? "#0D9488" : "#F59E0B",
-                    background: staffRiskAssessment ? "#F0FDFA" : "#FFFBEB",
-                    fontWeight: 600,
+                    borderColor: staffRiskAssessment ? "#2A6A45" : "#F59E0B",
+                    background: staffRiskAssessment ? "#F4FAF5" : "#FFFBEB",
+                    fontWeight: 700,
                   }}
                   value={staffRiskAssessment}
                   disabled={readOnly}
                   onChange={(e) => setStaffRiskAssessment(e.target.value)}
                   required
                 >
-                  <option value="">— Select Staff Risk Assessment —</option>
+                  <option value="">— Pumili ng Pagsusuri ng Staff —</option>
                   {STAFF_RISK_ASSESSMENT_OPTIONS.map((opt) => (
                     <option key={opt.value} value={opt.value}>
                       {opt.label}
@@ -975,12 +1438,12 @@ export default function CbteEvaluationModal({
               </label>
 
               <label style={styles.label}>
-                3. Staff Milestone Recommendation *
+                3. Staff Clinical Milestone Recommendation *
                 <select
                   style={{
                     ...styles.input,
-                    borderColor: clinicalJudgment ? "#0D9488" : "#F59E0B",
-                    background: clinicalJudgment ? "#F0FDFA" : "#FFFBEB",
+                    borderColor: clinicalJudgment ? "#2A6A45" : "#F59E0B",
+                    background: clinicalJudgment ? "#F4FAF5" : "#FFFBEB",
                     fontWeight: 700,
                   }}
                   value={clinicalJudgment}
@@ -988,17 +1451,12 @@ export default function CbteEvaluationModal({
                   onChange={(e) => setClinicalJudgment(e.target.value)}
                   required
                 >
-                  <option value="">— Select Clinical Decision —</option>
-                  <option value="ON_TRACK">✅ On Track — Continue Standard Outpatient Regimen</option>
-                  <option value="NEEDS_INTENSIFICATION">
-                    ⚠️ Needs Intensification — Increase Individual Counseling
-                  </option>
-                  <option value="RECOMMEND_DISCHARGE">
-                    🎓 Recommend for PDC & Graduation (CBT-E 3 Only)
-                  </option>
-                  <option value="REFER_RESIDENTIAL">
-                    🚨 Severe Relapse Risk — Refer for Inpatient / Residential Eval
-                  </option>
+                  <option value="">— Pumili ng Klinikal na Desisyon —</option>
+                  {CLINICAL_JUDGMENT_OPTIONS.map((opt) => (
+                    <option key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </option>
+                  ))}
                 </select>
               </label>
             </div>
@@ -1007,8 +1465,8 @@ export default function CbteEvaluationModal({
           <label style={styles.label}>
             Evaluator Clinical Synthesis & Remarks (Preserved Verbatim)
             <textarea
-              style={{ ...styles.input, minHeight: 75 }}
-              placeholder="Enter clinical observations, behavioral progress, and recommendations…"
+              style={{ ...styles.input, minHeight: 70 }}
+              placeholder="Clinical synthesis, client progress, specific recommendations, and aftercare follow-up instructions…"
               value={evaluatorRemarks}
               disabled={readOnly}
               onChange={(e) => setEvaluatorRemarks(e.target.value)}
@@ -1039,7 +1497,7 @@ const styles = {
   backdrop: {
     position: "fixed",
     inset: 0,
-    background: "rgba(0,0,0,0.5)",
+    background: "rgba(15, 30, 20, 0.6)",
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
@@ -1047,41 +1505,42 @@ const styles = {
     padding: 16,
   },
   modal: {
-    background: "#fff",
+    background: "#FFFFFF",
     borderRadius: 12,
-    width: 860,
+    width: 900,
     maxWidth: "96vw",
     maxHeight: "92vh",
     display: "flex",
     flexDirection: "column",
     overflow: "hidden",
-    boxShadow: "0 20px 45px rgba(0,0,0,0.22)",
+    boxShadow: "0 20px 45px rgba(27, 67, 44, 0.25)",
+    border: "1px solid #D5E5D6",
   },
   header: {
     display: "flex",
     justifyContent: "space-between",
     alignItems: "flex-start",
     padding: "16px 24px",
-    borderBottom: "1px solid #E2E8F0",
-    background: "#F8FAFC",
+    borderBottom: "1px solid #D5E5D6",
+    background: "#F4FAF5",
   },
-  title: { fontSize: 17, fontWeight: 800, color: "#1A202C" },
-  subtitle: { fontSize: 12.5, color: "#718096", marginTop: 2 },
+  title: { fontSize: 17, fontWeight: 800, color: "#1B432C" },
+  subtitle: { fontSize: 12.5, color: "#4A6E55", marginTop: 2 },
   closeBtn: {
     background: "none",
     border: "none",
-    fontSize: 24,
+    fontSize: 26,
     cursor: "pointer",
-    color: "#718096",
+    color: "#52755D",
     lineHeight: 1,
   },
   tabBar: {
     display: "grid",
     gridTemplateColumns: "1fr 1fr 1fr",
-    background: "#EDF2F7",
+    background: "#E8F4E8",
     padding: 6,
     gap: 6,
-    borderBottom: "1px solid #E2E8F0",
+    borderBottom: "1px solid #D5E5D6",
   },
   tabBtn: {
     padding: "10px 12px",
@@ -1090,14 +1549,14 @@ const styles = {
     background: "transparent",
     cursor: "pointer",
     textAlign: "left",
-    color: "#4A5568",
+    color: "#375540",
     transition: "all 0.15s",
   },
   tabBtnActive: {
-    background: "#fff",
-    color: "#0D9488",
-    borderColor: "#CBD5E0",
-    boxShadow: "0 1px 3px rgba(0,0,0,0.08)",
+    background: "#FFFFFF",
+    color: "#1B432C",
+    borderColor: "#A8DCB4",
+    boxShadow: "0 2px 6px rgba(27, 67, 44, 0.08)",
   },
   body: {
     padding: "18px 24px",
@@ -1113,10 +1572,11 @@ const styles = {
     borderRadius: 8,
     fontSize: 13,
     fontWeight: 600,
+    border: "1px solid #FCA5A5",
   },
   metaCard: {
-    background: "#F8FAFC",
-    border: "1px solid #E2E8F0",
+    background: "#F9FCFA",
+    border: "1px solid #D5E5D6",
     borderRadius: 10,
     padding: "12px 14px",
   },
@@ -1130,7 +1590,109 @@ const styles = {
     flexWrap: "wrap",
     gap: 8,
     fontSize: 12.5,
-    color: "#0F172A",
+    color: "#1B432C",
+  },
+  section: { display: "flex", flexDirection: "column", gap: 12 },
+  sectionHeader: {
+    display: "flex",
+    alignItems: "center",
+    gap: 10,
+    fontSize: 13,
+    fontWeight: 800,
+    color: "#1B432C",
+    background: "#E8F4E8",
+    padding: "8px 12px",
+    borderRadius: 8,
+    border: "1px solid #C8E6C9",
+  },
+  sectionBadge: {
+    background: "#2A6A45",
+    color: "#FFFFFF",
+    fontSize: 11,
+    fontWeight: 800,
+    padding: "2px 8px",
+    borderRadius: 999,
+  },
+  card: {
+    background: "#FFFFFF",
+    border: "1px solid #E2E8F0",
+    borderRadius: 8,
+    padding: "12px 14px",
+    display: "flex",
+    flexDirection: "column",
+    gap: 10,
+  },
+  cardHeader: {
+    fontSize: 12.5,
+    fontWeight: 800,
+    color: "#1B432C",
+    borderBottom: "1px solid #EBF2EC",
+    paddingBottom: 6,
+  },
+  itemsList: {
+    display: "flex",
+    flexDirection: "column",
+    gap: 8,
+    maxHeight: 340,
+    overflowY: "auto",
+    paddingRight: 4,
+  },
+  itemRow: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    padding: "10px 12px",
+    background: "#FFFFFF",
+    border: "1px solid #E2E8F0",
+    borderRadius: 8,
+    transition: "border-color 0.15s",
+  },
+  tableRowCard: {
+    padding: "10px 12px",
+    background: "#F9FCFA",
+    border: "1px solid #D5E5D6",
+    borderRadius: 8,
+  },
+  scoreBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 6,
+    border: "1px solid #CBD5E0",
+    background: "#FFFFFF",
+    fontWeight: 700,
+    fontSize: 13,
+    cursor: "pointer",
+    color: "#334155",
+    transition: "all 0.15s",
+  },
+  scoreBtnActive: {
+    background: "#2A6A45",
+    color: "#FFFFFF",
+    borderColor: "#2A6A45",
+    boxShadow: "0 2px 4px rgba(42, 106, 69, 0.25)",
+  },
+  optionPillBtn: {
+    padding: "6px 12px",
+    borderRadius: 6,
+    border: "1px solid #CBD5E0",
+    background: "#FFFFFF",
+    fontSize: 11.5,
+    fontWeight: 600,
+    color: "#334155",
+    cursor: "pointer",
+    transition: "all 0.15s",
+  },
+  optionPillBtnSuccess: {
+    background: "#2A6A45",
+    color: "#FFFFFF",
+    borderColor: "#2A6A45",
+    fontWeight: 700,
+  },
+  optionPillBtnWarning: {
+    background: "#B45309",
+    color: "#FFFFFF",
+    borderColor: "#B45309",
+    fontWeight: 700,
   },
   grid2: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 },
   grid3: { display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 },
@@ -1140,7 +1702,7 @@ const styles = {
     gap: 6,
     fontSize: 12.5,
     fontWeight: 700,
-    color: "#2D3748",
+    color: "#1B432C",
   },
   input: {
     padding: "8px 12px",
@@ -1151,105 +1713,50 @@ const styles = {
     width: "100%",
     boxSizing: "border-box",
   },
-  section: { display: "flex", flexDirection: "column", gap: 10 },
-  sectionTitle: {
-    fontSize: 12.5,
-    fontWeight: 800,
-    textTransform: "uppercase",
-    color: "#1E293B",
-    letterSpacing: 0.4,
-    background: "#EDF2F7",
+  inputSmall: {
     padding: "6px 10px",
     borderRadius: 6,
-  },
-  questionCard: {
-    padding: "10px 12px",
-    borderRadius: 8,
-    border: "1px solid #E2E8F0",
-    background: "#FFFFFF",
-  },
-  domainList: {
-    display: "flex",
-    flexDirection: "column",
-    gap: 8,
-    maxHeight: 320,
-    overflowY: "auto",
-    paddingRight: 4,
-  },
-  domainRow: {
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "center",
-    padding: "10px 12px",
-    background: "#FFFFFF",
-    border: "1px solid #E2E8F0",
-    borderRadius: 8,
-  },
-  scoreBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 6,
     border: "1px solid #CBD5E0",
-    background: "#fff",
-    fontWeight: 700,
-    fontSize: 13,
-    cursor: "pointer",
-    color: "#4A5568",
-  },
-  scoreBtnActive: {
-    background: "#0D9488",
-    color: "#fff",
-    borderColor: "#0D9488",
-  },
-  optionPillBtn: {
-    padding: "6px 12px",
-    borderRadius: 6,
-    border: "1px solid #CBD5E0",
-    background: "#FFFFFF",
     fontSize: 12,
-    fontWeight: 600,
-    color: "#334155",
-    cursor: "pointer",
-  },
-  optionPillBtnActive: {
-    background: "#0D9488",
-    color: "#FFFFFF",
-    borderColor: "#0D9488",
-    fontWeight: 700,
+    fontFamily: "inherit",
+    width: "100%",
+    boxSizing: "border-box",
   },
   separationBox: {
-    background: "#F0FDF4",
-    border: "1px solid #BBF7D0",
+    background: "#F4FAF5",
+    border: "1.5px solid #A8DCB4",
     borderRadius: 10,
     padding: "12px 14px",
     display: "flex",
     flexDirection: "column",
-    gap: 6,
+    gap: 8,
   },
   footer: {
     display: "flex",
     justifyContent: "flex-end",
     gap: 10,
     paddingTop: 12,
-    borderTop: "1px solid #E2E8F0",
+    borderTop: "1px solid #D5E5D6",
   },
   secondaryBtn: {
     padding: "9px 16px",
     borderRadius: 6,
     border: "1px solid #CBD5E0",
-    background: "#fff",
+    background: "#FFFFFF",
     fontWeight: 600,
     fontSize: 13,
+    color: "#334155",
     cursor: "pointer",
   },
   primaryBtn: {
     padding: "9px 20px",
     borderRadius: 6,
     border: "none",
-    background: "#0D9488",
-    color: "#fff",
+    background: "#2A6A45",
+    color: "#FFFFFF",
     fontWeight: 700,
     fontSize: 13,
     cursor: "pointer",
+    boxShadow: "0 2px 6px rgba(42, 106, 69, 0.2)",
   },
 };

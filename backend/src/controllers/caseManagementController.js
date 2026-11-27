@@ -1,5 +1,5 @@
 import pool from "../config/db.js";
-import { notifyUser, notifyRoles } from "../utils/notify.js";
+import { notifyUser, notifyRoles, notifyUserOnce } from "../utils/notify.js";
 import { ensureAttendanceCompletionSchema, checkDuplicateCurriculumCredit } from "../utils/attendanceSchema.js";
 import { getUnifiedPatientProgress, getBulkUnifiedPatientProgress } from "../utils/curriculumProgress.js";
 import {
@@ -24,6 +24,7 @@ import {
   CONSULT_TYPES,
 } from "../utils/interventionSchema.js";
 import { recordPatientStatusChange } from "../utils/historicalReportSchema.js";
+import { getCompletionGuardFailures, isEnrolledActive, findPatientsNotEnrolledOn } from "../utils/completionGuards.js";
 import { legacyDischargeReasonCode, isCompleterOutcome, enrollmentStatusForOutcome } from "../utils/classification.js";
 
 // 1. Milestones
@@ -157,6 +158,9 @@ export async function logSessionWithNote(req, res) {
   if (!patientId || !sessionDate || !sessionType || !status) {
     return res.status(400).json({ message: "Missing required attendance fields." });
   }
+  if ((await findPatientsNotEnrolledOn(pool, [patientId], sessionDate)).length > 0) {
+    return res.status(409).json({ message: "This patient is not actively enrolled on that date (discharged or not yet finalized)." });
+  }
 
   const connection = await pool.getConnection();
   try {
@@ -237,10 +241,16 @@ export async function logSessionWithNote(req, res) {
       if (p && p.assigned_case_manager_id) {
         if (normalizedStatus === "absent") {
           const [recentAtt] = await pool.query(
-            "SELECT status FROM attendance WHERE patient_id = ? AND status != 'cancelled' ORDER BY session_date DESC, id DESC LIMIT 2",
+            "SELECT status FROM attendance WHERE patient_id = ? AND status != 'cancelled' ORDER BY session_date DESC, id DESC LIMIT 3",
             [patientId]
           );
-          if (recentAtt.length === 2 && recentAtt[0].status === "absent" && recentAtt[1].status === "absent") {
+          // Flag once per absence streak (not again on the 3rd, 4th... absence).
+          if (
+            recentAtt.length >= 2 &&
+            recentAtt[0].status === "absent" &&
+            recentAtt[1].status === "absent" &&
+            (recentAtt.length === 2 || recentAtt[2].status !== "absent")
+          ) {
             await notifyUser(
               p.assigned_case_manager_id,
               "patients",
@@ -251,7 +261,7 @@ export async function logSessionWithNote(req, res) {
         } else if (resolvedCompletion === "CREDITED" && !isDuplicateTopic) {
           const progress = await getUnifiedPatientProgress(pool, patientId);
           if (progress.isCoreComplete) {
-            await notifyUser(
+            await notifyUserOnce(
               p.assigned_case_manager_id,
               "patients",
               "milestone_readiness",
@@ -330,6 +340,10 @@ export async function addDrugTest(req, res) {
 
     if (!testDate) {
       return res.status(400).json({ message: "Test date is required." });
+    }
+    const notEnrolled = await findPatientsNotEnrolledOn(pool, [id], testDate);
+    if (notEnrolled.length > 0) {
+      return res.status(409).json({ message: "This patient is not actively enrolled on that date (discharged or not yet finalized)." });
     }
 
     const multi3 = buildMulti3SubstanceSummary(
@@ -672,6 +686,35 @@ export async function dischargePatient(req, res) {
   try {
     await connection.beginTransaction();
 
+    // Lock the patient row; refuse a second discharge or a discharge of a non-active patient.
+    const [[dischargeTarget]] = await connection.query(
+      "SELECT id, enrollment_status FROM patients WHERE id = ? FOR UPDATE",
+      [id]
+    );
+    if (!dischargeTarget) {
+      await connection.rollback();
+      return res.status(404).json({ message: "Patient not found." });
+    }
+    const [[priorDischarge]] = await connection.query(
+      "SELECT id FROM discharges WHERE patient_id = ? UNION SELECT id FROM patient_discharges WHERE patient_id = ? LIMIT 1",
+      [id, id]
+    );
+    if (priorDischarge || !isEnrolledActive(dischargeTarget.enrollment_status)) {
+      await connection.rollback();
+      return res.status(409).json({ message: "This patient has already been discharged or is not actively enrolled." });
+    }
+    // A Completer discharge must meet the same statutory rules as the Certificate of Completion.
+    if (isCompleter) {
+      const unmet = await getCompletionGuardFailures(connection, id);
+      if (unmet.length > 0) {
+        await connection.rollback();
+        return res.status(400).json({
+          message: "Patient does not yet meet the completion requirements. Discharge as Completer is not allowed.",
+          guards: unmet,
+        });
+      }
+    }
+
     const outcomeCode = isCompleter ? "COMPLETER" : "NON_COMPLETER";
     const reasonCode = legacyDischargeReasonCode(reason) || (isCompleter ? "COMPLETED_PROGRAM" : "NON_COMPLIANCE");
 
@@ -709,8 +752,8 @@ export async function dischargePatient(req, res) {
     const phaseUpdate = transitionToAftercare ? ", program_phase = 'Aftercare'" : "";
 
     await connection.query(
-      `UPDATE patients SET enrollment_status = ? ${phaseUpdate} WHERE id = ?`,
-      [enrollmentStatus, id]
+      `UPDATE patients SET enrollment_status = ?, current_status = ? ${phaseUpdate} WHERE id = ?`,
+      [enrollmentStatus, enrollmentStatus, id]
     );
 
     // Synchronize historical status change (Finding 7)
@@ -1074,7 +1117,7 @@ export async function savePatientCbteEvaluation(req, res) {
   }
   if (!selfReportedStatus) {
     return res.status(400).json({
-      message: "Please record the client's self-reported Schedule Book / craving status before saving.",
+      message: "Please record the client's self-reported craving / relapse risk status before saving.",
     });
   }
 
@@ -1310,7 +1353,7 @@ export async function getCourtReportData(req, res) {
       family_count: curriculumProgress.supplementary.conjointFamily,
     };
 
-    // 3. Relapse Risk Counts (from Schedule Book logs — preserving distinction between Near-Use/Craving and Actual Use)
+    // 3. Relapse Risk Counts (preserving distinction between Near-Use/Craving and Actual Use)
     await ensureCbteAndRiskSchema();
     let relapseStats = { safe: 0, atRisk: 0, nearlyUsed: 0, used: 0 };
     let staffRiskStats = { lowRisk: 0, moderateRisk: 0, highRisk: 0, acuteRisk: 0 };

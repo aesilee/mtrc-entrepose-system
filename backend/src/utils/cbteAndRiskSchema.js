@@ -6,13 +6,13 @@ export const SELF_REPORTED_RISK_OPTIONS = [
   {
     value: "SAFE",
     label: "Safe / Abstinent",
-    description: "Adhering to recovery schedule; no cravings or high-risk exposure reported.",
+    description: "Adhering to recovery plan; no cravings or high-risk exposure reported.",
     isSubstanceUse: false,
   },
   {
     value: "AT_RISK",
-    label: "At Risk (Triggers / Skipped Schedule — No Use)",
-    description: "Exposed to external/internal triggers or skipped structured activities, without substance use.",
+    label: "At Risk (Triggers / High-Risk Exposure — No Use)",
+    description: "Exposed to external/internal triggers or high-risk situations, without substance use.",
     isSubstanceUse: false,
   },
   {

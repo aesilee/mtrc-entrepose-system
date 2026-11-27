@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 # MTRC ENTREPOSE Information System
 
 Web-Based Patient Monitoring and Case Management Information System for the
@@ -12,7 +11,7 @@ Stack: React (Vite) · Node.js + Express · MySQL
 mtrc-entrepose-system/
 ├── backend/          Node.js + Express API
 ├── frontend/         React (Vite) client
-├── database/         schema.sql
+├── database/         schema.sql (full structure) + seed_reference.sql (topics, programs, settings)
 └── README.md
 ```
 
@@ -29,13 +28,16 @@ mtrc-entrepose-system/
 CREATE DATABASE mtrc_entrepose;
 ```
 
-Then, from the `database/` folder:
+Then, from the `database/` folder, load the structure and the reference data:
 
 ```bash
 mysql -u root -p mtrc_entrepose < schema.sql
+mysql -u root -p mtrc_entrepose < seed_reference.sql
 ```
 
-(or open `schema.sql` in MySQL Workbench and run it against `mtrc_entrepose`).
+(or open both files in MySQL Workbench and run them against `mtrc_entrepose`, in that order).
+`seed_reference.sql` holds the curriculum topics, programs and default settings. It contains no
+patient or user records. Never commit a full database dump: it contains patient data (RA 10173).
 
 ## 3. Set up the backend
 
@@ -47,6 +49,10 @@ npm install
 npm run seed:admin     # creates the first ICT Admin login
 npm run dev            # starts the API on http://localhost:5000
 ```
+
+Optional `.env` setting: `SHARED_CASELOAD_CM_IDS` (comma-separated user IDs) lets those case
+managers share one caseload. Leave it empty unless that is needed. The login timeout comes from
+**Settings → Session timeout (minutes)**, and it extends automatically while the user is active.
 
 `npm run seed:admin` reads `SEED_ADMIN_USERNAME` / `SEED_ADMIN_PASSWORD` from
 `.env` and creates that one account directly in the database. Every other
@@ -108,6 +114,3 @@ With Login + User Management working end to end, the natural next modules
 Each of those can follow the same pattern already set up here: a MySQL
 table → an Express controller/route protected by `requireRole(...)` →
 a React page wrapped in `<AppShell>` and added to `App.jsx`.
-=======
-# mtrc-entrepose-system
->>>>>>> ec3ead984f00560791d9ff3ac298774f5b09271e

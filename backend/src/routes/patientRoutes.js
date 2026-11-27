@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { verifyToken, requireRole, requirePatientClinicalAccess } from "../middleware/auth.js";
+import { verifyToken, requireRole, requirePatientClinicalAccess, requireCertificateAccess } from "../middleware/auth.js";
 import {
   listPatients,
   createPatient,
@@ -31,8 +31,8 @@ router.get("/:id/progress-notes", requirePatientClinicalAccess, getPatientProgre
 router.post("/:id/progress-notes", requirePatientClinicalAccess, requireRole("case_manager", "ict_admin"), createProgressNote);
 router.get("/:id/follow-ups", getPatientFollowUps);
 router.post("/:id/follow-ups", requireRole("case_manager", "ict_admin"), createFollowUp);
-router.get("/:id/certificates", requirePatientClinicalAccess, getPatientCertificates);
-router.post("/:id/certificates", requirePatientClinicalAccess, requireRole("admitting", "case_manager", "him_staff", "ict_admin"), generateCertificate);
+router.get("/:id/certificates", requireCertificateAccess, getPatientCertificates);
+router.post("/:id/certificates", requireCertificateAccess, requireRole("admitting", "case_manager", "him_staff", "ict_admin"), generateCertificate);
 router.get("/:id/history", getPatientHistory);
 router.get("/:id/timeline", requirePatientClinicalAccess, getPatientTimeline);
 router.get("/:id/assignment-history", getPatientAssignmentHistory);

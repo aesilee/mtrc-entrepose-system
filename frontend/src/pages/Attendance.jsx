@@ -45,7 +45,7 @@ export default function Attendance() {
   const { isMobile, isTablet } = useViewport();
   const { user } = useAuth();
   const canManageAttendance = user?.role === "case_manager" || user?.role === "ict_admin";
-  const canApprovePolicy = user?.role === "ict_admin" || user?.role === "case_manager";
+  const canApprovePolicy = user?.role === "ict_admin";
 
   const statCols = isMobile ? 1 : isTablet ? 2 : 4;
   const [stats, setStats] = useState(null);
@@ -941,6 +941,16 @@ export default function Attendance() {
                 transform: translateY(-1px);
                 box-shadow: 0 3px 8px rgba(0,0,0,0.12);
               }
+              .cal-sessions-list::-webkit-scrollbar {
+                width: 3px;
+              }
+              .cal-sessions-list::-webkit-scrollbar-track {
+                background: transparent;
+              }
+              .cal-sessions-list::-webkit-scrollbar-thumb {
+                background: #CBD5E1;
+                border-radius: 3px;
+              }
             `}</style>
 
             {/* Sub-Header: Segmented View Mode Toggle & Calendar Month Navigation */}
@@ -1132,7 +1142,7 @@ export default function Attendance() {
                         </div>
 
                         {/* Sessions scheduled on this day */}
-                        <div style={styles.calendarSessionsList}>
+                        <div className="cal-sessions-list" style={styles.calendarSessionsList}>
                           {daySessions.map((s) => {
                             const modCfg = getModalityConfig(s.session_type);
                             const unresolved = Number(s.unresolved_count || 0);
@@ -2722,57 +2732,74 @@ const styles = {
   },
   calendarWeekdaysRow: {
     display: "grid",
-    gridTemplateColumns: "repeat(7, 1fr)",
-    background: "#F8FAFC",
+    gridTemplateColumns: "repeat(7, minmax(0, 1fr))",
+    gap: "1px",
+    background: "var(--color-border)",
     borderBottom: "1px solid var(--color-border)",
+    position: "sticky",
+    top: 0,
+    zIndex: 2,
+    width: "100%",
     minWidth: 700,
+    boxSizing: "border-box",
   },
   calendarWeekdayCell: {
+    background: "#F8FAFC",
     padding: "10px 8px",
     fontSize: 11,
     fontWeight: 700,
     textAlign: "center",
     letterSpacing: 0.5,
+    minWidth: 0,
+    boxSizing: "border-box",
   },
   calendarGrid: {
     display: "grid",
-    gridTemplateColumns: "repeat(7, 1fr)",
-    minWidth: 700,
-    background: "var(--color-border)",
+    gridTemplateColumns: "repeat(7, minmax(0, 1fr))",
     gap: "1px",
+    background: "var(--color-border)",
+    width: "100%",
+    minWidth: 700,
+    boxSizing: "border-box",
   },
   calendarDayCell: {
+    aspectRatio: "1 / 1",
     minHeight: 125,
     padding: "7px 8px",
     display: "flex",
     flexDirection: "column",
-    gap: 6,
+    gap: 5,
     boxSizing: "border-box",
+    minWidth: 0,
+    overflow: "hidden",
   },
   calendarDayHeader: {
     display: "flex",
     justifyContent: "space-between",
     alignItems: "center",
+    minWidth: 0,
+    flexShrink: 0,
   },
   calendarDayNumToday: {
     background: "#166534",
     color: "#ffffff",
-    width: 24,
-    height: 24,
+    width: 22,
+    height: 22,
     borderRadius: "50%",
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
-    fontSize: 12,
+    fontSize: 11.5,
     fontWeight: 800,
+    flexShrink: 0,
   },
   calendarDayNumCurrent: {
-    fontSize: 12.5,
+    fontSize: 12,
     fontWeight: 700,
     color: "#1E293B",
   },
   calendarDayNumOther: {
-    fontSize: 12,
+    fontSize: 11.5,
     fontWeight: 600,
     color: "#94A3B8",
   },
@@ -2781,104 +2808,126 @@ const styles = {
     color: "#166534",
     border: "1px solid #86EFAC",
     borderRadius: 4,
-    padding: "2px 6px",
-    fontSize: 10.5,
+    padding: "1px 5px",
+    fontSize: 10,
     fontWeight: 700,
     cursor: "pointer",
+    whiteSpace: "nowrap",
+    flexShrink: 0,
   },
   calendarSessionsList: {
     display: "flex",
     flexDirection: "column",
-    gap: 5,
+    gap: 4,
     flex: 1,
+    minHeight: 0,
+    minWidth: 0,
     overflowY: "auto",
-    maxHeight: 140,
   },
   calendarSessionCard: {
     borderRadius: 6,
-    padding: "5px 7px",
+    padding: "4px 6px",
     border: "1px solid",
     display: "flex",
     flexDirection: "column",
-    gap: 3,
+    gap: 2,
     cursor: "pointer",
+    minWidth: 0,
+    width: "100%",
+    boxSizing: "border-box",
   },
   sessionCardTop: {
     display: "flex",
     justifyContent: "space-between",
     alignItems: "center",
     gap: 4,
+    minWidth: 0,
   },
   sessionCardTime: {
-    fontSize: 10.5,
+    fontSize: 10,
     fontWeight: 700,
     color: "#1E293B",
+    whiteSpace: "nowrap",
   },
   sessionStatusPill: {
-    fontSize: 9.5,
+    fontSize: 9,
     fontWeight: 700,
-    padding: "1px 5px",
+    padding: "1px 4px",
     borderRadius: 4,
     whiteSpace: "nowrap",
   },
   sessionCardTitle: {
-    fontSize: 11.5,
+    fontSize: 11,
     fontWeight: 700,
     lineHeight: 1.25,
     overflow: "hidden",
     textOverflow: "ellipsis",
-    whiteSpace: "nowrap",
+    wordBreak: "break-word",
+    display: "-webkit-box",
+    WebkitLineClamp: 2,
+    WebkitBoxOrient: "vertical",
+    marginTop: 1,
   },
   sessionCardFooter: {
     display: "flex",
     alignItems: "center",
     justifyContent: "space-between",
-    gap: 4,
-    marginTop: 2,
+    gap: 3,
+    marginTop: 1,
+    minWidth: 0,
   },
   unresolvedBadgeMini: {
     background: "#F4F7F4",
     color: "#2D4A3E",
     border: "1px solid #CBDAD0",
-    padding: "1px 5px",
+    padding: "1px 4px",
     borderRadius: 3,
-    fontSize: 9.5,
+    fontSize: 9,
     fontWeight: 600,
+    whiteSpace: "nowrap",
   },
   completedBadgeMini: {
     background: "#E8F5E9",
     color: "#166534",
     border: "1px solid #BBF7D0",
-    padding: "1px 5px",
+    padding: "1px 4px",
     borderRadius: 3,
-    fontSize: 9.5,
+    fontSize: 9,
     fontWeight: 600,
+    whiteSpace: "nowrap",
   },
   expectedBadgeMini: {
     background: "#F1F5F9",
     color: "#475569",
     padding: "1px 4px",
     borderRadius: 3,
-    fontSize: 9.5,
+    fontSize: 9,
     fontWeight: 600,
+    whiteSpace: "nowrap",
   },
   facilitatorMiniText: {
-    fontSize: 9.5,
+    fontSize: 9,
     color: "#64748B",
     overflow: "hidden",
     textOverflow: "ellipsis",
     whiteSpace: "nowrap",
-    maxWidth: 65,
+    maxWidth: 55,
   },
   cellEmptyHint: {
-    fontSize: 10.5,
+    fontSize: 10,
     color: "#166534",
     textAlign: "center",
-    padding: "8px 0",
+    padding: "6px 2px",
     fontWeight: 600,
     border: "1px dashed #BBF7D0",
     borderRadius: 6,
     background: "#F0FDF4",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    flex: 1,
+    minHeight: 32,
+    boxSizing: "border-box",
   },
   sessionDetailModal: {
     background: "#ffffff",

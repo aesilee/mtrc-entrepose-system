@@ -1,4 +1,5 @@
 import pool from "../config/db.js";
+import { ensureIssuanceArchiveSchema } from "./archiveController.js";
 import { ensureAttendanceCompletionSchema } from "../utils/attendanceSchema.js";
 import { getUnifiedPatientProgress } from "../utils/curriculumProgress.js";
 import {
@@ -29,6 +30,18 @@ export async function checkEligibility(req, res) {
     // Must be active (or completed, but usually active). Basically, as long as they have an admission date.
     const enrollmentEligible = !!patient.admission_date;
     const enrollmentReason = enrollmentEligible ? null : "Patient lacks an official admission date. Complete the intake workflow first.";
+
+    // Admitting personnel only issue enrollment certificates and have no clinical access, so they
+    // receive the enrollment check only (no curriculum, drug test, or duration details).
+    if (req.user.role === "admitting") {
+      return res.json({
+        enrollment: { eligible: enrollmentEligible, reason: enrollmentReason },
+        completion: {
+          eligible: false,
+          reasons: ["Certificates of completion are issued by Case Managers, HIM Staff, or the ICT Administrator."],
+        },
+      });
+    }
 
     // COMPLETION ELIGIBILITY
     const completionGuards = [];
@@ -221,24 +234,39 @@ export async function generateCertificate(req, res) {
     const year = new Date().getFullYear().toString().slice(-2);
     const typeCode = certificateType === "ENROLLMENT" ? "ENR" : "CMP";
     
-    const [[{ current_count }]] = await pool.query(
-      "SELECT COUNT(*) as current_count FROM certificate_issuances WHERE certificate_control_no LIKE ?",
-      [`CERT-${typeCode}-${year}-%`]
-    );
-    const sequence = String(current_count + 1).padStart(5, "0");
-    const controlNo = `CERT-${typeCode}-${year}-${sequence}`;
+    // Next number = highest existing sequence + 1 (not COUNT, which repeats numbers after any deletion).
+    const nextControlNo = async () => {
+      const [[{ max_seq }]] = await pool.query(
+        "SELECT MAX(CAST(SUBSTRING_INDEX(certificate_control_no, '-', -1) AS UNSIGNED)) AS max_seq FROM certificate_issuances WHERE certificate_control_no LIKE ?",
+        [`CERT-${typeCode}-${year}-%`]
+      );
+      return `CERT-${typeCode}-${year}-${String((max_seq || 0) + 1).padStart(5, "0")}`;
+    };
+    let controlNo = await nextControlNo();
 
     const [[issuer]] = await pool.query("SELECT full_name FROM users WHERE id = ?", [req.user.id]);
     const issuerName = issuer?.full_name || req.user.full_name || req.user.username;
     const finalSignatory = (signatoryName || approvedByName || issuerName).trim();
 
     // Insert into DB
-    const [insertResult] = await pool.query(
-      `INSERT INTO certificate_issuances 
-        (patient_id, certificate_type, certificate_control_no, issued_date, issued_by, signatory_name, remarks)
-       VALUES (?, ?, ?, CURDATE(), ?, ?, ?)`,
-      [patientId, certificateType, controlNo, req.user.id, finalSignatory, remarks || null]
-    );
+    // certificate_control_no is UNIQUE: if another issuance took this number at the same moment, take the next one.
+    let insertResult;
+    for (let attempt = 1; ; attempt++) {
+      try {
+        [insertResult] = await pool.query(
+          `INSERT INTO certificate_issuances 
+            (patient_id, certificate_type, certificate_control_no, issued_date, issued_by, signatory_name, remarks)
+           VALUES (?, ?, ?, CURDATE(), ?, ?, ?)`,
+          [patientId, certificateType, controlNo, req.user.id, finalSignatory, remarks || null]
+        );
+        break;
+      } catch (insertErr) {
+        if (insertErr.code !== "ER_DUP_ENTRY" || attempt >= 10) throw insertErr;
+        // Brief random pause so simultaneous requests stop colliding on the same next number.
+        await new Promise((r) => setTimeout(r, 10 + Math.floor(Math.random() * 60)));
+        controlNo = await nextControlNo();
+      }
+    }
 
     // Audit Log
     await pool.query(
@@ -278,12 +306,13 @@ export async function generateCertificate(req, res) {
 export async function getCertificateHistory(req, res) {
   const patientId = req.params.id;
   try {
+    await ensureIssuanceArchiveSchema();
     const [history] = await pool.query(
       `SELECT c.id, c.certificate_type, c.certificate_control_no, c.issued_date, 
               u.full_name as issued_by_name, c.remarks, c.created_at
        FROM certificate_issuances c
        JOIN users u ON c.issued_by = u.id
-       WHERE c.patient_id = ?
+       WHERE c.patient_id = ? AND COALESCE(c.is_archived, 0) = 0
        ORDER BY c.created_at DESC`,
       [patientId]
     );

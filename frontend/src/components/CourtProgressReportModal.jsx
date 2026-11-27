@@ -53,8 +53,8 @@ export default function CourtProgressReportModal({ patient, onClose, onSaved }) 
         `ATTENDANCE & CURRICULUM PROGRESSION:\n` +
         `As of this reporting period, the client has attended ${att.present_count || 0} sessions out of ${att.total_recorded || 0} scheduled sessions (Attendance Rate: ${attPct}%). ` +
         `Credited Core Curriculum breakdown: ${att.cbt_count || 0}/28 CBT group sessions, ${att.cbte_count || 0}/3 CBT-E evaluations, and ${att.pe_count || 0}/12 Psycho-Education topics (Supplementary: ${att.shgm_count || 0} SHGM).\n\n` +
-        `CLIENT SELF-REPORTED SCHEDULE BOOK vs. STAFF CLINICAL ASSESSMENT:\n` +
-        `Weekly Schedule Book self-reports reflect ${rStats.safe || 0} Safe/Abstinent ratings, ${rStats.atRisk || 0} At-Risk trigger reviews (no use), ${rStats.nearlyUsed || 0} Near-Use / Strong Craving episodes where abstinence was maintained (no substance use), and ${rStats.used || 0} self-reported substance use lapses.` +
+        `CLIENT SELF-REPORTED STATUS vs. STAFF CLINICAL ASSESSMENT:\n` +
+        `Weekly self-reported recovery checks reflect ${rStats.safe || 0} Safe/Abstinent ratings, ${rStats.atRisk || 0} At-Risk trigger reviews (no use), ${rStats.nearlyUsed || 0} Near-Use / Strong Craving episodes where abstinence was maintained (no substance use), and ${rStats.used || 0} self-reported substance use lapses.` +
         (sStats.lowRisk + sStats.moderateRisk + sStats.highRisk + sStats.acuteRisk > 0
           ? ` Independent Staff Clinical Risk Assessments logged: ${sStats.lowRisk} Low Risk, ${sStats.moderateRisk} Moderate Risk, ${sStats.highRisk} High Risk, ${sStats.acuteRisk} Acute Risk.\n\n`
           : `\n\n`) +

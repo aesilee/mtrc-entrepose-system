@@ -1,5 +1,5 @@
 import pool from "../config/db.js";
-import { notifyRoles } from "../utils/notify.js";
+import { notifyRoles, notifyUser } from "../utils/notify.js";
 import {
   ensureCbteAndRiskSchema,
   normalizeSelfReportedRisk,
@@ -31,7 +31,8 @@ export async function createProgressNote(req, res) {
     const hasRelapseRisk = colNames.includes("relapse_risk");
     const hasStaffRisk = colNames.includes("staff_risk_assessment");
 
-    const normalizedSelfRisk = normalizeSelfReportedRisk(relapseRisk);
+    // An unanswered self-report is stored as SAFE (the column default); the column is NOT NULL.
+    const normalizedSelfRisk = normalizeSelfReportedRisk(relapseRisk) || "SAFE";
     const normalizedStaffRisk = normalizeStaffRiskAssessment(staffRiskAssessment);
 
     let insertSql = `INSERT INTO progress_notes
@@ -79,13 +80,11 @@ export async function createProgressNote(req, res) {
       const alertMessage = isNearUse
         ? `Client "${patientRow.full_name}" reported strong craving / near-use WITHOUT using substances (Abstinence Maintained) during progress note evaluation.`
         : `Client "${patientRow.full_name}" was recorded as "${normalizedSelfRisk}" during clinical progress note evaluation.`;
-      await pool.query(
-        "INSERT INTO notifications (user_id, category, event_type, title, message) VALUES (?, 'patients', 'relapse_risk_alert', ?, ?)",
-        [
-          patientRow.assigned_case_manager_id,
-          `Schedule Book Status [${severity}]`,
-          alertMessage,
-        ]
+      await notifyUser(
+        patientRow.assigned_case_manager_id,
+        "patients",
+        "relapse_risk_alert",
+        `Relapse Risk Status [${severity}]: ${alertMessage}`
       );
     }
 
@@ -124,7 +123,7 @@ export async function updateProgressNote(req, res) {
     const hasRelapseRisk = colNames.includes("relapse_risk");
     const hasStaffRisk = colNames.includes("staff_risk_assessment");
 
-    const normalizedSelfRisk = normalizeSelfReportedRisk(relapseRisk);
+    const normalizedSelfRisk = normalizeSelfReportedRisk(relapseRisk) || "SAFE";
     const normalizedStaffRisk = normalizeStaffRiskAssessment(staffRiskAssessment);
 
     let updateSql = `UPDATE progress_notes SET

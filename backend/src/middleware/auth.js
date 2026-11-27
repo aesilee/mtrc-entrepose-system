@@ -1,5 +1,7 @@
 import jwt from "jsonwebtoken";
 import pool from "../config/db.js";
+import { caseloadIdsFor } from "../utils/sharedCaseload.js";
+import { getSessionTimeoutMinutes } from "../utils/sessionTimeout.js";
 
 // Confirms the request carries a valid token and actively verifies that the account
 // is still active and has not had its session revoked (Task 12 / Finding 8).
@@ -48,6 +50,23 @@ export async function verifyToken(req, res, next) {
       fullName: user.full_name || decoded.fullName || user.username,
     };
 
+    // Sliding idle timeout: once half of the session has passed, hand the client a fresh token
+    // (X-Refreshed-Token) so active users are not logged out mid-task; idle users still expire.
+    try {
+      const minutes = await getSessionTimeoutMinutes();
+      const secondsLeft = (decoded.exp || 0) - Math.floor(Date.now() / 1000);
+      if (secondsLeft < (minutes * 60) / 2) {
+        const fresh = jwt.sign(
+          { id: user.id, username: user.username, role: user.role, fullName: user.full_name },
+          process.env.JWT_SECRET,
+          { expiresIn: `${minutes}m` }
+        );
+        res.setHeader("X-Refreshed-Token", fresh);
+      }
+    } catch {
+      // refreshing is best-effort; the current token is still valid
+    }
+
     // Fire-and-forget last_active update
     pool.query("UPDATE users SET last_active = NOW() WHERE id = ?", [user.id]).catch(() => {});
     next();
@@ -64,6 +83,14 @@ export function requireRole(...allowedRoles) {
     }
     next();
   };
+}
+
+// Certificate routes: Admitting personnel issue enrollment certificates, so they may reach these
+// routes without clinical access (the certificate controller limits them to ENROLLMENT and hides
+// completion details). Every other role goes through the normal clinical access check.
+export function requireCertificateAccess(req, res, next) {
+  if (req.user?.role === "admitting") return next();
+  return requirePatientClinicalAccess(req, res, next);
 }
 
 // Enforces role-based clinical access and assigned-case-manager boundaries (Finding 1 / Step 12).
@@ -100,7 +127,9 @@ export async function requirePatientClinicalAccess(req, res, next) {
       return res.status(404).json({ message: "Patient not found." });
     }
 
-    if (patient.assigned_case_manager_id && Number(patient.assigned_case_manager_id) !== Number(req.user.id)) {
+    const inCaseload = caseloadIdsFor(req.user.id).includes(Number(patient.assigned_case_manager_id));
+
+    if (patient.assigned_case_manager_id && !inCaseload) {
       return res.status(403).json({
         message: "Access denied. You are not the assigned case manager for this patient.",
       });

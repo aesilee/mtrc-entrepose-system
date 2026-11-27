@@ -61,9 +61,9 @@ export default function Analytics() {
   const { user } = useAuth();
   const isCaseManager = user?.role === "case_manager";
   const scopeMeta = ROLE_SCOPE_META[user?.role] || ROLE_SCOPE_META.him_staff;
-  const { isMobile, isTablet } = useViewport();
+  const { width, isMobile, isTablet } = useViewport();
   const isCompact = isMobile || isTablet;
-  const kpiCols = isMobile ? 2 : isTablet ? 3 : 7;
+  const kpiCols = isMobile ? 2 : isTablet ? 3 : width < 1200 ? "repeat(auto-fit, minmax(160px, 1fr))" : 7;
   const gridCols = isMobile ? 1 : isTablet ? 2 : 4;
 
   const [overview, setOverview] = useState(null);
@@ -219,7 +219,7 @@ export default function Analytics() {
             </div>
 
             {/* Row 1: KPI Cards (7 Key Clinical & Program Indicators) */}
-            <div style={{ ...styles.kpiRow, gridTemplateColumns: `repeat(${kpiCols}, 1fr)` }}>
+            <div style={{ ...styles.kpiRow, gridTemplateColumns: typeof kpiCols === "string" ? kpiCols : `repeat(${kpiCols}, 1fr)` }}>
               <KpiCard
                 label="Retention Rate"
                 value={overview.kpis?.retentionRate ?? 100}

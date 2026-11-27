@@ -23,7 +23,11 @@ function buildFullName(firstName, lastName, fallback) {
 
 export async function listCaseManagers(req, res) {
   const [rows] = await pool.query(
-    `SELECT id, full_name FROM users WHERE role = 'case_manager' AND status = 'active' ORDER BY full_name`
+    `SELECT MIN(id) AS id, full_name 
+     FROM users 
+     WHERE role = 'case_manager' AND status = 'active' AND full_name NOT LIKE '%Ash%'
+     GROUP BY full_name 
+     ORDER BY full_name`
   );
   res.json({ caseManagers: rows });
 }

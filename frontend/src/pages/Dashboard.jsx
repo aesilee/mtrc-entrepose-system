@@ -423,9 +423,9 @@ const quickActionStyles = {
 
 function IctAdminDashboard() {
   const navigate = useNavigate();
-  const { isMobile, isTablet } = useViewport();
+  const { width, isMobile, isTablet } = useViewport();
   const isCompact = isMobile || isTablet;
-  const statCols = isMobile ? 1 : isTablet ? 2 : 5;
+  const statCols = isMobile ? 2 : isTablet ? 3 : width < 1200 ? "repeat(auto-fit, minmax(170px, 1fr))" : 5;
   const [stats, setStats] = useState(null);
   const [recentActivity, setRecentActivity] = useState([]);
   const [systemNotifications, setSystemNotifications] = useState([]);
@@ -486,13 +486,13 @@ function IctAdminDashboard() {
         isCompact={isCompact}
       />
 
-      <div style={{ ...styles.statsRow, gridTemplateColumns: `repeat(${statCols}, 1fr)` }}>
+      <div style={{ ...styles.statsRow, gridTemplateColumns: typeof statCols === "string" ? statCols : `repeat(${statCols}, 1fr)` }}>
         {statCards.map((card) => (
           <div key={card.key} className="mtrc-kpi-card" style={styles.statCard}>
             <div className="mtrc-kpi-icon" style={styles.statIcon}>{card.icon}</div>
-            <div>
+            <div style={{ minWidth: 0, flex: 1 }}>
               <div style={styles.statValue}>{card.value}</div>
-              <div style={styles.statLabel}>{card.label}</div>
+              <div style={styles.statLabel} title={card.label}>{card.label}</div>
             </div>
           </div>
         ))}
@@ -687,9 +687,9 @@ function DashboardMonthlyAdmissionsChart({ data, color = "#357648", suffix = "" 
 
 function HimStaffDashboard() {
   const navigate = useNavigate();
-  const { isMobile, isTablet } = useViewport();
+  const { width, isMobile, isTablet } = useViewport();
   const isCompact = isMobile || isTablet;
-  const kpiCols = isMobile ? 2 : isTablet ? 4 : 7;
+  const kpiCols = isMobile ? 2 : isTablet ? 3 : width < 1200 ? "repeat(auto-fit, minmax(150px, 1fr))" : 7;
   const gridCols = isMobile ? 1 : isTablet ? 2 : 4;
 
   const [overview, setOverview] = useState(null);
@@ -744,7 +744,7 @@ function HimStaffDashboard() {
       />
 
       {/* Row 1: KPI Cards */}
-      <div style={{ ...himStyles.kpiRow, gridTemplateColumns: `repeat(${kpiCols}, 1fr)` }}>
+      <div style={{ ...himStyles.kpiRow, gridTemplateColumns: typeof kpiCols === "string" ? kpiCols : `repeat(${kpiCols}, 1fr)` }}>
         <HimKpiCard label="Total Patients" value={totalPatients ?? "—"} suffix="" icon={HIM_KPI_ICONS.patients} />
         <HimKpiCard label="Active Patients" value={overview ? activePatients : "—"} suffix="" icon={HIM_KPI_ICONS.status} />
         <HimKpiCard label="Graduated Patients" value={graduatedPatients ?? "—"} suffix="" icon={HIM_KPI_ICONS.users} />
@@ -907,9 +907,9 @@ function HimKpiCard({ label, value, suffix, icon }) {
   return (
     <div className="mtrc-kpi-card" style={himStyles.kpiCard}>
       <div className="mtrc-kpi-icon" style={himStyles.kpiIcon}>{icon}</div>
-      <div>
+      <div style={{ minWidth: 0, flex: 1 }}>
         <div style={himStyles.kpiValue}>{value}{value !== "—" ? suffix : ""}</div>
-        <div style={himStyles.kpiLabel}>{label}</div>
+        <div style={himStyles.kpiLabel} title={label}>{label}</div>
       </div>
     </div>
   );
@@ -943,9 +943,9 @@ function PatientAvatar({ name, photoUrl, style }) {
 
 function CaseManagerDashboard() {
   const navigate = useNavigate();
-  const { isMobile, isTablet } = useViewport();
+  const { width, isMobile, isTablet } = useViewport();
   const isCompact = isMobile || isTablet;
-  const kpiCols = isCompact ? 2 : 5;
+  const kpiCols = isCompact ? 2 : width < 1200 ? "repeat(auto-fit, minmax(170px, 1fr))" : 5;
   const primaryPanelHeight = isMobile ? 280 : 300;
   const patientsPanelHeight = isMobile ? 520 : 440;
   const overviewPanelHeight = isMobile ? 310 : 300;
@@ -1134,7 +1134,7 @@ function CaseManagerDashboard() {
         isCompact={isCompact}
       />
 
-      <div style={{ ...cmStyles.kpiRow, gridTemplateColumns: `repeat(${kpiCols}, 1fr)` }}>
+      <div style={{ ...cmStyles.kpiRow, gridTemplateColumns: typeof kpiCols === "string" ? kpiCols : `repeat(${kpiCols}, 1fr)` }}>
         <CmKpiCard label="Assigned Patients" value={stats?.assignedPatients ?? "—"} icon={HIM_KPI_ICONS.patients} />
         <CmKpiCard label="Today's Sessions" value={stats?.todaysSessions ?? "—"} icon={HIM_KPI_ICONS.online} />
         <CmKpiCard label="Missed Sessions" value={stats?.missedSessions ?? "—"} icon={HIM_KPI_ICONS.auditLogs} />
@@ -1506,10 +1506,10 @@ function CmKpiCard({ label, value, icon, subtitle }) {
   return (
     <div className="mtrc-kpi-card" style={cmStyles.kpiCard}>
       <div className="mtrc-kpi-icon" style={cmStyles.kpiIcon}>{icon}</div>
-      <div>
+      <div style={{ minWidth: 0, flex: 1 }}>
         <div style={cmStyles.kpiValue}>{value}</div>
-        <div style={cmStyles.kpiLabel}>{label}</div>
-        {subtitle && <div style={{ fontSize: 11, color: "var(--color-text-muted, #6B7280)", marginTop: 2, fontWeight: 600 }}>{subtitle}</div>}
+        <div style={cmStyles.kpiLabel} title={label}>{label}</div>
+        {subtitle && <div style={{ fontSize: 10.5, color: "var(--color-text-muted, #6B7280)", marginTop: 2, fontWeight: 600, lineHeight: 1.2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }} title={subtitle}>{subtitle}</div>}
       </div>
     </div>
   );
@@ -1525,9 +1525,9 @@ const STATUS_BADGE_COLORS = {
 
 function AdmittingDashboard() {
   const navigate = useNavigate();
-  const { isMobile, isTablet } = useViewport();
+  const { width, isMobile, isTablet } = useViewport();
   const isCompact = isMobile || isTablet;
-  const kpiCols = isCompact ? 2 : 5;
+  const kpiCols = isCompact ? 2 : width < 1200 ? "repeat(auto-fit, minmax(170px, 1fr))" : 5;
   const mainPanelHeight = isMobile ? 320 : 286;
   const insightPanelHeight = isMobile ? 310 : 258;
   const activityPanelHeight = isMobile ? 270 : 210;
@@ -1706,13 +1706,13 @@ function AdmittingDashboard() {
       />
 
       {/* KPI row */}
-      <div style={{ ...apStyles.kpiRow, gridTemplateColumns: `repeat(${kpiCols}, 1fr)` }}>
+      <div style={{ ...apStyles.kpiRow, gridTemplateColumns: typeof kpiCols === "string" ? kpiCols : `repeat(${kpiCols}, 1fr)` }}>
         {kpiCards.map((card) => (
           <div key={card.key} className="mtrc-kpi-card" style={apStyles.kpiCard}>
             <div className="mtrc-kpi-icon" style={apStyles.kpiIcon}>{card.icon}</div>
-            <div>
+            <div style={{ minWidth: 0, flex: 1 }}>
               <div style={apStyles.kpiValue}>{card.value}</div>
-              <div style={apStyles.kpiLabel}>{card.label}</div>
+              <div style={apStyles.kpiLabel} title={card.label}>{card.label}</div>
             </div>
           </div>
         ))}
@@ -1967,16 +1967,19 @@ const styles = {
   statCard: {
     display: "flex",
     alignItems: "center",
-    gap: 14,
+    gap: 12,
     background: "#FFFFFF",
     border: "1.5px solid #DCE8DD",
     borderRadius: 16,
-    padding: "16px 18px",
+    padding: "14px 16px",
+    minHeight: 80,
+    height: "auto",
+    boxSizing: "border-box",
     boxShadow: "0 2px 10px rgba(38, 101, 59, 0.04), inset 0 0 0 2px rgba(230, 243, 232, 0.45)",
   },
   statIcon: {
-    width: 40,
-    height: 40,
+    width: 38,
+    height: 38,
     borderRadius: "50%",
     background: "#E6F3E8",
     color: "#26653B",
@@ -1985,8 +1988,15 @@ const styles = {
     justifyContent: "center",
     flexShrink: 0,
   },
-  statValue: { fontSize: 22, fontWeight: 800, color: "var(--color-text)" },
-  statLabel: { fontSize: 12, color: "var(--color-text-muted)", marginTop: 2 },
+  statValue: { fontSize: 20, fontWeight: 800, color: "var(--color-text)", lineHeight: 1.15 },
+  statLabel: {
+    fontSize: 11.5,
+    fontWeight: 700,
+    color: "var(--color-text, #1F2421)",
+    marginTop: 2,
+    lineHeight: 1.25,
+    wordBreak: "break-word",
+  },
 
   twoColRow: {
     display: "flex",
@@ -2186,10 +2196,10 @@ const himStyles = {
     background: "var(--color-border)", color: "var(--color-text-muted)",
     display: "flex", alignItems: "center", justifyContent: "center",
   },
-  kpiCard: { display: "flex", alignItems: "center", gap: 12, background: "#FFFFFF", border: "1.5px solid #DCE8DD", borderRadius: 16, padding: 14, boxShadow: "0 2px 10px rgba(38, 101, 59, 0.04), inset 0 0 0 2px rgba(230, 243, 232, 0.45)" },
-  kpiIcon: { width: 40, height: 40, borderRadius: "50%", background: "#E6F3E8", color: "#26653B", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 },
-  kpiValue: { fontSize: 20, fontWeight: 800, color: "var(--color-text)" },
-  kpiLabel: { fontSize: 11, color: "var(--color-text-muted)", marginTop: 2 },
+  kpiCard: { display: "flex", alignItems: "center", gap: 10, background: "#FFFFFF", border: "1.5px solid #DCE8DD", borderRadius: 16, padding: "12px 14px", minHeight: 76, height: "auto", boxSizing: "border-box", boxShadow: "0 2px 10px rgba(38, 101, 59, 0.04), inset 0 0 0 2px rgba(230, 243, 232, 0.45)" },
+  kpiIcon: { width: 36, height: 36, borderRadius: "50%", background: "#E6F3E8", color: "#26653B", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 },
+  kpiValue: { fontSize: 20, fontWeight: 800, color: "var(--color-text)", lineHeight: 1.15 },
+  kpiLabel: { fontSize: 11, fontWeight: 700, color: "var(--color-text, #1F2421)", marginTop: 2, lineHeight: 1.25, wordBreak: "break-word", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" },
 };
 
 const cmStyles = {
@@ -2511,20 +2521,21 @@ const cmStyles = {
   kpiCard: {
     display: "flex",
     alignItems: "center",
-    gap: 14,
+    gap: 12,
     background: "#FFFFFF",
     border: "1.5px solid #DCE8DD",
     borderRadius: 16,
-    padding: "16px 18px",
-    height: 86,
+    padding: "14px 16px",
+    minHeight: 82,
+    height: "auto",
     minWidth: 0,
     width: "100%",
     boxSizing: "border-box",
     boxShadow: "0 2px 10px rgba(38, 101, 59, 0.04), inset 0 0 0 2px rgba(230, 243, 232, 0.45)",
   },
   kpiIcon: {
-    width: 40,
-    height: 40,
+    width: 38,
+    height: 38,
     borderRadius: "50%",
     background: "#E6F3E8",
     color: "#26653B",
@@ -2533,8 +2544,15 @@ const cmStyles = {
     justifyContent: "center",
     flexShrink: 0,
   },
-  kpiValue: { fontSize: 22, fontWeight: 800, color: "var(--color-text)" },
-  kpiLabel: { fontSize: 12, color: "var(--color-text-muted)", marginTop: 2 },
+  kpiValue: { fontSize: 22, fontWeight: 800, color: "var(--color-text)", lineHeight: 1.15 },
+  kpiLabel: {
+    fontSize: 11.5,
+    fontWeight: 700,
+    color: "var(--color-text, #1F2421)",
+    marginTop: 2,
+    lineHeight: 1.25,
+    wordBreak: "break-word",
+  },
 };
 
 const apStyles = {
@@ -2573,20 +2591,21 @@ const apStyles = {
   kpiCard: {
     display: "flex",
     alignItems: "center",
-    gap: 14,
+    gap: 12,
     background: "#FFFFFF",
     border: "1.5px solid #DCE8DD",
     borderRadius: 16,
-    padding: "14px 16px",
-    height: 80,
+    padding: "12px 14px",
+    minHeight: 80,
+    height: "auto",
     minWidth: 0,
     width: "100%",
     boxSizing: "border-box",
     boxShadow: "0 2px 10px rgba(38, 101, 59, 0.04), inset 0 0 0 2px rgba(230, 243, 232, 0.45)",
   },
   kpiIcon: {
-    width: 40,
-    height: 40,
+    width: 36,
+    height: 36,
     borderRadius: "50%",
     background: "#E6F3E8",
     color: "#26653B",
@@ -2595,8 +2614,19 @@ const apStyles = {
     justifyContent: "center",
     flexShrink: 0,
   },
-  kpiValue: { fontSize: 22, fontWeight: 800, color: "var(--color-text)" },
-  kpiLabel: { fontSize: 12, color: "var(--color-text-muted)", marginTop: 2 },
+  kpiValue: { fontSize: 20, fontWeight: 800, color: "var(--color-text)", lineHeight: 1.15 },
+  kpiLabel: {
+    fontSize: 11,
+    fontWeight: 700,
+    color: "var(--color-text, #1F2421)",
+    marginTop: 2,
+    lineHeight: 1.25,
+    wordBreak: "break-word",
+    display: "-webkit-box",
+    WebkitLineClamp: 2,
+    WebkitBoxOrient: "vertical",
+    overflow: "hidden",
+  },
 
   tableWrap: { flex: 1, minHeight: 0, overflow: "auto", width: "100%" },
   table: { width: "100%", minWidth: 620, borderCollapse: "collapse", fontSize: 13 },

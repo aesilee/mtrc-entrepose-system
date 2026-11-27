@@ -1,6 +1,7 @@
 import pool from "../config/db.js";
 import { notifyRoles } from "../utils/notify.js";
 import { recordPatientStatusChange } from "../utils/historicalReportSchema.js";
+import { getCompletionGuardFailures, isEnrolledActive } from "../utils/completionGuards.js";
 import { legacyDischargeReasonCode, isCompleterOutcome, enrollmentStatusForOutcome } from "../utils/classification.js";
 
 function cleanText(value) {
@@ -106,6 +107,35 @@ export async function createDischarge(req, res) {
       return res.status(409).json({ message: "This patient has already been discharged." });
     }
 
+    // Lock the patient row; refuse a second discharge or a discharge of a non-active patient.
+    const [[dischargeTarget]] = await connection.query(
+      "SELECT id, enrollment_status FROM patients WHERE id = ? FOR UPDATE",
+      [patientId]
+    );
+    if (!dischargeTarget) {
+      await connection.rollback();
+      return res.status(404).json({ message: "Patient not found." });
+    }
+    const [[priorDischarge]] = await connection.query(
+      "SELECT id FROM discharges WHERE patient_id = ? UNION SELECT id FROM patient_discharges WHERE patient_id = ? LIMIT 1",
+      [patientId, patientId]
+    );
+    if (priorDischarge || !isEnrolledActive(dischargeTarget.enrollment_status)) {
+      await connection.rollback();
+      return res.status(409).json({ message: "This patient has already been discharged or is not actively enrolled." });
+    }
+    // A Completer discharge must meet the same statutory rules as the Certificate of Completion.
+    if (isCompleter) {
+      const unmet = await getCompletionGuardFailures(connection, patientId);
+      if (unmet.length > 0) {
+        await connection.rollback();
+        return res.status(400).json({
+          message: "Patient does not yet meet the completion requirements. Discharge as Completer is not allowed.",
+          guards: unmet,
+        });
+      }
+    }
+
     const [result] = await connection.query(
       `INSERT INTO discharges (patient_id, program_type, discharge_type, discharge_date, remarks, discharged_by, outcome, reason_code)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -115,8 +145,8 @@ export async function createDischarge(req, res) {
     // Harmonize patient enrollment_status and mirror to patient_discharges for reporting
     const enrollmentStatus = enrollmentStatusForOutcome(outcomeCode);
     await connection.query(
-      "UPDATE patients SET enrollment_status = ? WHERE id = ?",
-      [enrollmentStatus, patientId]
+      "UPDATE patients SET enrollment_status = ?, current_status = ? WHERE id = ?",
+      [enrollmentStatus, enrollmentStatus, patientId]
     );
 
     // Synchronize historical status change without swallowing errors (Finding 7)

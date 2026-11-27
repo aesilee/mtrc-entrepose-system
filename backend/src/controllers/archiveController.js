@@ -176,3 +176,73 @@ export async function restoreReport(req, res) {
     res.status(500).json({ message: "Could not restore this report." });
   }
 }
+// ---------------------------------------------------------------------------
+// Issued certificates (certificate_issuances) — the records listed on the Patient Profile.
+// These have their own archive columns; they must never be confused with the legacy `certificates` table.
+let issuanceArchiveSchemaReady = false;
+async function ensureIssuanceArchiveSchema() {
+  if (issuanceArchiveSchemaReady) return;
+  const [cols] = await pool.query("SHOW COLUMNS FROM certificate_issuances");
+  const have = new Set(cols.map((c) => c.Field));
+  if (!have.has("is_archived")) await pool.query("ALTER TABLE certificate_issuances ADD COLUMN is_archived TINYINT(1) NOT NULL DEFAULT 0");
+  if (!have.has("archived_at")) await pool.query("ALTER TABLE certificate_issuances ADD COLUMN archived_at DATETIME NULL");
+  if (!have.has("archived_by")) await pool.query("ALTER TABLE certificate_issuances ADD COLUMN archived_by INT NULL");
+  issuanceArchiveSchemaReady = true;
+}
+export { ensureIssuanceArchiveSchema };
+
+async function findIssuance(id) {
+  const [[cert]] = await pool.query(
+    `SELECT ci.id, ci.is_archived, ci.certificate_type, ci.certificate_control_no, p.full_name AS patient_name
+     FROM certificate_issuances ci JOIN patients p ON p.id = ci.patient_id WHERE ci.id = ?`,
+    [id]
+  );
+  return cert;
+}
+
+export async function archiveCertificateIssuance(req, res) {
+  const id = req.params.certId;
+  const { reason } = req.body;
+  try {
+    await ensureIssuanceArchiveSchema();
+    const cert = await findIssuance(id);
+    if (!cert) return res.status(404).json({ message: "Certificate not found." });
+    if (cert.is_archived) return res.status(400).json({ message: "This certificate is already archived." });
+
+    await pool.query("UPDATE certificate_issuances SET is_archived = 1, archived_at = NOW(), archived_by = ? WHERE id = ?", [req.user.id, id]);
+    await pool.query(
+      "INSERT INTO archives (entity_type, entity_id, entity_label, reason, archived_by) VALUES ('certificate_issuance', ?, ?, ?, ?)",
+      [id, `Certificate ${cert.certificate_control_no} — ${cert.patient_name}`, reason || null, req.user.id]
+    );
+    await pool.query("INSERT INTO audit_log (actor_username, action) VALUES (?, ?)", [
+      req.user.username, `Archived ${cert.certificate_type} certificate ${cert.certificate_control_no} for "${cert.patient_name}"`,
+    ]);
+    res.json({ message: "Certificate archived." });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Could not archive this certificate." });
+  }
+}
+
+export async function restoreCertificateIssuance(req, res) {
+  const id = req.params.certId;
+  try {
+    await ensureIssuanceArchiveSchema();
+    const cert = await findIssuance(id);
+    if (!cert) return res.status(404).json({ message: "Certificate not found." });
+    if (!cert.is_archived) return res.status(400).json({ message: "This certificate is not archived." });
+
+    await pool.query("UPDATE certificate_issuances SET is_archived = 0, archived_at = NULL, archived_by = NULL WHERE id = ?", [id]);
+    await pool.query(
+      `UPDATE archives SET restored_at = NOW(), restored_by = ? WHERE entity_type = 'certificate_issuance' AND entity_id = ? AND restored_at IS NULL`,
+      [req.user.id, id]
+    );
+    await pool.query("INSERT INTO audit_log (actor_username, action) VALUES (?, ?)", [
+      req.user.username, `Restored ${cert.certificate_type} certificate ${cert.certificate_control_no} for "${cert.patient_name}"`,
+    ]);
+    res.json({ message: "Certificate restored." });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Could not restore this certificate." });
+  }
+}

@@ -1,4 +1,5 @@
 import pool from "../config/db.js";
+import { caseloadIdsFor } from "../utils/sharedCaseload.js";
 import { notifyIctAdmins, notifyRoles, notifyUser } from "../utils/notify.js";
 import { ensureAttendanceCompletionSchema } from "../utils/attendanceSchema.js";
 import { ensureCbteAndRiskSchema } from "../utils/cbteAndRiskSchema.js";
@@ -158,16 +159,17 @@ export async function listPatients(req, res) {
   // For group attendance, any facilitator can take attendance for all active outpatients.
   // For regular patient list, show assigned patients plus unassigned patients needing attention.
   const caseManagerId = req.query.caseManagerId;
-  if (caseManagerId) {
+  if (caseManagerId && caseManagerId !== "all") {
     clauses.push("p.assigned_case_manager_id = ?");
     params.push(caseManagerId);
-  } else if (req.user.role === "case_manager" && !forAttendance && req.query.showAll !== "true") {
-    clauses.push("(p.assigned_case_manager_id = ? OR p.assigned_case_manager_id IS NULL)");
-    params.push(req.user.id);
+  } else if (req.user.role === "case_manager" && !forAttendance && req.query.showAll !== "true" && caseManagerId !== "all") {
+    clauses.push("(p.assigned_case_manager_id IN (?) OR p.assigned_case_manager_id IS NULL)");
+    params.push(caseloadIdsFor(req.user.id));
   }
 
   // Parse pagination params (attendance rosters can load full active cohort up to 500)
-  const maxLimit = forAttendance ? 500 : 100;
+  // Dropdowns (certificates, notes, follow-ups, reports) request the full list, so allow up to 500.
+  const maxLimit = 500;
   const defaultLimit = forAttendance ? 300 : 10;
   const page = Math.max(1, parseInt(req.query.page, 10) || 1);
   const limit = Math.max(1, Math.min(maxLimit, parseInt(req.query.limit, 10) || defaultLimit));
@@ -478,6 +480,10 @@ export async function updatePatient(req, res) {
   const { id } = req.params;
   const fields = req.body;
 
+  // Editing follows the same rule as viewing: a case manager may only change patients in their own caseload.
+  const access = await verifyPatientAccess(id, req.user);
+  if (!access.allowed) return res.status(access.status).json({ message: access.message });
+
   if (fields.livingArrangement !== undefined
       && !new Set(["", "With Parents", "With Relatives", "Boarding House", "Living Alone"]).has(cleanText(fields.livingArrangement) || "")) {
     return res.status(400).json({ message: "Select a valid living arrangement." });
@@ -728,7 +734,7 @@ export async function updatePatient(req, res) {
 async function verifyPatientAccess(patientId, user) {
   const [[patient]] = await pool.query("SELECT id, assigned_case_manager_id FROM patients WHERE id = ?", [patientId]);
   if (!patient) return { allowed: false, status: 404, message: "Patient not found." };
-  if (user.role === "case_manager" && patient.assigned_case_manager_id && patient.assigned_case_manager_id !== user.id) {
+  if (user.role === "case_manager" && patient.assigned_case_manager_id && !caseloadIdsFor(user.id).includes(Number(patient.assigned_case_manager_id))) {
     return { allowed: false, status: 403, message: "You do not have access to this patient." };
   }
   return { allowed: true, patient };
@@ -1284,7 +1290,7 @@ export async function createPatient(req, res) {
       });
     }
 
-    const patientCode = await generatePatientCode();
+    let patientCode = await generatePatientCode();
     const resolvedCaseType = "substance_use"; // Scope locked: ENTREPOSE SUD only
 
     // Enforce case manager assignment for all PWUD registrations
@@ -1372,10 +1378,28 @@ export async function createPatient(req, res) {
 
     const columns = Object.keys(finalRecord);
     const placeholders = columns.map(() => "?").join(", ");
-    const [result] = await pool.query(
-      `INSERT INTO patients (${columns.join(", ")}) VALUES (${placeholders})`,
-      Object.values(finalRecord)
-    );
+    // Two staff registering at the same moment can compute the same next code; the UNIQUE indexes
+    // reject the second insert, so regenerate the codes and retry instead of failing.
+    let result;
+    for (let attempt = 1; ; attempt++) {
+      try {
+        [result] = await pool.query(
+          `INSERT INTO patients (${columns.join(", ")}) VALUES (${placeholders})`,
+          Object.values(finalRecord)
+        );
+        break;
+      } catch (insertErr) {
+        const codeClash = insertErr.code === "ER_DUP_ENTRY" && /patient_code|pwud_code/.test(insertErr.sqlMessage || "");
+        if (!codeClash || attempt >= 10) throw insertErr;
+        await new Promise((r) => setTimeout(r, 10 + Math.floor(Math.random() * 60)));
+        patientCode = await generatePatientCode();
+        if ("patient_code" in finalRecord) finalRecord.patient_code = patientCode;
+        if (pwudCode && "pwud_code" in finalRecord) {
+          pwudCode = await generatePwudCode(normalized.municipality);
+          finalRecord.pwud_code = pwudCode;
+        }
+      }
+    }
 
     await pool.query(
       "INSERT INTO audit_log (actor_username, action, table_name, record_id) VALUES (?, ?, ?, ?)",

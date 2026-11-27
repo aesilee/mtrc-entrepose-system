@@ -1,5 +1,5 @@
 import pool from "../config/db.js";
-import { notifyIctAdmins, notifyUser } from "../utils/notify.js";
+import { notifyIctAdmins, notifyUser, notifyUserOnce } from "../utils/notify.js";
 import {
   ensureAttendanceCompletionSchema,
   checkDuplicateCurriculumCredit,
@@ -16,6 +16,7 @@ import {
   normalizeSelfReportedRisk,
   normalizeStaffRiskAssessment,
 } from "../utils/cbteAndRiskSchema.js";
+import { findPatientsNotEnrolledOn } from "../utils/completionGuards.js";
 
 export async function recordAttendanceBulk(req, res) {
   const { sessionId, records, sessionCancelled, cancellationReason, authorizedByName } = req.body;
@@ -72,6 +73,16 @@ export async function recordAttendanceBulk(req, res) {
       }
     }
 
+    if (!isCenterCancelled) {
+      const notEnrolled = await findPatientsNotEnrolledOn(connection, safeRecords.map((r) => r.patientId), session.session_date);
+      if (notEnrolled.length > 0) {
+        connection.release();
+        return res.status(409).json({
+      message: `Not actively enrolled (discharged or not yet finalized): ${notEnrolled.map((p) => p.full_name).join(", ")}. Remove them from this session.`,
+    });
+      }
+    }
+
     const defaultAuthStaff = authorizedByName || session.authorized_by_name || req.user.full_name || req.user.username;
 
     await connection.beginTransaction();
@@ -83,10 +94,8 @@ export async function recordAttendanceBulk(req, res) {
         `DELETE FROM attendance WHERE session_id = ? AND patient_id IN (?)`,
         [sessionId, patientIds]
       );
-      await connection.query(
-        `DELETE FROM drug_test_logs WHERE session_id = ? AND patient_id IN (?)`,
-        [sessionId, patientIds]
-      );
+      // Drug-test rows are NOT deleted on re-record: they are updated in place below with a correction
+      // trail (previous_result / previous_substance_tested), so the history of the session test survives.
     }
 
     if (isCenterCancelled) {
@@ -305,7 +314,8 @@ export async function recordAttendanceBulk(req, res) {
           ? new Date()
           : null;
 
-      const normalizedSelfRisk = normalizeSelfReportedRisk(r.relapseRisk);
+      // An unanswered self-report is stored as SAFE (the column default); the column is NOT NULL.
+      const normalizedSelfRisk = normalizeSelfReportedRisk(r.relapseRisk) || "SAFE";
       const normalizedStaffRisk = normalizeStaffRiskAssessment(r.staffRiskAssessment);
       r.relapseRisk = normalizedSelfRisk;
       r.staffRiskAssessment = normalizedStaffRisk;
@@ -354,6 +364,9 @@ export async function recordAttendanceBulk(req, res) {
       if (isAttended && dtResult) {
         const substanceTested = multi3Summary?.substanceTested || "Multi-3 Rapid Drug Screen (THC, METH, ECS)";
         const positiveSubstancesStr = multi3Summary?.positiveSubstancesStr || null;
+        // Remember the normalized result and detected drugs for the post-save alerts.
+        r.drugTestResult = dtResult;
+        r.detectedSubstancesLabel = positiveSubstancesStr || substanceTested;
         const relatedVisitLabel = `${session.session_type || session.session_name}${effectiveTopicName ? `: ${effectiveTopicName}` : ""}`;
         const testedByStaff =
           String(r.testedByName || r.authorizedByName || defaultAuthStaff || "").trim() ||
@@ -376,7 +389,26 @@ export async function recordAttendanceBulk(req, res) {
           r.drugTestRemarks ||
           `Post-session Multi-3 RDT for ${relatedVisitLabel}`;
 
-        await connection.query(
+        const [[priorTest]] = await connection.query(
+          "SELECT id, result, substance_tested FROM drug_test_logs WHERE session_id = ? AND patient_id = ? ORDER BY id DESC LIMIT 1",
+          [sessionId, r.patientId]
+        );
+        if (priorTest) {
+          const changed = priorTest.result !== dtResult || (priorTest.substance_tested || "") !== (substanceTested || "");
+          await connection.query(
+            `UPDATE drug_test_logs SET
+               test_time = ?, substance_tested = ?, positive_substances = ?, result = ?,
+               related_visit = ?, tested_by_name = ?, action_taken = ?, remarks = ?
+               ${changed ? ", is_corrected = 1, previous_result = ?, previous_substance_tested = ?, correction_reason = 'Re-recorded from session attendance', corrected_by = ?, corrected_by_name = ?, corrected_at = NOW()" : ""}
+             WHERE id = ?`,
+            [
+              testTimeVal, substanceTested, positiveSubstancesStr, dtResult,
+              relatedVisitLabel, testedByStaff, actionTaken, dtRemarks,
+              ...(changed ? [priorTest.result, priorTest.substance_tested, req.user.id, req.user.full_name || req.user.username] : []),
+              priorTest.id,
+            ]
+          );
+        } else await connection.query(
           `INSERT INTO drug_test_logs (
              patient_id, test_date, test_time, test_type,
              substance_tested, positive_substances, result,
@@ -399,6 +431,16 @@ export async function recordAttendanceBulk(req, res) {
             dtRemarks,
             req.user.id,
           ]
+        );
+      } else if (!isAttended) {
+        // Re-recorded as absent/excused: a session test can no longer stand, so void it with a trail.
+        await connection.query(
+          `UPDATE drug_test_logs SET
+             is_corrected = 1, previous_result = result, previous_substance_tested = substance_tested,
+             result = 'NOT_PERFORMED', correction_reason = 'Attendance re-recorded as not attended',
+             corrected_by = ?, corrected_by_name = ?, corrected_at = NOW()
+           WHERE session_id = ? AND patient_id = ? AND result <> 'NOT_PERFORMED'`,
+          [req.user.id, req.user.full_name || req.user.username, sessionId, r.patientId]
         );
       }
     }
@@ -472,10 +514,16 @@ export async function recordAttendanceBulk(req, res) {
         // Check if client has 2 consecutive unexcused absences (excluding cancelled sessions)
         if (p.assigned_case_manager_id) {
           const [recentAtt] = await pool.query(
-            "SELECT status FROM attendance WHERE patient_id = ? AND status != 'cancelled' ORDER BY session_date DESC, id DESC LIMIT 2",
+            "SELECT status FROM attendance WHERE patient_id = ? AND status != 'cancelled' ORDER BY session_date DESC, id DESC LIMIT 3",
             [p.id]
           );
-          if (recentAtt.length === 2 && recentAtt[0].status === "absent" && recentAtt[1].status === "absent") {
+          // Flag once per absence streak: exactly the 2 latest are absent (a 3rd, 4th... absence does not re-flag).
+          if (
+            recentAtt.length >= 2 &&
+            recentAtt[0].status === "absent" &&
+            recentAtt[1].status === "absent" &&
+            (recentAtt.length === 2 || recentAtt[2].status !== "absent")
+          ) {
             await notifyUser(
               p.assigned_case_manager_id,
               "patients",
@@ -499,7 +547,7 @@ export async function recordAttendanceBulk(req, res) {
         if (p.assigned_case_manager_id) {
           const progress = await getUnifiedPatientProgress(pool, p.id);
           if (progress.isCoreComplete) {
-            await notifyUser(
+            await notifyUserOnce(
               p.assigned_case_manager_id,
               "patients",
               "milestone_readiness",
@@ -531,8 +579,8 @@ export async function recordAttendanceBulk(req, res) {
           ? "NEAR-USE / STRONG CRAVING (NO SUBSTANCE USE)"
           : "AT RISK (TRIGGER EXPOSURE — NO USE)";
         const alertMsg = isNearUse
-          ? `Schedule Book Craving Support [${severityLabel}]: "${patient.full_name}" reported strong craving / near-use WITHOUT using substances in session "${session.session_name}". Abstinence was maintained; supportive coping review recommended.`
-          : `Relapse Risk Alert [${severityLabel}]: "${patient.full_name}" was recorded as "${r.relapseRisk}" in Schedule Book review for session "${session.session_name}". Clinical follow-up recommended.`;
+          ? `Craving Support Alert [${severityLabel}]: "${patient.full_name}" reported strong craving / near-use WITHOUT using substances in session "${session.session_name}". Abstinence was maintained; supportive coping review recommended.`
+          : `Relapse Risk Alert [${severityLabel}]: "${patient.full_name}" was recorded as "${r.relapseRisk}" in session self-report review for session "${session.session_name}". Clinical follow-up recommended.`;
 
         await notifyUser(
           patient.assigned_case_manager_id,
@@ -542,10 +590,10 @@ export async function recordAttendanceBulk(req, res) {
         );
         try {
           const followUpReason = isNearUse
-            ? `Schedule Book Near-Use / Strong Craving (Abstinence Maintained — No Substance Use): ${session.session_name || "Curriculum Session"}`
+            ? `Self-Reported Near-Use / Strong Craving (Abstinence Maintained — No Substance Use): ${session.session_name || "Curriculum Session"}`
             : isActualUse
-            ? `Schedule Book Self-Reported Substance Use / Lapse: ${session.session_name || "Curriculum Session"}`
-            : `Schedule Book At-Risk Review (Trigger Exposure — No Use): ${session.session_name || "Curriculum Session"}`;
+            ? `Self-Reported Substance Use / Lapse: ${session.session_name || "Curriculum Session"}`
+            : `Self-Reported At-Risk Review (Trigger Exposure — No Use): ${session.session_name || "Curriculum Session"}`;
           await pool.query(
             "INSERT INTO follow_ups (patient_id, assigned_to, reason, due_date, status) VALUES (?, ?, ?, CURDATE(), 'pending')",
             [r.patientId, patient.assigned_case_manager_id, followUpReason]
@@ -566,7 +614,7 @@ export async function recordAttendanceBulk(req, res) {
         [r.patientId]
       );
       if (patient?.assigned_case_manager_id) {
-        const detectedSubstances = r.substanceTested || "Multi-3 Panel";
+        const detectedSubstances = r.detectedSubstancesLabel || r.substanceTested || "Multi-3 Panel";
         await notifyUser(
           patient.assigned_case_manager_id,
           "patients",
@@ -734,7 +782,7 @@ export async function updateAttendanceCompletion(req, res) {
       : existing.arrival_time;
     const nextNotes = notes !== undefined ? notes : existing.notes;
     const nextRelapseRisk =
-      relapseRisk !== undefined ? normalizeSelfReportedRisk(relapseRisk) : existing.relapse_risk || null;
+      relapseRisk !== undefined ? normalizeSelfReportedRisk(relapseRisk) || "SAFE" : existing.relapse_risk || "SAFE";
     const nextStaffRisk =
       staffRiskAssessment !== undefined
         ? normalizeStaffRiskAssessment(staffRiskAssessment)
@@ -788,7 +836,7 @@ export async function updateAttendanceCompletion(req, res) {
     if (nextCompletion === "CREDITED" && existing.assigned_case_manager_id) {
       const progress = await getUnifiedPatientProgress(pool, existing.patient_id);
       if (progress.isCoreComplete) {
-        await notifyUser(
+        await notifyUserOnce(
           existing.assigned_case_manager_id,
           "patients",
           "milestone_readiness",

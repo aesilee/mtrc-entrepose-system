@@ -9,4 +9,7 @@ build/
 .vs/
 output/
 *.sql
+!database/*.sql
 database/migrations/
+# Real patient data — never commit
+database/seed_mtrc_actual_tracker_data.sql

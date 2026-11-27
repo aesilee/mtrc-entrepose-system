@@ -1305,7 +1305,7 @@ export default function RecordAttendanceModal({ initialPatientId, existingSessio
                                 </label>
                               )}
 
-                              {/* 4. Schedule Book Client Self-Reported Risk (Vol. 3A) */}
+                              {/* 4. Client Self-Reported Craving / Relapse Risk */}
                               <select
                                 style={{
                                   ...styles.pillSelect,
@@ -1337,7 +1337,7 @@ export default function RecordAttendanceModal({ initialPatientId, existingSessio
                                 }}
                                 value={sel.relapseRisk || ""}
                                 onChange={(e) => updateSelection(p.id, "relapseRisk", e.target.value)}
-                                title="Client Self-Reported Schedule Book Status (Distinguishes Near-Use/Craving from Actual Use)"
+                                title="Client Self-Reported Craving / Relapse Risk Status (Distinguishes Near-Use/Craving from Actual Use)"
                               >
                                 <option value="">— Unanswered / Not Assessed —</option>
                                 <option value="SAFE">Self: Safe / Abstinent</option>

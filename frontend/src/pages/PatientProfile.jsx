@@ -169,7 +169,7 @@ export default function PatientProfile() {
   }, [toast]);
 
   async function handleArchiveCertificate(reason) {
-    await api.post(`/certificates/${archivingCertificate.id}/archive`, { reason });
+    await api.post(`/certificates/issuances/${archivingCertificate.id}/archive`, { reason });
     if (statutoryCertModal && statutoryCertModal.id === archivingCertificate.id) {
       setStatutoryCertModal(null);
     }
@@ -229,19 +229,22 @@ export default function PatientProfile() {
 
   function loadAll() {
     setLoading(true);
+    // Admitting personnel may open the profile but not clinical records (the API answers 403),
+    // so clinical requests fall back to empty data instead of failing the whole profile.
+    const optional = (request, fallback) => request.catch(() => ({ data: fallback }));
     Promise.all([
       api.get(`/patients/${id}`),
-      api.get(`/patients/${id}/attendance`),
-      api.get(`/patients/${id}/progress-notes`),
-      api.get(`/certificates/${id}/history`),
-      api.get(`/patients/${id}/history`),
-      api.get(`/patients/${id}/follow-ups`),
-      api.get(`/patients/${id}/timeline`),
+      optional(api.get(`/patients/${id}/attendance`), { attendance: [] }),
+      optional(api.get(`/patients/${id}/progress-notes`), { progressNotes: [] }),
+      optional(api.get(`/certificates/${id}/history`), { history: [] }),
+      optional(api.get(`/patients/${id}/history`), { history: [] }),
+      optional(api.get(`/patients/${id}/follow-ups`), { followUps: [] }),
+      optional(api.get(`/patients/${id}/timeline`), { timeline: [] }),
       api.get("/users/case-managers"),
       api.get("/programs"),
-      api.get(`/case-management/patients/${id}/milestones`),
-      api.get(`/case-management/patients/${id}/sessions/summary`),
-      api.get(`/case-management/patients/${id}/drug-tests`),
+      optional(api.get(`/case-management/patients/${id}/milestones`), { milestones: {}, history: [] }),
+      optional(api.get(`/case-management/patients/${id}/sessions/summary`), null),
+      optional(api.get(`/case-management/patients/${id}/drug-tests`), { drugTests: [] }),
       api.get(`/case-management/patients/${id}/treatment-plan`).catch(() => ({ data: { treatmentPlan: null } })),
       api.get(`/case-management/patients/${id}/cbte-evaluations`).catch(() => ({ data: { evaluations: [] } })),
       api.get(`/case-management/patients/${id}/interventions`).catch(() => ({ data: { interventions: [], summary: {} } })),
@@ -272,11 +275,12 @@ export default function PatientProfile() {
   }
 
   function refreshCertificates() {
+    // Same source as the initial load: issued certificates (certificate_issuances)
     Promise.all([
-      api.get(`/patients/${id}/certificates`),
+      api.get(`/certificates/${id}/history`),
       api.get(`/patients/${id}/timeline`),
     ]).then(([c, tl]) => {
-      setCertificates(c.data.certificates);
+      setCertificates(c.data.history || []);
       setTimeline(tl.data.timeline);
     }).catch(err => {
       console.error("Error refreshing certificates:", err);
@@ -761,7 +765,7 @@ export default function PatientProfile() {
           <div style={{ ...styles.sideNavGroupLabel, marginTop: 16 }}>Records</div>
           {TAB_SECTIONS.filter((s) => {
               if (user.role === "case_manager" && s.key === "certificates") return false;
-              if (user.role === "admitting" && (s.key === "case-notes" || s.key === "attendance")) return false;
+              if (user.role === "admitting" && (s.key === "case-notes" || s.key === "attendance" || s.key === "progress")) return false;
               return true;
             }).map((s) => (
             <button
@@ -1341,7 +1345,7 @@ export default function PatientProfile() {
                                     ? "1px solid #FCD34D"
                                     : "1px solid #A7F3D0",
                               }}
-                              title="Client Self-Reported Schedule Book Status"
+                              title="Client Self-Reported Craving / Relapse Risk Status"
                             >
                               {a.relapse_risk === "USED"
                                 ? "🔴 Self: USED / SLIP"
@@ -1814,21 +1818,72 @@ export default function PatientProfile() {
 
               {caseSubTab === "summary" && (
                 <div>
-                  <div style={{ ...styles.card, padding: 20, marginBottom: 20, border: "1px solid #E2E8F0", borderRadius: 8 }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16, flexWrap: "wrap", gap: 10 }}>
+                  <div style={{ ...styles.card, padding: "20px 24px", marginBottom: 20, border: "1.5px solid #D5E5D6", borderRadius: 14, background: "#FFFFFF", boxShadow: "0 2px 12px rgba(38, 101, 59, 0.04)" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 18, flexWrap: "wrap", gap: 12 }}>
                       <div>
-                        <h3 style={{ margin: 0, fontSize: 16, color: "#2D3748" }}>
+                        <h3 style={{ margin: 0, fontSize: 16, fontWeight: 800, color: "#1B3828" }}>
                           Lifetime Curriculum Progress (28 CBT · 3 CBT-E · 12 PE = 43 Core Requirements)
                         </h3>
-                        <p style={{ margin: "3px 0 0", fontSize: 12, color: "#64748B" }}>
+                        <p style={{ margin: "4px 0 0", fontSize: 12.5, color: "#52755D", lineHeight: 1.4 }}>
                           Counts only approved, non-duplicate curriculum credits toward each component target. Supplementary services and additional meetings are tracked separately.
                         </p>
                       </div>
                       {canManageCase && (
-                        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                          <button type="button" style={styles.generateBtn} onClick={() => setAttendanceModalOpen(true)}>+ Record CBT / Attendance</button>
-                          <button type="button" style={{ ...styles.generateBtn, background: "#2B6CB0" }} onClick={() => setCbteModalOpen(true)}>+ Record CBT-E</button>
-                          <button type="button" style={{ ...styles.generateBtn, background: "#4A5568" }} onClick={() => setNoteModal({})}>+ Log Progress Note</button>
+                        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                          <button
+                            type="button"
+                            style={{
+                              background: "#2A6A45",
+                              color: "#FFFFFF",
+                              border: "1px solid #1E5033",
+                              padding: "8px 16px",
+                              borderRadius: 8,
+                              fontSize: 12.5,
+                              fontWeight: 700,
+                              cursor: "pointer",
+                              boxShadow: "0 2px 6px rgba(42, 106, 69, 0.2)",
+                              transition: "all 0.15s ease",
+                            }}
+                            onClick={() => setAttendanceModalOpen(true)}
+                          >
+                            + Record CBT / Attendance
+                          </button>
+                          <button
+                            type="button"
+                            style={{
+                              background: "#3D7A52",
+                              color: "#FFFFFF",
+                              border: "1px solid #2C5B3C",
+                              padding: "8px 16px",
+                              borderRadius: 8,
+                              fontSize: 12.5,
+                              fontWeight: 700,
+                              cursor: "pointer",
+                              boxShadow: "0 2px 6px rgba(61, 122, 82, 0.2)",
+                              transition: "all 0.15s ease",
+                            }}
+                            onClick={() => setCbteModalOpen(true)}
+                          >
+                            + Record CBT-E
+                          </button>
+                          <button
+                            type="button"
+                            style={{
+                              background: "#486B52",
+                              color: "#FFFFFF",
+                              border: "1px solid #36533E",
+                              padding: "8px 16px",
+                              borderRadius: 8,
+                              fontSize: 12.5,
+                              fontWeight: 700,
+                              cursor: "pointer",
+                              boxShadow: "0 2px 6px rgba(72, 107, 82, 0.2)",
+                              transition: "all 0.15s ease",
+                            }}
+                            onClick={() => setNoteModal({})}
+                          >
+                            + Log Progress Note
+                          </button>
                         </div>
                       )}
                     </div>
@@ -2859,7 +2914,7 @@ export default function PatientProfile() {
 
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
                 <label style={{ display: "flex", flexDirection: "column", gap: 5, fontSize: 12, fontWeight: 700, color: "#334155" }}>
-                  Client Self-Reported Schedule Book Risk
+                  Client Self-Reported Craving / Relapse Risk
                   <select
                     style={styles.input}
                     value={reviewAttForm.relapseRisk || ""}
@@ -3240,9 +3295,7 @@ function EmptyState({ text }) {
 }
 
 function CurriculumCompletionPanel({ sessionSummary, canManageCase, onOpenCbteModal }) {
-  const [expanded, setExpanded] = useState({ cbt: false, cbte: true, pe: false });
-  const [showAllMissingCbt, setShowAllMissingCbt] = useState(false);
-  const [showAllMissingPe, setShowAllMissingPe] = useState(false);
+  const [expanded, setExpanded] = useState({ cbt: false, cbte: true, pe: true });
 
   const cbt = sessionSummary?.components?.cbt || {
     completed: sessionSummary?.cbtGroup || 0,
@@ -3284,45 +3337,55 @@ function CurriculumCompletionPanel({ sessionSummary, canManageCase, onOpenCbteMo
     setExpanded({ cbt: nextState, cbte: nextState, pe: nextState });
   };
 
-  const displayedCbtMissing = showAllMissingCbt ? cbt.missingTopics : (cbt.missingTopics || []).slice(0, 8);
-  const displayedPeMissing = showAllMissingPe ? pe.missingTopics : (pe.missingTopics || []).slice(0, 6);
-
   return (
     <div style={{ marginBottom: 20 }}>
-      {/* Hero Curriculum Progress Card */}
+      {/* Hero Curriculum Progress Card (Warm Green & Spacious) */}
       <div
         style={{
           background: "#FFFFFF",
-          border: "1px solid #E2E8F0",
-          borderRadius: 12,
-          padding: "16px 20px",
-          marginBottom: 16,
-          boxShadow: "0 1px 3px rgba(0,0,0,0.04)",
+          border: "1.5px solid #D5E5D6",
+          borderRadius: 14,
+          padding: "18px 22px",
+          marginBottom: 18,
+          boxShadow: "0 2px 10px rgba(38, 101, 59, 0.04), inset 0 0 0 1px rgba(230, 243, 232, 0.45)",
         }}
       >
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 10, marginBottom: 12 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 12, marginBottom: 14 }}>
           <div>
-            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
-              <span style={{ fontSize: 11, fontWeight: 700, padding: "2px 8px", borderRadius: 4, background: "#E0F2FE", color: "#0369A1", textTransform: "uppercase" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 5 }}>
+              <span
+                style={{
+                  fontSize: 11,
+                  fontWeight: 800,
+                  padding: "3px 9px",
+                  borderRadius: 6,
+                  background: "#E8F4E8",
+                  color: "#1E5833",
+                  border: "1px solid #C4DFC8",
+                  textTransform: "uppercase",
+                  letterSpacing: "0.03em",
+                }}
+              >
                 Curriculum Milestone
               </span>
-              <span style={{ fontSize: 13, fontWeight: 800, color: "#0F172A" }}>
+              <span style={{ fontSize: 14, fontWeight: 800, color: "#1B3828" }}>
                 43 Core Requirements (ENTREPOSE Vol. 1)
               </span>
             </div>
-            <p style={{ margin: 0, fontSize: 12, color: "#64748B" }}>
+            <p style={{ margin: 0, fontSize: 12.5, color: "#52755D", lineHeight: 1.4 }}>
               Unified requirement of 28 CBT Sessions + 3 CBT-E Clinical Evaluations + 12 Psycho-Education Meetings.
             </p>
           </div>
           <span
             style={{
-              padding: "4px 12px",
+              padding: "5px 14px",
               borderRadius: 999,
               fontSize: 12,
               fontWeight: 800,
-              background: totalCore.isComplete ? "#DCFCE7" : "#FEF3C7",
-              color: totalCore.isComplete ? "#166534" : "#92400E",
-              border: totalCore.isComplete ? "1px solid #86EFAC" : "1px solid #FDE68A",
+              background: totalCore.isComplete ? "#E8F5EC" : "#F6F3EB",
+              color: totalCore.isComplete ? "#166534" : "#6E5218",
+              border: totalCore.isComplete ? "1.5px solid #A3D9B1" : "1.5px solid #DFD5BE",
+              boxShadow: "0 1px 3px rgba(0,0,0,0.03)",
             }}
           >
             {totalCore.isComplete
@@ -3332,64 +3395,66 @@ function CurriculumCompletionPanel({ sessionSummary, canManageCase, onOpenCbteMo
         </div>
 
         {/* Progress Bar & Percentage */}
-        <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 14 }}>
-          <div style={{ flex: 1, background: "#EDF2F7", borderRadius: 999, height: 12, overflow: "hidden" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 16 }}>
+          <div style={{ flex: 1, background: "#E8F1EA", borderRadius: 999, height: 11, overflow: "hidden" }}>
             <div
               style={{
-                background: totalCore.isComplete ? "#166534" : "var(--color-primary, #2F6F4F)",
+                background: totalCore.isComplete
+                  ? "#1E5833"
+                  : "linear-gradient(90deg, #2A6A45 0%, #3D8B59 100%)",
                 height: "100%",
                 width: `${Math.min(100, Math.max(0, totalCore.percentage || 0))}%`,
                 borderRadius: 999,
-                transition: "width 0.4s ease",
+                transition: "width 0.4s cubic-bezier(0.22, 1, 0.36, 1)",
               }}
             />
           </div>
-          <div style={{ fontSize: 14, fontWeight: 800, color: "#1E293B", whiteSpace: "nowrap" }}>
+          <div style={{ fontSize: 14, fontWeight: 800, color: "#1B3828", whiteSpace: "nowrap" }}>
             {totalCore.completed} / {totalCore.required} ({totalCore.percentage || 0}%)
           </div>
         </div>
 
-        {/* 3 Pillars Sub-meters */}
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 10 }}>
-          <div style={{ background: "#F8FAFC", border: "1px solid #E2E8F0", borderRadius: 8, padding: "10px 14px" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11.5, fontWeight: 700, color: "#334155" }}>
+        {/* 3 Pillars Sub-meters (Warm Botanical Styling) */}
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 12 }}>
+          <div style={{ background: "#F7FAF8", border: "1.5px solid #DCE9DE", borderRadius: 10, padding: "12px 14px" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, fontWeight: 700, color: "#1E3326" }}>
               <span>CBT Topics (Sessions 1–28)</span>
-              <span style={{ color: cbt.isComplete ? "#166534" : "#0F172A" }}>{cbt.completed}/28</span>
+              <span style={{ color: cbt.isComplete ? "#1E5833" : "#244E36", fontWeight: 800 }}>{cbt.completed}/28</span>
             </div>
-            <div style={{ background: "#E2E8F0", borderRadius: 999, height: 6, margin: "6px 0 4px", overflow: "hidden" }}>
-              <div style={{ background: cbt.isComplete ? "#166534" : "#2B6CB0", height: "100%", width: `${Math.round((cbt.completed / 28) * 100)}%` }} />
+            <div style={{ background: "#E4EEE5", borderRadius: 999, height: 6, margin: "7px 0 5px", overflow: "hidden" }}>
+              <div style={{ background: cbt.isComplete ? "#1E5833" : "#2E6F48", height: "100%", width: `${Math.round((cbt.completed / 28) * 100)}%` }} />
             </div>
-            <div style={{ fontSize: 11, color: "#64748B" }}>{cbt.isComplete ? "Completed" : `${cbt.remaining} remaining`}</div>
+            <div style={{ fontSize: 11, color: "#52755D", fontWeight: 600 }}>{cbt.isComplete ? "✓ Completed" : `${cbt.remaining} remaining`}</div>
           </div>
 
-          <div style={{ background: "#F8FAFC", border: "1px solid #E2E8F0", borderRadius: 8, padding: "10px 14px" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11.5, fontWeight: 700, color: "#334155" }}>
+          <div style={{ background: "#F7FAF8", border: "1.5px solid #DCE9DE", borderRadius: 10, padding: "12px 14px" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, fontWeight: 700, color: "#1E3326" }}>
               <span>CBT-E Evaluations (Sesyon 1–3)</span>
-              <span style={{ color: cbte.isComplete ? "#166534" : "#0F172A" }}>{cbte.completed}/3</span>
+              <span style={{ color: cbte.isComplete ? "#1E5833" : "#244E36", fontWeight: 800 }}>{cbte.completed}/3</span>
             </div>
-            <div style={{ background: "#E2E8F0", borderRadius: 999, height: 6, margin: "6px 0 4px", overflow: "hidden" }}>
-              <div style={{ background: cbte.isComplete ? "#166534" : "#7C3AED", height: "100%", width: `${Math.round((cbte.completed / 3) * 100)}%` }} />
+            <div style={{ background: "#E4EEE5", borderRadius: 999, height: 6, margin: "7px 0 5px", overflow: "hidden" }}>
+              <div style={{ background: cbte.isComplete ? "#1E5833" : "#558A43", height: "100%", width: `${Math.round((cbte.completed / 3) * 100)}%` }} />
             </div>
-            <div style={{ fontSize: 11, color: "#64748B" }}>{cbte.isComplete ? "Completed" : `${cbte.remaining} remaining`}</div>
+            <div style={{ fontSize: 11, color: "#52755D", fontWeight: 600 }}>{cbte.isComplete ? "✓ Completed" : `${cbte.remaining} remaining`}</div>
           </div>
 
-          <div style={{ background: "#F8FAFC", border: "1px solid #E2E8F0", borderRadius: 8, padding: "10px 14px" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11.5, fontWeight: 700, color: "#334155" }}>
+          <div style={{ background: "#F7FAF8", border: "1.5px solid #DCE9DE", borderRadius: 10, padding: "12px 14px" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, fontWeight: 700, color: "#1E3326" }}>
               <span>PE Meetings (Topics 1–12)</span>
-              <span style={{ color: pe.isComplete ? "#166534" : "#0F172A" }}>{pe.completed}/12</span>
+              <span style={{ color: pe.isComplete ? "#1E5833" : "#244E36", fontWeight: 800 }}>{pe.completed}/12</span>
             </div>
-            <div style={{ background: "#E2E8F0", borderRadius: 999, height: 6, margin: "6px 0 4px", overflow: "hidden" }}>
-              <div style={{ background: pe.isComplete ? "#166534" : "#059669", height: "100%", width: `${Math.round((pe.completed / 12) * 100)}%` }} />
+            <div style={{ background: "#E4EEE5", borderRadius: 999, height: 6, margin: "7px 0 5px", overflow: "hidden" }}>
+              <div style={{ background: pe.isComplete ? "#1E5833" : "#3B7F52", height: "100%", width: `${Math.round((pe.completed / 12) * 100)}%` }} />
             </div>
-            <div style={{ fontSize: 11, color: "#64748B" }}>{pe.isComplete ? "Completed" : `${pe.remaining} remaining`}</div>
+            <div style={{ fontSize: 11, color: "#52755D", fontWeight: 600 }}>{pe.isComplete ? "✓ Completed" : `${pe.remaining} remaining`}</div>
           </div>
         </div>
       </div>
 
-      {/* Component Matrix Table with Integrated Drawers */}
-      <div style={{ border: "1px solid #E2E8F0", borderRadius: 12, overflow: "hidden", marginBottom: 16, background: "#FFFFFF", boxShadow: "0 1px 3px rgba(0,0,0,0.04)" }}>
-        <div style={{ padding: "12px 18px", background: "#F8FAFC", borderBottom: "1px solid #E2E8F0", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10 }}>
-          <span style={{ fontSize: 13, fontWeight: 800, color: "#1E293B", textTransform: "uppercase", letterSpacing: "0.03em" }}>
+      {/* Component Matrix Table with Integrated Clean Drawers */}
+      <div style={{ border: "1.5px solid #D5E5D6", borderRadius: 14, overflow: "hidden", marginBottom: 18, background: "#FFFFFF", boxShadow: "0 2px 10px rgba(38, 101, 59, 0.04)" }}>
+        <div style={{ padding: "14px 20px", background: "#F3F8F4", borderBottom: "1px solid #DCE8DD", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10 }}>
+          <span style={{ fontSize: 13, fontWeight: 800, color: "#1B3828", textTransform: "uppercase", letterSpacing: "0.04em" }}>
             Curriculum Component Breakdown
           </span>
           <button
@@ -3397,13 +3462,14 @@ function CurriculumCompletionPanel({ sessionSummary, canManageCase, onOpenCbteMo
             onClick={toggleAll}
             style={{
               background: "#FFFFFF",
-              border: "1px solid #CBD5E1",
-              borderRadius: 6,
-              padding: "4px 10px",
-              fontSize: 11.5,
+              border: "1.5px solid #C4DFC8",
+              borderRadius: 7,
+              padding: "5px 12px",
+              fontSize: 12,
               fontWeight: 700,
-              color: "#334155",
+              color: "#205634",
               cursor: "pointer",
+              transition: "all 0.15s ease",
             }}
           >
             {isAllExpanded ? "Collapse All Details ▴" : "Expand All Checklists ▾"}
@@ -3412,47 +3478,48 @@ function CurriculumCompletionPanel({ sessionSummary, canManageCase, onOpenCbteMo
 
         <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
           <thead>
-            <tr style={{ background: "#FAFAFA", borderBottom: "1px solid #E2E8F0" }}>
-              <th style={{ textAlign: "left", padding: "10px 16px", fontSize: 11, fontWeight: 800, color: "#64748B", textTransform: "uppercase" }}>Component</th>
-              <th style={{ textAlign: "center", padding: "10px 14px", fontSize: 11, fontWeight: 800, color: "#64748B", textTransform: "uppercase", width: 100 }}>Completed</th>
-              <th style={{ textAlign: "center", padding: "10px 14px", fontSize: 11, fontWeight: 800, color: "#64748B", textTransform: "uppercase", width: 90 }}>Required</th>
-              <th style={{ textAlign: "left", padding: "10px 14px", fontSize: 11, fontWeight: 800, color: "#64748B", textTransform: "uppercase", width: 160 }}>Requirement Status</th>
-              <th style={{ textAlign: "right", padding: "10px 16px", fontSize: 11, fontWeight: 800, color: "#64748B", textTransform: "uppercase" }}>Inspect Checklist</th>
+            <tr style={{ background: "#F8FAF8", borderBottom: "1.5px solid #DCE8DD" }}>
+              <th style={{ textAlign: "left", padding: "12px 18px", fontSize: 11, fontWeight: 800, color: "#45634F", textTransform: "uppercase", letterSpacing: "0.03em" }}>Component</th>
+              <th style={{ textAlign: "center", padding: "12px 14px", fontSize: 11, fontWeight: 800, color: "#45634F", textTransform: "uppercase", width: 100 }}>Completed</th>
+              <th style={{ textAlign: "center", padding: "12px 14px", fontSize: 11, fontWeight: 800, color: "#45634F", textTransform: "uppercase", width: 90 }}>Required</th>
+              <th style={{ textAlign: "left", padding: "12px 14px", fontSize: 11, fontWeight: 800, color: "#45634F", textTransform: "uppercase", width: 170 }}>Requirement Status</th>
+              <th style={{ textAlign: "right", padding: "12px 18px", fontSize: 11, fontWeight: 800, color: "#45634F", textTransform: "uppercase" }}>Inspect Checklist</th>
             </tr>
           </thead>
           <tbody>
             {/* CBT Row */}
-            <tr style={{ borderBottom: expanded.cbt ? "none" : "1px solid #F1F5F9" }}>
-              <td style={{ padding: "12px 16px" }}>
-                <div style={{ fontWeight: 800, color: "#0F172A" }}>CBT</div>
-                <div style={{ fontSize: 11.5, color: "#64748B" }}>Core Cognitive Behavioral Therapy Topics (Sessions 1–28)</div>
+            <tr style={{ borderBottom: expanded.cbt ? "none" : "1px solid #EBF2EC" }}>
+              <td style={{ padding: "14px 18px" }}>
+                <div style={{ fontWeight: 800, fontSize: 14, color: "#1B3828" }}>CBT</div>
+                <div style={{ fontSize: 12, color: "#52755D", marginTop: 2 }}>Core Cognitive Behavioral Therapy Topics (Sessions 1–28)</div>
               </td>
-              <td style={{ textAlign: "center", padding: "12px 14px", fontWeight: 800, fontSize: 14, color: cbt.isComplete ? "#166534" : "#0F172A" }}>{cbt.completed}</td>
-              <td style={{ textAlign: "center", padding: "12px 14px", fontWeight: 700, fontSize: 14, color: "#475569" }}>28</td>
-              <td style={{ padding: "12px 14px" }}>
+              <td style={{ textAlign: "center", padding: "14px 14px", fontWeight: 800, fontSize: 14, color: cbt.isComplete ? "#1E5833" : "#1B3828" }}>{cbt.completed}</td>
+              <td style={{ textAlign: "center", padding: "14px 14px", fontWeight: 700, fontSize: 14, color: "#52755D" }}>28</td>
+              <td style={{ padding: "14px 14px" }}>
                 {cbt.isComplete ? (
-                  <span style={{ fontSize: 11.5, fontWeight: 700, padding: "2px 9px", borderRadius: 999, background: "#DCFCE7", color: "#166534" }}>
+                  <span style={{ fontSize: 11.5, fontWeight: 700, padding: "3px 10px", borderRadius: 999, background: "#E8F5EC", color: "#166534", border: "1px solid #A3D9B1" }}>
                     ✓ Complete (28/28)
                   </span>
                 ) : (
-                  <span style={{ fontSize: 11.5, fontWeight: 700, padding: "2px 9px", borderRadius: 999, background: "#FFF7ED", color: "#C2410C", border: "1px solid #FED7AA" }}>
+                  <span style={{ fontSize: 11.5, fontWeight: 700, padding: "3px 10px", borderRadius: 999, background: "#F6F3EB", color: "#6E5218", border: "1px solid #DFD5BE" }}>
                     {cbt.remaining} remaining ({cbt.completed}/28)
                   </span>
                 )}
               </td>
-              <td style={{ textAlign: "right", padding: "12px 16px" }}>
+              <td style={{ textAlign: "right", padding: "14px 18px" }}>
                 <button
                   type="button"
                   onClick={() => toggleComponent("cbt")}
                   style={{
-                    background: expanded.cbt ? "#EFF6FF" : "#FFFFFF",
-                    border: "1px solid #CBD5E1",
-                    borderRadius: 6,
-                    padding: "4px 10px",
-                    fontSize: 11.5,
+                    background: expanded.cbt ? "#EBF4EC" : "#FFFFFF",
+                    border: "1.5px solid #C2DEC6",
+                    borderRadius: 7,
+                    padding: "5px 12px",
+                    fontSize: 12,
                     fontWeight: 700,
-                    color: "#1E40AF",
+                    color: "#205634",
                     cursor: "pointer",
+                    transition: "all 0.15s ease",
                   }}
                 >
                   {expanded.cbt ? "Hide Topics ▴" : `Inspect Missing (${cbt.remaining}) ▾`}
@@ -3462,51 +3529,121 @@ function CurriculumCompletionPanel({ sessionSummary, canManageCase, onOpenCbteMo
 
             {/* CBT Drawer */}
             {expanded.cbt && (
-              <tr style={{ background: "#F8FAFC", borderBottom: "1px solid #E2E8F0" }}>
-                <td colSpan={5} style={{ padding: "12px 18px" }}>
-                  <div style={{ fontSize: 12, fontWeight: 700, color: "#1E293B", marginBottom: 6 }}>
-                    • Missing CBT Core Topics ({cbt.remaining} of 28 incomplete):
-                  </div>
-                  {cbt.isComplete ? (
-                    <div style={{ fontSize: 12, color: "#166534", fontWeight: 600 }}>All 28 CBT curriculum topics credited.</div>
-                  ) : (
+              <tr style={{ background: "#F8FAF8", borderBottom: "1.5px solid #D5E5D6" }}>
+                <td colSpan={5} style={{ padding: "16px 20px" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12, flexWrap: "wrap", gap: 8 }}>
                     <div>
-                      <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 8 }}>
-                        {displayedCbtMissing.map((t) => (
-                          <span
-                            key={t.code}
-                            style={{
-                              fontSize: 11,
-                              padding: "3px 8px",
-                              borderRadius: 6,
-                              background: "#FFFFFF",
-                              color: "#334155",
-                              border: "1px solid #CBD5E1",
-                              fontWeight: 600,
-                            }}
-                          >
-                            {t.title}
-                          </span>
-                        ))}
+                      <div style={{ fontSize: 13, fontWeight: 800, color: "#1B3828" }}>
+                        {cbt.isComplete ? "All 28 CBT Topics Completed" : `Missing CBT Core Topics (${cbt.remaining} of 28 Pending)`}
                       </div>
-                      {(cbt.missingTopics || []).length > 8 && (
-                        <button
-                          type="button"
-                          onClick={() => setShowAllMissingCbt((v) => !v)}
+                      <div style={{ fontSize: 11.5, color: "#52755D", marginTop: 2 }}>
+                        Core Cognitive Behavioral Therapy Sessions 1–28 (ENTREPOSE Volume 1).
+                      </div>
+                    </div>
+                    <span style={{ background: "#E8F4E8", color: "#166534", border: "1px solid #C4DFC8", borderRadius: 999, padding: "3px 10px", fontSize: 11.5, fontWeight: 700 }}>
+                      {cbt.completed} / 28 Credited
+                    </span>
+                  </div>
+
+                  {cbt.isComplete ? (
+                    <div
+                      style={{
+                        background: "#F2F9F3",
+                        border: "1.5px solid #B8E0BF",
+                        borderRadius: 10,
+                        padding: "14px 18px",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 12,
+                      }}
+                    >
+                      <span
+                        style={{
+                          width: 24,
+                          height: 24,
+                          borderRadius: "50%",
+                          background: "#2A6A45",
+                          color: "#FFFFFF",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          fontSize: 13,
+                          fontWeight: 800,
+                          flexShrink: 0,
+                        }}
+                      >
+                        ✓
+                      </span>
+                      <div>
+                        <div style={{ fontSize: 13, fontWeight: 800, color: "#166534" }}>
+                          All 28 Core Cognitive Behavioral Therapy Topics Completed
+                        </div>
+                        <div style={{ fontSize: 11.5, color: "#3B6E4C", marginTop: 2 }}>
+                          This patient has satisfied 100% of the 28-session CBT outpatient curriculum (ENTREPOSE Volume 1).
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(310px, 1fr))", gap: 10 }}>
+                      {(cbt.missingTopics || []).map((t) => (
+                        <div
+                          key={t.code || t.sessionNumber}
                           style={{
-                            fontSize: 11,
-                            padding: "2px 8px",
-                            borderRadius: 6,
-                            background: "#FEF3C7",
-                            color: "#92400E",
-                            border: "1px solid #FCD34D",
-                            fontWeight: 700,
-                            cursor: "pointer",
+                            background: "#FFFFFF",
+                            border: "1.5px solid #D5E5D6",
+                            borderRadius: 9,
+                            padding: "10px 14px",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "space-between",
+                            gap: 12,
+                            boxShadow: "0 1px 3px rgba(38, 101, 59, 0.04)",
                           }}
                         >
-                          {showAllMissingCbt ? "Show fewer" : `+${cbt.missingTopics.length - 8} more missing CBT topics`}
-                        </button>
-                      )}
+                          <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
+                            <span
+                              style={{
+                                background: "#E8F4E8",
+                                color: "#1E5833",
+                                border: "1px solid #C4DFC8",
+                                borderRadius: 6,
+                                padding: "3px 7px",
+                                fontSize: 11,
+                                fontWeight: 800,
+                                whiteSpace: "nowrap",
+                                flexShrink: 0,
+                              }}
+                            >
+                              {t.code || `CBT-${t.sessionNumber}`}
+                            </span>
+                            <div style={{ minWidth: 0 }}>
+                              <div style={{ fontSize: 12, fontWeight: 700, color: "#1B3828", lineHeight: 1.3, wordBreak: "break-word" }}>
+                                {t.title}
+                              </div>
+                              {t.altTitle && (
+                                <div style={{ fontSize: 10.5, color: "#52755D", marginTop: 2 }}>
+                                  Standard: {t.altTitle}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                          <span
+                            style={{
+                              background: "#F6F3EB",
+                              color: "#7A5C1E",
+                              border: "1px solid #DFD5BE",
+                              borderRadius: 999,
+                              padding: "2px 8px",
+                              fontSize: 10.5,
+                              fontWeight: 700,
+                              whiteSpace: "nowrap",
+                              flexShrink: 0,
+                            }}
+                          >
+                            Incomplete
+                          </span>
+                        </div>
+                      ))}
                     </div>
                   )}
                 </td>
@@ -3514,39 +3651,41 @@ function CurriculumCompletionPanel({ sessionSummary, canManageCase, onOpenCbteMo
             )}
 
             {/* CBT-E Row */}
-            <tr style={{ borderBottom: expanded.cbte ? "none" : "1px solid #F1F5F9" }}>
-              <td style={{ padding: "12px 16px" }}>
-                <div style={{ fontWeight: 800, color: "#0F172A" }}>CBT-E</div>
-                <div style={{ fontSize: 11.5, color: "#64748B" }}>CBT Clinical Evaluations (Recovery W5 · Relapse W13 · Tx Plan M6–7)</div>
+            <tr style={{ borderBottom: expanded.cbte ? "none" : "1px solid #EBF2EC" }}>
+              <td style={{ padding: "14px 18px" }}>
+                <div style={{ fontWeight: 800, fontSize: 14, color: "#1B3828" }}>CBT-E</div>
+                <div style={{ fontSize: 12, color: "#52755D", marginTop: 2 }}>CBT Clinical Evaluations (Recovery W5 · Relapse W13 · Tx Plan M6–7)</div>
               </td>
-              <td style={{ textAlign: "center", padding: "12px 14px", fontWeight: 800, fontSize: 14, color: cbte.isComplete ? "#166534" : "#0F172A" }}>{cbte.completed}</td>
-              <td style={{ textAlign: "center", padding: "12px 14px", fontWeight: 700, fontSize: 14, color: "#475569" }}>3</td>
-              <td style={{ padding: "12px 14px" }}>
+              <td style={{ textAlign: "center", padding: "14px 14px", fontWeight: 800, fontSize: 14, color: cbte.isComplete ? "#1E5833" : "#1B3828" }}>{cbte.completed}</td>
+              <td style={{ textAlign: "center", padding: "14px 14px", fontWeight: 700, fontSize: 14, color: "#52755D" }}>3</td>
+              <td style={{ padding: "14px 14px" }}>
                 {cbte.isComplete ? (
-                  <span style={{ fontSize: 11.5, fontWeight: 700, padding: "2px 9px", borderRadius: 999, background: "#DCFCE7", color: "#166534" }}>
+                  <span style={{ fontSize: 11.5, fontWeight: 700, padding: "3px 10px", borderRadius: 999, background: "#E8F5EC", color: "#166534", border: "1px solid #A3D9B1" }}>
                     ✓ Complete (3/3)
                   </span>
                 ) : (
-                  <span style={{ fontSize: 11.5, fontWeight: 700, padding: "2px 9px", borderRadius: 999, background: "#FFF7ED", color: "#C2410C", border: "1px solid #FED7AA" }}>
+                  <span style={{ fontSize: 11.5, fontWeight: 700, padding: "3px 10px", borderRadius: 999, background: "#F6F3EB", color: "#6E5218", border: "1px solid #DFD5BE" }}>
                     {cbte.remaining} remaining ({cbte.completed}/3)
                   </span>
                 )}
               </td>
-              <td style={{ textAlign: "right", padding: "12px 16px" }}>
-                <div style={{ display: "inline-flex", gap: 6, alignItems: "center" }}>
+              <td style={{ textAlign: "right", padding: "14px 18px" }}>
+                <div style={{ display: "inline-flex", gap: 8, alignItems: "center" }}>
                   {canManageCase && !cbte.isComplete && onOpenCbteModal && (
                     <button
                       type="button"
                       onClick={onOpenCbteModal}
                       style={{
-                        background: "#2F6F4F",
-                        border: "none",
+                        background: "#2A6A45",
+                        border: "1px solid #1E5033",
                         color: "#FFFFFF",
-                        borderRadius: 6,
-                        padding: "4px 9px",
-                        fontSize: 11,
+                        borderRadius: 7,
+                        padding: "5px 12px",
+                        fontSize: 12,
                         fontWeight: 700,
                         cursor: "pointer",
+                        boxShadow: "0 2px 5px rgba(42, 106, 69, 0.2)",
+                        transition: "all 0.15s ease",
                       }}
                     >
                       + Record CBT-E
@@ -3556,17 +3695,18 @@ function CurriculumCompletionPanel({ sessionSummary, canManageCase, onOpenCbteMo
                     type="button"
                     onClick={() => toggleComponent("cbte")}
                     style={{
-                      background: expanded.cbte ? "#EFF6FF" : "#FFFFFF",
-                      border: "1px solid #CBD5E1",
-                      borderRadius: 6,
-                      padding: "4px 10px",
-                      fontSize: 11.5,
+                      background: expanded.cbte ? "#EBF4EC" : "#FFFFFF",
+                      border: "1.5px solid #C2DEC6",
+                      borderRadius: 7,
+                      padding: "5px 12px",
+                      fontSize: 12,
                       fontWeight: 700,
-                      color: "#1E40AF",
+                      color: "#205634",
                       cursor: "pointer",
+                      transition: "all 0.15s ease",
                     }}
                   >
-                    {expanded.cbte ? "Hide ▴" : `Inspect (${cbte.remaining}) ▾`}
+                    {expanded.cbte ? "Hide Details ▴" : `Inspect (${cbte.remaining}) ▾`}
                   </button>
                 </div>
               </td>
@@ -3574,61 +3714,160 @@ function CurriculumCompletionPanel({ sessionSummary, canManageCase, onOpenCbteMo
 
             {/* CBT-E Drawer */}
             {expanded.cbte && (
-              <tr style={{ background: "#F8FAFC", borderBottom: "1px solid #E2E8F0" }}>
-                <td colSpan={5} style={{ padding: "12px 18px" }}>
-                  <div style={{ fontSize: 12, fontWeight: 700, color: "#1E293B", marginBottom: 6 }}>
-                    • CBT Clinical Evaluation Stages (Approved ENTREPOSE Vol. 2A Source Worksheets):
+              <tr style={{ background: "#F8FAF8", borderBottom: "1.5px solid #D5E5D6" }}>
+                <td colSpan={5} style={{ padding: "16px 20px" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12, flexWrap: "wrap", gap: 8 }}>
+                    <div>
+                      <div style={{ fontSize: 13, fontWeight: 800, color: "#1B3828" }}>
+                        CBT Clinical Evaluation Stages (Approved ENTREPOSE Vol. 2A Worksheets)
+                      </div>
+                      <div style={{ fontSize: 11.5, color: "#52755D", marginTop: 2 }}>
+                        Required milestone evaluations conducted at Weeks 5, 13, and Month 6–7.
+                      </div>
+                    </div>
+                    <span style={{ background: "#E8F4E8", color: "#166534", border: "1px solid #C4DFC8", borderRadius: 999, padding: "3px 10px", fontSize: 11.5, fontWeight: 700 }}>
+                      {cbte.completed} / 3 Completed
+                    </span>
                   </div>
-                  <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-                    <div style={{ background: "#FFFFFF", border: "1px solid #CBD5E1", borderRadius: 6, padding: "6px 10px", fontSize: 11.5 }}>
-                      <strong>CBT-E 1: Pagsusuri ng Katayuan ng Paggaling</strong>
-                      <span style={{ color: "#64748B", marginLeft: 6 }}>Week 5 (Recovery Status)</span>
-                    </div>
-                    <div style={{ background: "#FFFFFF", border: "1px solid #CBD5E1", borderRadius: 6, padding: "6px 10px", fontSize: 11.5 }}>
-                      <strong>CBT-E 2: Pag-iwas sa Muling Paggamit</strong>
-                      <span style={{ color: "#64748B", marginLeft: 6 }}>Week 13 (Relapse Prevention Behaviors)</span>
-                    </div>
-                    <div style={{ background: "#FFFFFF", border: "1px solid #CBD5E1", borderRadius: 6, padding: "6px 10px", fontSize: 11.5 }}>
-                      <strong>CBT-E 3: Pagpapatuloy ng Treatment Planning</strong>
-                      <span style={{ color: "#64748B", marginLeft: 6 }}>Month 6–7 (Continuing Care Review)</span>
-                    </div>
+
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 12 }}>
+                    {[
+                      {
+                        num: 1,
+                        code: "CBT-E 1",
+                        title: "Pagsusuri ng Katayuan ng Paggaling",
+                        timing: "Week 5 (Recovery Status & Physical Stability)",
+                        desc: "Comprehensive evaluation of early cognitive stability and treatment adherence.",
+                        isDone: cbte.completed >= 1,
+                      },
+                      {
+                        num: 2,
+                        code: "CBT-E 2",
+                        title: "Pag-iwas sa Muling Paggamit",
+                        timing: "Week 13 (Relapse Prevention Behaviors)",
+                        desc: "Mid-treatment review of craving triggers and behavioral coping strategies.",
+                        isDone: cbte.completed >= 2,
+                      },
+                      {
+                        num: 3,
+                        code: "CBT-E 3",
+                        title: "Pagpapatuloy ng Treatment Planning",
+                        timing: "Month 6–7 (Continuing Care Review)",
+                        desc: "Pre-discharge assessment and continuing community aftercare preparation.",
+                        isDone: cbte.completed >= 3,
+                      },
+                    ].map((stage) => (
+                      <div
+                        key={stage.code}
+                        style={{
+                          background: stage.isDone ? "#F3FAF4" : "#FFFFFF",
+                          border: stage.isDone ? "1.5px solid #A8DCB4" : "1.5px solid #D5E5D6",
+                          borderRadius: 10,
+                          padding: "14px 16px",
+                          display: "flex",
+                          flexDirection: "column",
+                          justifyContent: "space-between",
+                          gap: 10,
+                          boxShadow: stage.isDone ? "0 2px 6px rgba(22, 101, 52, 0.05)" : "none",
+                        }}
+                      >
+                        <div>
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                            <span
+                              style={{
+                                background: stage.isDone ? "#244E36" : "#E8F4E8",
+                                color: stage.isDone ? "#FFFFFF" : "#1E5833",
+                                border: stage.isDone ? "none" : "1px solid #C4DFC8",
+                                borderRadius: 6,
+                                padding: "2px 8px",
+                                fontSize: 11,
+                                fontWeight: 800,
+                              }}
+                            >
+                              {stage.code}
+                            </span>
+                            {stage.isDone ? (
+                              <span style={{ fontSize: 11.5, fontWeight: 800, color: "#166534", display: "inline-flex", alignItems: "center", gap: 4 }}>
+                                ✓ Credited
+                              </span>
+                            ) : (
+                              <span style={{ background: "#F6F3EB", color: "#7A5C1E", border: "1px solid #DFD5BE", borderRadius: 999, padding: "2px 8px", fontSize: 10.5, fontWeight: 700 }}>
+                                Pending Assessment
+                              </span>
+                            )}
+                          </div>
+                          <div style={{ fontSize: 13, fontWeight: 800, color: "#1B3828", lineHeight: 1.35 }}>
+                            {stage.title}
+                          </div>
+                          <div style={{ fontSize: 11, fontWeight: 700, color: "#3D6E49", marginTop: 3 }}>
+                            {stage.timing}
+                          </div>
+                          <div style={{ fontSize: 11, color: "#52755D", marginTop: 4, lineHeight: 1.4 }}>
+                            {stage.desc}
+                          </div>
+                        </div>
+
+                        {!stage.isDone && canManageCase && onOpenCbteModal && (
+                          <button
+                            type="button"
+                            onClick={onOpenCbteModal}
+                            style={{
+                              background: "#2A6A45",
+                              border: "none",
+                              color: "#FFFFFF",
+                              borderRadius: 6,
+                              padding: "6px 12px",
+                              fontSize: 11.5,
+                              fontWeight: 700,
+                              cursor: "pointer",
+                              alignSelf: "flex-start",
+                              marginTop: 4,
+                              boxShadow: "0 2px 4px rgba(42, 106, 69, 0.2)",
+                            }}
+                          >
+                            + Record {stage.code}
+                          </button>
+                        )}
+                      </div>
+                    ))}
                   </div>
                 </td>
               </tr>
             )}
 
             {/* PE Row */}
-            <tr style={{ borderBottom: expanded.pe ? "none" : "1px solid #F1F5F9" }}>
-              <td style={{ padding: "12px 16px" }}>
-                <div style={{ fontWeight: 800, color: "#0F172A" }}>PE</div>
-                <div style={{ fontSize: 11.5, color: "#64748B" }}>Required Patient Psycho-Education Curriculum Topics (1–12)</div>
+            <tr style={{ borderBottom: expanded.pe ? "none" : "1px solid #EBF2EC" }}>
+              <td style={{ padding: "14px 18px" }}>
+                <div style={{ fontWeight: 800, fontSize: 14, color: "#1B3828" }}>PE</div>
+                <div style={{ fontSize: 12, color: "#52755D", marginTop: 2 }}>Required Patient Psycho-Education Curriculum Topics (1–12)</div>
               </td>
-              <td style={{ textAlign: "center", padding: "12px 14px", fontWeight: 800, fontSize: 14, color: pe.isComplete ? "#166534" : "#0F172A" }}>{pe.completed}</td>
-              <td style={{ textAlign: "center", padding: "12px 14px", fontWeight: 700, fontSize: 14, color: "#475569" }}>12</td>
-              <td style={{ padding: "12px 14px" }}>
+              <td style={{ textAlign: "center", padding: "14px 14px", fontWeight: 800, fontSize: 14, color: pe.isComplete ? "#1E5833" : "#1B3828" }}>{pe.completed}</td>
+              <td style={{ textAlign: "center", padding: "14px 14px", fontWeight: 700, fontSize: 14, color: "#52755D" }}>12</td>
+              <td style={{ padding: "14px 14px" }}>
                 {pe.isComplete ? (
-                  <span style={{ fontSize: 11.5, fontWeight: 700, padding: "2px 9px", borderRadius: 999, background: "#DCFCE7", color: "#166534" }}>
+                  <span style={{ fontSize: 11.5, fontWeight: 700, padding: "3px 10px", borderRadius: 999, background: "#E8F5EC", color: "#166534", border: "1px solid #A3D9B1" }}>
                     ✓ Complete (12/12)
                   </span>
                 ) : (
-                  <span style={{ fontSize: 11.5, fontWeight: 700, padding: "2px 9px", borderRadius: 999, background: "#FFF7ED", color: "#C2410C", border: "1px solid #FED7AA" }}>
+                  <span style={{ fontSize: 11.5, fontWeight: 700, padding: "3px 10px", borderRadius: 999, background: "#F6F3EB", color: "#6E5218", border: "1px solid #DFD5BE" }}>
                     {pe.remaining} remaining ({pe.completed}/12)
                   </span>
                 )}
               </td>
-              <td style={{ textAlign: "right", padding: "12px 16px" }}>
+              <td style={{ textAlign: "right", padding: "14px 18px" }}>
                 <button
                   type="button"
                   onClick={() => toggleComponent("pe")}
                   style={{
-                    background: expanded.pe ? "#EFF6FF" : "#FFFFFF",
-                    border: "1px solid #CBD5E1",
-                    borderRadius: 6,
-                    padding: "4px 10px",
-                    fontSize: 11.5,
+                    background: expanded.pe ? "#EBF4EC" : "#FFFFFF",
+                    border: "1.5px solid #C2DEC6",
+                    borderRadius: 7,
+                    padding: "5px 12px",
+                    fontSize: 12,
                     fontWeight: 700,
-                    color: "#1E40AF",
+                    color: "#205634",
                     cursor: "pointer",
+                    transition: "all 0.15s ease",
                   }}
                 >
                   {expanded.pe ? "Hide Topics ▴" : `Inspect Missing (${pe.remaining}) ▾`}
@@ -3636,53 +3875,132 @@ function CurriculumCompletionPanel({ sessionSummary, canManageCase, onOpenCbteMo
               </td>
             </tr>
 
-            {/* PE Drawer */}
+            {/* PE Drawer (Clean & Structured Requirement Grid) */}
             {expanded.pe && (
-              <tr style={{ background: "#F8FAFC", borderBottom: "1px solid #E2E8F0" }}>
-                <td colSpan={5} style={{ padding: "12px 18px" }}>
-                  <div style={{ fontSize: 12, fontWeight: 700, color: "#1E293B", marginBottom: 6 }}>
-                    • Missing PE Topics ({pe.remaining} of 12 incomplete):
-                  </div>
-                  {pe.isComplete ? (
-                    <div style={{ fontSize: 12, color: "#166534", fontWeight: 600 }}>All 12 PE topics credited.</div>
-                  ) : (
+              <tr style={{ background: "#F8FAF8", borderBottom: "1.5px solid #D5E5D6" }}>
+                <td colSpan={5} style={{ padding: "16px 20px" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12, flexWrap: "wrap", gap: 8 }}>
                     <div>
-                      <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 8 }}>
-                        {displayedPeMissing.map((t) => (
-                          <span
-                            key={t.code}
-                            style={{
-                              fontSize: 11,
-                              padding: "3px 8px",
-                              borderRadius: 6,
-                              background: "#FFFFFF",
-                              color: "#334155",
-                              border: "1px solid #CBD5E1",
-                              fontWeight: 600,
-                            }}
-                          >
-                            {t.title}
-                          </span>
-                        ))}
+                      <div style={{ fontSize: 13, fontWeight: 800, color: "#1B3828" }}>
+                        {pe.isComplete ? "All Psycho-Education Topics Credited" : `Missing Psycho-Education Topics (${pe.remaining} of 12 Pending Credit)`}
                       </div>
-                      {(pe.missingTopics || []).length > 6 && (
-                        <button
-                          type="button"
-                          onClick={() => setShowAllMissingPe((v) => !v)}
+                      <div style={{ fontSize: 11.5, color: "#52755D", marginTop: 2 }}>
+                        Approved Patient Psycho-Education Curriculum (ENTREPOSE Volume 1, Topics 1–12).
+                      </div>
+                    </div>
+                    <span style={{ background: "#E8F4E8", color: "#166534", border: "1px solid #C4DFC8", borderRadius: 999, padding: "3px 10px", fontSize: 11.5, fontWeight: 700 }}>
+                      {pe.completed} / 12 Credited
+                    </span>
+                  </div>
+
+                  {pe.isComplete ? (
+                    <div
+                      style={{
+                        background: "#F2F9F3",
+                        border: "1.5px solid #B8E0BF",
+                        borderRadius: 10,
+                        padding: "14px 18px",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 12,
+                      }}
+                    >
+                      <span
+                        style={{
+                          width: 24,
+                          height: 24,
+                          borderRadius: "50%",
+                          background: "#2A6A45",
+                          color: "#FFFFFF",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          fontSize: 13,
+                          fontWeight: 800,
+                          flexShrink: 0,
+                        }}
+                      >
+                        ✓
+                      </span>
+                      <div>
+                        <div style={{ fontSize: 13, fontWeight: 800, color: "#166534" }}>
+                          All 12 Psycho-Education Topics Completed
+                        </div>
+                        <div style={{ fontSize: 11.5, color: "#3B6E4C", marginTop: 2 }}>
+                          This patient has satisfied all 12 psycho-education meetings required for curriculum graduation.
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(310px, 1fr))", gap: 10 }}>
+                      {(pe.missingTopics || []).map((t) => (
+                        <div
+                          key={t.code || t.sessionNumber}
                           style={{
-                            fontSize: 11,
-                            padding: "2px 8px",
-                            borderRadius: 6,
-                            background: "#FEF3C7",
-                            color: "#92400E",
-                            border: "1px solid #FCD34D",
-                            fontWeight: 700,
-                            cursor: "pointer",
+                            background: "#FFFFFF",
+                            border: "1.5px solid #D5E5D6",
+                            borderRadius: 9,
+                            padding: "10px 14px",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "space-between",
+                            gap: 12,
+                            boxShadow: "0 1px 3px rgba(38, 101, 59, 0.04)",
                           }}
                         >
-                          {showAllMissingPe ? "Show fewer" : `+${pe.missingTopics.length - 6} more missing PE topics`}
-                        </button>
-                      )}
+                          <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
+                            <span
+                              style={{
+                                background: "#E8F4E8",
+                                color: "#1E5833",
+                                border: "1px solid #C4DFC8",
+                                borderRadius: 6,
+                                padding: "3px 7px",
+                                fontSize: 11,
+                                fontWeight: 800,
+                                letterSpacing: "0.02em",
+                                whiteSpace: "nowrap",
+                                flexShrink: 0,
+                              }}
+                            >
+                              {t.code ? t.code.replace("PE-PAT-", "PE-") : `PE-${t.sessionNumber}`}
+                            </span>
+                            <div style={{ minWidth: 0 }}>
+                              <div
+                                style={{
+                                  fontSize: 12,
+                                  fontWeight: 700,
+                                  color: "#1B3828",
+                                  lineHeight: 1.3,
+                                  wordBreak: "break-word",
+                                }}
+                              >
+                                {t.title}
+                              </div>
+                              {t.altTitle && (
+                                <div style={{ fontSize: 10.5, color: "#52755D", marginTop: 2 }}>
+                                  Standard: {t.altTitle}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                          <span
+                            style={{
+                              background: "#F6F3EB",
+                              color: "#7A5C1E",
+                              border: "1px solid #DFD5BE",
+                              borderRadius: 999,
+                              padding: "2px 8px",
+                              fontSize: 10.5,
+                              fontWeight: 700,
+                              whiteSpace: "nowrap",
+                              flexShrink: 0,
+                            }}
+                          >
+                            Incomplete
+                          </span>
+                        </div>
+                      ))}
                     </div>
                   )}
                 </td>
@@ -3690,17 +4008,17 @@ function CurriculumCompletionPanel({ sessionSummary, canManageCase, onOpenCbteMo
             )}
 
             {/* Total Core Row */}
-            <tr style={{ background: "#F0FDF4", borderTop: "2px solid #BBF7D0" }}>
-              <td style={{ padding: "12px 16px", fontWeight: 800, color: "#14532D" }}>
+            <tr style={{ background: "#EDF6EE", borderTop: "2px solid #B8DCBE" }}>
+              <td style={{ padding: "14px 18px", fontWeight: 800, fontSize: 13.5, color: "#144826" }}>
                 Total Core Requirements Credited
               </td>
-              <td style={{ textAlign: "center", padding: "12px 14px", fontWeight: 900, fontSize: 15, color: "#14532D" }}>
+              <td style={{ textAlign: "center", padding: "14px 14px", fontWeight: 900, fontSize: 15, color: "#144826" }}>
                 {totalCore.completed}
               </td>
-              <td style={{ textAlign: "center", padding: "12px 14px", fontWeight: 900, fontSize: 15, color: "#14532D" }}>
+              <td style={{ textAlign: "center", padding: "14px 14px", fontWeight: 900, fontSize: 15, color: "#144826" }}>
                 {totalCore.required}
               </td>
-              <td colSpan={2} style={{ padding: "12px 16px", fontWeight: 700, fontSize: 12.5, color: "#166534" }}>
+              <td colSpan={2} style={{ padding: "14px 18px", fontWeight: 700, fontSize: 12.5, color: "#166534" }}>
                 {totalCore.isComplete
                   ? "✓ All 3 core components satisfied (28 CBT + 3 CBT-E + 12 PE)"
                   : `Missing ${totalCore.remaining} core requirement(s) across incomplete components`}
@@ -3710,39 +4028,41 @@ function CurriculumCompletionPanel({ sessionSummary, canManageCase, onOpenCbteMo
         </table>
       </div>
 
-      {/* Supplementary Services Box (Clean & Muted) */}
+      {/* Supplementary Services Box (Warm & Botanical) */}
       <div
         style={{
-          background: "#F8FAFC",
-          border: "1px solid #E2E8F0",
-          borderRadius: 10,
-          padding: "12px 16px",
+          background: "#F7FAF8",
+          border: "1.5px solid #D5E5D6",
+          borderRadius: 12,
+          padding: "16px 20px",
+          marginTop: 18,
+          boxShadow: "0 1px 3px rgba(38, 101, 59, 0.03)",
         }}
       >
-        <div style={{ fontSize: 11.5, fontWeight: 800, color: "#475569", textTransform: "uppercase", letterSpacing: "0.03em", marginBottom: 8 }}>
+        <div style={{ fontSize: 12, fontWeight: 800, color: "#244E36", textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: 10 }}>
           Supplementary Services & Additional Meetings (Tracked Separately from 43 Core Targets)
         </div>
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 8 }}>
-          <span style={{ fontSize: 11, fontWeight: 700, padding: "3px 8px", borderRadius: 999, background: "#E0F2FE", color: "#0369A1" }}>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
+          <span style={{ fontSize: 11.5, fontWeight: 700, padding: "4px 10px", borderRadius: 999, background: "#E8F4E8", color: "#1E5833", border: "1px solid #C2DEC6" }}>
             SHGM (Self-Help): {supp.shgm ?? sessionSummary?.shgm ?? 0}
           </span>
-          <span style={{ fontSize: 11, fontWeight: 700, padding: "3px 8px", borderRadius: 999, background: "#F3E8FF", color: "#6B21A8" }}>
+          <span style={{ fontSize: 11.5, fontWeight: 700, padding: "4px 10px", borderRadius: 999, background: "#EBF2EC", color: "#2C5438", border: "1px solid #C5DAC9" }}>
             Individual Counseling: {supp.indCounseling ?? sessionSummary?.indCounseling ?? 0}
           </span>
-          <span style={{ fontSize: 11, fontWeight: 700, padding: "3px 8px", borderRadius: 999, background: "#DCFCE7", color: "#15803D" }}>
+          <span style={{ fontSize: 11.5, fontWeight: 700, padding: "4px 10px", borderRadius: 999, background: "#E5EFE7", color: "#234D30", border: "1px solid #BDD8C2" }}>
             Conjoint / Family: {supp.conjointFamily ?? sessionSummary?.conjointFamily ?? 0}
           </span>
-          <span style={{ fontSize: 11, fontWeight: 700, padding: "3px 8px", borderRadius: 999, background: "#F1F5F9", color: "#334155" }}>
+          <span style={{ fontSize: 11.5, fontWeight: 700, padding: "4px 10px", borderRadius: 999, background: "#F0F5F1", color: "#3B5A44", border: "1px solid #CDE0D1" }}>
             Orientation: {supp.orientation ?? 0}
           </span>
           {(supp.additionalPeMeetings > 0 || supp.additionalCbtMeetings > 0) && (
-            <span style={{ fontSize: 11, fontWeight: 700, padding: "3px 8px", borderRadius: 999, background: "#FEF3C7", color: "#92400E" }}>
+            <span style={{ fontSize: 11.5, fontWeight: 700, padding: "4px 10px", borderRadius: 999, background: "#F6F3EB", color: "#6E5218", border: "1px solid #DFD5BE" }}>
               Repeat / Additional Meetings: {(supp.additionalPeMeetings || 0) + (supp.additionalCbtMeetings || 0)}
             </span>
           )}
         </div>
-        <div style={{ fontSize: 11, color: "#64748B", lineHeight: 1.4 }}>
-          <strong>Note:</strong> The monthly OP CM Tracker records all conducted sessions, while curriculum progress measures unique core completions.
+        <div style={{ fontSize: 11.5, color: "#52755D", lineHeight: 1.45 }}>
+          <strong>Note:</strong> The monthly OP CM Tracker records all conducted sessions, while curriculum progress measures unique core completions toward completion certification.
         </div>
       </div>
     </div>

@@ -1,4 +1,5 @@
 import pool from "../config/db.js";
+import { caseloadIdsFor } from "../utils/sharedCaseload.js";
 import { getBulkUnifiedPatientProgress } from "../utils/curriculumProgress.js";
 import { mapCategory } from "../services/opCmTrackerService.js";
 import { getAttendanceRates, ATTENDANCE_RATE_SESSION_TYPES } from "../utils/attendanceRate.js";
@@ -19,14 +20,19 @@ function getMonthRange(dateFrom, dateTo) {
   return months;
 }
 
+function getCmScopeCondition(userId, colPrefix = "p.") {
+  return { clause: `${colPrefix}assigned_case_manager_id IN (?)`, params: [caseloadIdsFor(userId)] };
+}
+
 // ---- Snapshot data: current totals, no date range needed ----
 export async function getAnalyticsOverview(req, res) {
   try {
     const patientClauses = ["p.is_archived = FALSE"];
     const patientParams = [];
     if (req.user.role === "case_manager") {
-      patientClauses.push("p.assigned_case_manager_id = ?");
-      patientParams.push(req.user.id);
+      const scope = getCmScopeCondition(req.user.id, "p.");
+      patientClauses.push(scope.clause);
+      patientParams.push(...scope.params);
     }
 
     const [patients] = await pool.query(
@@ -103,8 +109,9 @@ export async function getAnalyticsOverview(req, res) {
     const dtClauses = ["p.is_archived = FALSE"];
     const dtParams = [];
     if (req.user.role === "case_manager") {
-      dtClauses.push("p.assigned_case_manager_id = ?");
-      dtParams.push(req.user.id);
+      const scope = getCmScopeCondition(req.user.id, "p.");
+      dtClauses.push(scope.clause);
+      dtParams.push(...scope.params);
     }
     const [[dtStats]] = await pool.query(
       `SELECT COUNT(*) AS total_tests,
@@ -218,8 +225,9 @@ export async function getAnalyticsOverview(req, res) {
     let dischargeJoin = "";
     if (req.user.role === "case_manager") {
       dischargeJoin = "JOIN patients p ON p.id = d.patient_id";
-      dischargeClauses.push("p.assigned_case_manager_id = ?");
-      dischargeParams.push(req.user.id);
+      const scope = getCmScopeCondition(req.user.id, "p.");
+      dischargeClauses.push(scope.clause);
+      dischargeParams.push(...scope.params);
     }
     const [dischargeRows] = await pool.query(
       `SELECT d.discharge_type, COUNT(*) as count 
@@ -359,8 +367,9 @@ export async function getMonthlyAdmissions(req, res) {
   const clauses = ["admission_date >= ?"];
   const params = [rangeStart];
   if (req.user.role === "case_manager") {
-    clauses.push("assigned_case_manager_id = ?");
-    params.push(req.user.id);
+    const scope = getCmScopeCondition(req.user.id, "");
+    clauses.push(scope.clause);
+    params.push(...scope.params);
   }
 
   const [rows] = await pool.query(
@@ -383,10 +392,13 @@ export async function getAttendanceTrend(req, res) {
   const months = getMonthRange(dateFrom, dateTo);
   const rangeStart = `${months[0].year}-${String(months[0].month).padStart(2, "0")}-01`;
 
-  const scopeJoin = req.user.role === "case_manager"
-    ? "JOIN patients p ON p.id = a.patient_id AND p.assigned_case_manager_id = ?"
-    : "";
-  const scopeParams = req.user.role === "case_manager" ? [req.user.id] : [];
+  let scopeJoin = "";
+  let scopeParams = [];
+  if (req.user.role === "case_manager") {
+    const scope = getCmScopeCondition(req.user.id, "p.");
+    scopeJoin = `JOIN patients p ON p.id = a.patient_id AND ${scope.clause}`;
+    scopeParams = scope.params;
+  }
 
   const [rows] = await pool.query(
     `SELECT DATE_FORMAT(a.session_date, '%Y-%m') AS ym,
@@ -420,8 +432,9 @@ export async function getMonthlyDischarges(req, res) {
 
   if (req.user.role === "case_manager") {
     joinPatient = "JOIN patients p ON p.id = d.patient_id";
-    clauses.push("p.assigned_case_manager_id = ?");
-    params.push(req.user.id);
+    const scope = getCmScopeCondition(req.user.id, "p.");
+    clauses.push(scope.clause);
+    params.push(...scope.params);
   }
 
   const [rows] = await pool.query(

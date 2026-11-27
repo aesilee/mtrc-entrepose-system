@@ -28,7 +28,7 @@ export default function ProgressNoteModal({ patientId: initialPatientId, note, o
 
   useEffect(() => {
     if (!initialPatientId) {
-      api.get("/patients").then(({ data }) => {
+      api.get("/patients", { params: { limit: 500 } }).then(({ data }) => {
         const pts = data.patients || [];
         setPatients(pts);
         if (pts.length && !selectedPatientId) {
@@ -118,10 +118,10 @@ export default function ProgressNoteModal({ patientId: initialPatientId, note, o
 
           <div style={{ background: "#F8FAFC", border: "1px solid #E2E8F0", borderRadius: 8, padding: "10px 12px", display: "flex", flexDirection: "column", gap: 10 }}>
             <div style={{ fontSize: 11.5, color: "#475569", lineHeight: 1.4 }}>
-              <strong>Separate Risk Documentation:</strong> Client self-reported Schedule Book status and Staff clinical assessment are recorded separately. Selecting <em>Nearly Used / Strong Craving</em> preserves that the client experienced cravings <strong>without</strong> using drugs.
+              <strong>Separate Risk Documentation:</strong> Client self-reported craving / urge status and Staff clinical assessment are recorded separately. Selecting <em>Nearly Used / Strong Craving</em> preserves that the client experienced cravings <strong>without</strong> using drugs.
             </div>
             <label style={styles.label}>
-              1. Client Self-Reported Schedule Book Status (ENTREPOSE Vol. 3A)
+              1. Client Self-Reported Craving / Urge Status (Workbook Reflection)
               <select
                 style={{
                   ...styles.input,
@@ -132,8 +132,8 @@ export default function ProgressNoteModal({ patientId: initialPatientId, note, o
                 onChange={(e) => update("relapseRisk", e.target.value)}
               >
                 <option value="">— Unanswered / Not Assessed —</option>
-                <option value="SAFE">🟢 Safe / Abstinent (Adhering to schedule; no cravings reported)</option>
-                <option value="AT_RISK">🟡 At Risk (Trigger exposure or skipped activity — no substance use)</option>
+                <option value="SAFE">🟢 Safe / Abstinent (Adhering to recovery plan; no cravings reported)</option>
+                <option value="AT_RISK">🟡 At Risk (Trigger exposure or high-risk situation — no substance use)</option>
                 <option value="NEARLY_USED">🟠 Nearly Used / Strong Craving (Strong urge — did NOT use substances)</option>
                 <option value="USED">🔴 Actual Use / Slip (Client reported actual substance use / lapse)</option>
               </select>

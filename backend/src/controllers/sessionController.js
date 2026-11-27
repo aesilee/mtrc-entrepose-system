@@ -1,5 +1,6 @@
 import pool from "../config/db.js";
 import { ensureAttendanceCompletionSchema } from "../utils/attendanceSchema.js";
+import { findPatientsNotEnrolledOn } from "../utils/completionGuards.js";
 import { getUnifiedPatientProgress } from "../utils/curriculumProgress.js";
 
 const VALID_SESSION_TYPES = new Set([
@@ -266,6 +267,13 @@ export async function scheduleSession(req, res) {
   const SINGLE_PATIENT_TYPES = ["INDIVIDUAL_COUNSELING", "CONJOINT_FAMILY"];
   if (SINGLE_PATIENT_TYPES.includes(sessionType) && patientIds.length > 1) {
     return res.status(400).json({ message: "Individual counseling and conjoint/family sessions can only have 1 expected patient." });
+  }
+
+  const notEnrolled = await findPatientsNotEnrolledOn(pool, patientIds, sessionDate);
+  if (notEnrolled.length > 0) {
+    return res.status(409).json({
+      message: `Not actively enrolled (discharged or not yet finalized): ${notEnrolled.map((p) => p.full_name).join(", ")}. Remove them from this session.`,
+    });
   }
 
   const matchedTopic = topicId

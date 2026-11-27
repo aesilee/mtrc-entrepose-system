@@ -9,6 +9,7 @@ import { useAuth } from "../context/AuthContext.jsx";
 function fmtDateTime(d) { return d ? new Date(d).toLocaleString() : "—"; }
 
 function restoreEndpoint(a) {
+  if (a.entity_type === "certificate_issuance") return `/certificates/issuances/${a.entity_id}/restore`;
   if (a.entity_type === "certificate") return `/certificates/${a.entity_id}/restore`;
   if (a.entity_type === "report") return `/reports/${a.entity_id}/restore`;
   return `/archives/patients/${a.entity_id}/restore`;

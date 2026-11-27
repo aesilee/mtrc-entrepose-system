@@ -13,11 +13,14 @@ import {
 const router = Router();
 
 router.use(verifyToken);
-router.get("/", listAttendance);
-router.get("/stats", getAttendanceStats);
-router.get("/patient-context", getPatientAttendanceContext);
+// Attendance is a clinical record: Admitting personnel have no access (same rule as the patient profile).
+const CLINICAL_ROLES = ["case_manager", "him_staff", "ict_admin"];
+router.get("/", requireRole(...CLINICAL_ROLES), listAttendance);
+router.get("/stats", requireRole(...CLINICAL_ROLES), getAttendanceStats);
+router.get("/patient-context", requireRole(...CLINICAL_ROLES), getPatientAttendanceContext);
 router.get("/policy", getAttendancePolicy);
-router.put("/policy", requireRole("ict_admin", "case_manager"), updateAttendancePolicy);
+// The participation policy is approved by the Medical Center Chief; only ICT encodes the approved values.
+router.put("/policy", requireRole("ict_admin"), updateAttendancePolicy);
 router.post("/bulk", requireRole("case_manager", "ict_admin"), recordAttendanceBulk);
 router.put("/:id/completion", requireRole("case_manager", "ict_admin"), updateAttendanceCompletion);
 

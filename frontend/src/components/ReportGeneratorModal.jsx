@@ -29,7 +29,7 @@ export default function ReportGeneratorModal({ onClose, onGenerated }) {
 
   useEffect(() => {
     api.get("/users/case-managers").then(({ data }) => setCaseManagers(data.caseManagers));
-    api.get("/patients").then(({ data }) => setPatients(data.patients));
+    api.get("/patients", { params: { limit: 500 } }).then(({ data }) => setPatients(data.patients));
   }, []);
 
   const showPatientField = reportType === "attendance" || reportType === "patient";

@@ -17,7 +17,7 @@ export default function Certificates() {
 
   useEffect(() => {
     // Load active/completed patients for dropdown
-    api.get("/patients").then(res => {
+    api.get("/patients", { params: { limit: 500 } }).then(res => {
       const patientList = Array.isArray(res.data) ? res.data : (res.data?.patients || []);
       const opts = patientList.map(p => ({
         value: p.id,
